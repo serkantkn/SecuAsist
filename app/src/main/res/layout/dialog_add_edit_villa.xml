@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <EditText
+            android:id="@+id/etVillaNo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Villa Numarası"
+            android:inputType="number"
+            android:minEms="5"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <EditText
+            android:id="@+id/etVillaNotes"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Notlar"
+            android:inputType="textMultiLine"
+            android:lines="3"
+            android:gravity="top|start"
+            app:layout_constraintTop_toBottomOf="@+id/etVillaNo"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <EditText
+            android:id="@+id/etVillaStreet"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Sokak"
+            android:inputType="text"
+            app:layout_constraintTop_toBottomOf="@+id/etVillaNotes"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <EditText
+            android:id="@+id/etVillaNavigation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Navigasyon Bilgisi"
+            android:inputType="text"
+            app:layout_constraintTop_toBottomOf="@+id/etVillaStreet"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsUnderConstruction"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Villada Çalışma Var"
+            app:layout_constraintTop_toBottomOf="@+id/etVillaNavigation"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsSpecial"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Özel Villa"
+            app:layout_constraintTop_toBottomOf="@+id/cbIsUnderConstruction"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsRental"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Kiralık Villa"
+            app:layout_constraintTop_toBottomOf="@+id/cbIsSpecial"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsCallFromHome"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Sadece Ev Telefonundan Ara"
+            app:layout_constraintTop_toBottomOf="@+id/cbIsRental"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsCallForCargo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Kargo İçin Aranmasın"
+            app:layout_constraintTop_toBottomOf="@+id/cbIsCallFromHome"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbIsEmpty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Boş Villa"
+            app:layout_constraintTop_toBottomOf="@+id/cbIsCallForCargo"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

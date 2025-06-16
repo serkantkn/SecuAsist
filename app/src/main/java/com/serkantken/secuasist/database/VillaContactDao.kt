@@ -1,0 +1,34 @@
+package com.serkantken.secuasist.database
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Delete
+import com.serkantken.secuasist.models.Contact
+import com.serkantken.secuasist.models.VillaContact
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface VillaContactDao {
+    @Insert
+    suspend fun insert(villaContact: VillaContact): Long
+
+    @Delete
+    suspend fun delete(villaContact: VillaContact)
+
+    // Belirli bir villanın tüm ilgili kişilerini çekmek için
+    @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId")
+    fun getContactsForVilla(villaId: Int): Flow<List<Contact>>
+
+    // Belirli bir villanın gerçek sahiplerini çekmek için
+    @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.isRealOwner = 1")
+    fun getRealOwnersForVilla(villaId: Int): Flow<List<Contact>>
+
+    // Belirli bir villanın belirli bir contactType'a sahip kişilerini çekmek için
+    @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.contactType = :contactType")
+    fun getContactsByVillaIdAndType(villaId: Int, contactType: String): Flow<List<Contact>>
+
+    // Bir bağlantının varlığını kontrol etmek için (örneğin UNIQUE kısıtlaması nedeniyle)
+    @Query("SELECT * FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId AND contactType = :contactType")
+    suspend fun getVillaContact(villaId: Int, contactId: Int, contactType: String): VillaContact?
+}
