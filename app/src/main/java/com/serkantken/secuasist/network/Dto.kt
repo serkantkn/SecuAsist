@@ -10,6 +10,7 @@ data class WebSocketMessage<T>(
 
 // Villas tablosu için JSON modeli
 data class VillaDto(
+    val villaId: Int? = null, // Opsiyonel ve null olabilir
     val villaNo: Int,
     val villaNotes: String? = null,
     val villaStreet: String? = null,
