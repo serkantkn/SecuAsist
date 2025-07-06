@@ -4,105 +4,308 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    tools:context=".views.activities.MainActivity"
+    android:background="@drawable/background_gradient">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/searchBarLayout"
-        android:layout_width="0dp"
+        android:id="@+id/toolbarLayout"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorPrimary"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Geri"
-            android:src="@drawable/ic_arrow_back"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            android:layout_marginStart="8dp"
-            app:tint="@android:color/white" />
-
-        <EditText
-            android:id="@+id/etSearch"
-            android:layout_width="0dp"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:hint="Ara"
-            android:textColorHint="#CCCCCC"
-            android:textColor="@android:color/white"
-            android:background="@drawable/rounded_search_background"
-            android:paddingStart="16dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="16dp"
-            android:maxLines="1"
-            android:singleLine="true"
+            android:id="@+id/content_title"
+            android:text="Villa Listesi"
+            android:textColor="@color/white"
+            android:textSize="24sp"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/btnBack"
-            app:layout_constraintEnd_toStartOf="@+id/btnFilter"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"/>
+            app:layout_constraintStart_toStartOf="parent"
+            android:layout_marginStart="16dp"/>
 
-        <ImageButton
-            android:id="@+id/btnFilter"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Filtrele"
-            android:src="@drawable/ic_filter"
-            app:layout_constraintEnd_toEndOf="parent"
+        <eightbitlab.com.blurview.BlurView
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:id="@+id/blur_toolbar_buttons"
+            android:background="@drawable/background_blur"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            android:layout_marginEnd="8dp"
-            app:tint="@android:color/white" />
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginEnd="16dp">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:id="@+id/toolbar_button_layout">
+
+                <com.makeramen.roundedimageview.RoundedImageView
+                    android:id="@+id/btnFilter"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="Filtrele"
+                    android:src="@drawable/ic_filter"
+                    android:padding="10dp"
+                    android:layout_marginEnd="5dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/btnMore"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+
+                <com.makeramen.roundedimageview.RoundedImageView
+                    android:id="@+id/btnMore"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="Daha Fazla"
+                    android:src="@drawable/ic_more"
+                    android:padding="10dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+        </eightbitlab.com.blurview.BlurView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewVillas"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:padding="8dp"
-        app:layout_constraintTop_toBottomOf="@+id/searchBarLayout"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layoutManager="androidx.recyclerview.widget.StaggeredGridLayoutManager"
-        app:spanCount="2"
-        tools:listitem="@layout/item_villa" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAddVilla"
-        android:layout_width="wrap_content"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:src="@drawable/ic_add"
-        app:tint="@android:color/white"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:backgroundTint="?attr/colorSecondary"
-        android:contentDescription="Yeni Villa Ekle" />
+        android:id="@+id/bottom_nav_bar"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-    <TextView
-        android:id="@+id/receivedMessagesTextView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Gelen Mesajlar:\n"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="16dp"/>
+        <eightbitlab.com.blurview.BlurView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/blur_message"
+            android:background="@drawable/background_blur"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/blur_nav_view"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/text_message"
+                    android:text="Mesaj"
+                    android:textColor="@color/white"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="10dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/btnClear"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+
+                <com.makeramen.roundedimageview.RoundedImageView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/btnClear"
+                    android:src="@drawable/ic_close"
+                    android:background="@drawable/background_blur"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    android:layout_marginEnd="10dp"/>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+        </eightbitlab.com.blurview.BlurView>
+
+        <eightbitlab.com.blurview.BlurView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/blur_search_button"
+            android:background="@drawable/background_blur"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/blur_nav_view"
+            android:layout_marginStart="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:layout_width="62dp"
+                android:layout_height="62dp"
+                android:id="@+id/ic_search"
+                android:src="@drawable/ic_search"
+                android:padding="10dp"/>
+
+        </eightbitlab.com.blurview.BlurView>
+
+        <eightbitlab.com.blurview.BlurView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:id="@+id/blur_nav_view"
+            android:background="@drawable/background_blur"
+            app:layout_constraintTop_toBottomOf="@id/blur_message"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/blur_search_button">
+
+            <HorizontalScrollView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:scrollbars="none">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="62dp"
+                    android:paddingTop="7dp"
+                    android:paddingBottom="7dp">
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:id="@+id/tab_villas"
+                        android:background="@drawable/background_blur"
+                        android:padding="5dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent">
+
+                        <com.makeramen.roundedimageview.RoundedImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/icon_villa"
+                            android:src="@drawable/ic_home"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/title_villas"
+                            android:text="Villa Listesi"
+                            android:textColor="@color/white"
+                            app:layout_constraintTop_toBottomOf="@id/icon_villa"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            android:layout_marginStart="7dp"
+                            android:layout_marginEnd="7dp"/>
+
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:id="@+id/tab_cargos"
+                        android:padding="5dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toEndOf="@id/tab_villas">
+
+                        <com.makeramen.roundedimageview.RoundedImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/icon_cargo"
+                            android:src="@drawable/ic_cargo"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/title_cargos"
+                            android:text="Kargo Listesi"
+                            android:textColor="@color/white"
+                            app:layout_constraintTop_toBottomOf="@id/icon_cargo"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            android:layout_marginStart="7dp"
+                            android:layout_marginEnd="7dp"/>
+
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:id="@+id/tab_contacts"
+                        android:padding="5dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toEndOf="@id/tab_cargos">
+
+                        <com.makeramen.roundedimageview.RoundedImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/icon_contacts"
+                            android:src="@drawable/ic_person"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/title_contacts"
+                            android:text="Kişi Listesi"
+                            android:textColor="@color/white"
+                            app:layout_constraintTop_toBottomOf="@id/icon_contacts"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            android:layout_marginStart="7dp"
+                            android:layout_marginEnd="7dp"/>
+
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:id="@+id/tab_cameras"
+                        android:padding="5dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toEndOf="@id/tab_contacts">
+
+                        <com.makeramen.roundedimageview.RoundedImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/icon_cameras"
+                            android:src="@drawable/ic_videocam"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/title_cameras"
+                            android:text="Kamera Listesi"
+                            android:textColor="@color/white"
+                            app:layout_constraintTop_toBottomOf="@id/icon_cameras"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            android:layout_marginStart="7dp"
+                            android:layout_marginEnd="7dp"/>
+
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </HorizontalScrollView>
+
+        </eightbitlab.com.blurview.BlurView>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/background_window"
+    android:padding="15dp"
+    android:id="@+id/blur">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/tvDialogTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Villa Sakinleri"
+            android:textSize="24sp"
+            android:textColor="@color/white"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"/>
+
+        <com.makeramen.roundedimageview.RoundedImageView
+            android:id="@+id/btnClose"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:src="@drawable/ic_close"
+            android:background="@drawable/background_blur"
+            android:padding="10dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"/>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btnAddContactToVilla"
+            android:background="@drawable/background_blur"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icVillaContacts"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_add_person"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleVillaContacts"
+                android:text="Villa Sakini Ekle"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icVillaContacts"
+                app:layout_constraintTop_toTopOf="@id/icVillaContacts"
+                app:layout_constraintBottom_toBottomOf="@id/icVillaContacts"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewVillaContacts"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintHeight_min="500dp"
+            android:layout_marginTop="15dp"
+            android:layout_marginBottom="15dp"
+            app:layout_constraintTop_toBottomOf="@+id/tvDialogTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/btnAddContactToVilla"
+            tools:listitem="@layout/item_contact"/>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</eightbitlab.com.blurview.BlurView>

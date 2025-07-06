@@ -23,7 +23,7 @@ import com.serkantken.secuasist.models.VillaContact
         Cargo::class
     ],
     version = 1, // Veritabanı şemasında her değişiklik yaptığınızda bu numarayı artırmalısınız
-    exportSchema = false // Şema yedeği dışarı aktarılmasın, şimdilik false bırakabiliriz
+    exportSchema = true // Şema yedeği dışarı aktarılacak
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -45,8 +45,13 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "secuasist_database" // Veritabanı adı (Python'daki ile aynı olması zorunlu değil)
-                ).build()
+                    "secuasist_database"
+                )
+                    // İlk defa çalıştığında veritabanı şemasında bir değişiklik varsa
+                    // migration gerekecektir. Şimdilik yıkıcı bir migrate kullanalım,
+                    // daha sonra gerçek migration stratejilerini öğreniriz.
+                    // .fallbackToDestructiveMigration() // DİKKAT: Verileri siler! Geliştirme aşamasında kullanışlıdır.
+                    .build()
                 INSTANCE = instance
                 instance
             }

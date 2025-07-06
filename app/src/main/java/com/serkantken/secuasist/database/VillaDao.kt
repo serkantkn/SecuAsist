@@ -5,7 +5,9 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Delete
+import androidx.room.Transaction
 import com.serkantken.secuasist.models.Villa
+import com.serkantken.secuasist.models.VillaWithContacts
 import kotlinx.coroutines.flow.Flow // Veri değişikliklerini gözlemlemek için Flow kullanacağız
 
 @Dao
@@ -27,4 +29,15 @@ interface VillaDao {
 
     @Query("SELECT * FROM Villas WHERE villaNo = :villaNo")
     suspend fun getVillaByNo(villaNo: Int): Villa?
+
+    // Tüm villaları, ilgili iletişim kişileriyle birlikte getiren metod
+    // @Transaction anotasyonu, bu sorgunun atomik olmasını sağlar ve ilişkili verileri doğru çeker.
+    @Transaction
+    @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
+    fun getAllVillasWithContacts(): Flow<List<VillaWithContacts>>
+
+    // Belirli bir villayı, ilgili iletişim kişileriyle birlikte getiren metod
+    @Transaction
+    @Query("SELECT * FROM Villas WHERE villaId = :villaId")
+    suspend fun getVillaWithContactsById(villaId: Int): VillaWithContacts?
 }

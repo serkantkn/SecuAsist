@@ -16,6 +16,9 @@ interface VillaContactDao {
     @Delete
     suspend fun delete(villaContact: VillaContact)
 
+    @Query("DELETE FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId")
+    suspend fun deleteByVillaIdAndContactId(villaId: Int, contactId: Int)
+
     // Belirli bir villanın tüm ilgili kişilerini çekmek için
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId")
     fun getContactsForVilla(villaId: Int): Flow<List<Contact>>
@@ -31,4 +34,8 @@ interface VillaContactDao {
     // Bir bağlantının varlığını kontrol etmek için (örneğin UNIQUE kısıtlaması nedeniyle)
     @Query("SELECT * FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId AND contactType = :contactType")
     suspend fun getVillaContact(villaId: Int, contactId: Int, contactType: String): VillaContact?
+
+    // Belirli bir contactId'nin kaç tane villa ilişkisi olduğunu sayar
+    @Query("SELECT COUNT(*) FROM VillaContacts WHERE contactId = :contactId")
+    suspend fun getVillaAssociationsCount(contactId: Int): Int
 }

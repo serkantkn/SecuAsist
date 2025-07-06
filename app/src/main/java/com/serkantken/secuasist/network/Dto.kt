@@ -1,7 +1,5 @@
 package com.serkantken.secuasist.network
 
-import com.google.gson.annotations.SerializedName
-
 // Temel bir WebSocket mesaj yapısı için
 data class WebSocketMessage<T>(
     val type: String, // "add_villa", "add_contact", "add_cargo" vb.
@@ -27,10 +25,9 @@ data class VillaDto(
 
 // Contacts tablosu için JSON modeli (Python tarafındaki Kisiler tablosuyla uyumlu)
 data class ContactDto(
-    val contactName: String,
-    val contactPhone: String
-    // VillaContact veya CompanyContact'a özgü alanlar DTO seviyesinde burada tutulmaz
-    // Çünkü bunlar birer ilişki, ContactDto sadece kişinin kendisini temsil eder.
+    val contactId: Int? = null, // YENİ: ID alanı eklendi
+    val contactName: String?,
+    val contactPhone: String?
 )
 
 // VillaContacts için JSON modeli (Sadece bağlantı oluşturmak için kullanılacak)
@@ -75,4 +72,9 @@ data class CargoDto(
     val date: String, // ISO 8601 formatı
     val callDate: String? = null,
     val callAttemptCount: Int = 0
+)
+
+data class VillaContactDeleteDto(
+    val villaId: Int,
+    val contactId: Int
 )

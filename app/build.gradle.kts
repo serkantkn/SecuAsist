@@ -52,7 +52,13 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     kapt(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.roundedimageview)
+    implementation(libs.imagepicker)
+    implementation(libs.hawk)
+    implementation(libs.balloon)
+    implementation(libs.timeago)
 
     implementation(libs.okhttp)
     implementation(libs.gson)
+    implementation(libs.blurview)
 }

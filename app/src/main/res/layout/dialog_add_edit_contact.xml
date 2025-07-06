@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="15dp"
+    android:background="@drawable/background_window"
+    android:id="@+id/blur">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <EditText
+            android:id="@+id/etContactName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Kişi Adı Soyadı"
+            android:inputType="textPersonName"
+            android:textColorHint="@color/textColorSecondary"
+            android:textColor="@color/white"
+            android:background="@drawable/background_edittext"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <EditText
+            android:id="@+id/etContactPhone"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="Telefon Numarası"
+            android:inputType="phone"
+            android:textColorHint="@color/textColorSecondary"
+            android:textColor="@color/white"
+            android:background="@drawable/background_edittext"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            app:layout_constraintTop_toBottomOf="@+id/etContactName"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</eightbitlab.com.blurview.BlurView>

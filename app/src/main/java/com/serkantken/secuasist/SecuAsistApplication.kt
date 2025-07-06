@@ -9,7 +9,7 @@ import com.serkantken.secuasist.network.WebSocketClient
 class SecuAsistApplication : Application() {
 
     val webSocketClient: WebSocketClient by lazy {
-        WebSocketClient("192.168.137.1", 8765) // Kendi sunucu IP'nizi ve portunuzu girin
+        WebSocketClient("192.168.1.34", 8765) // Kendi sunucu IP'nizi ve portunuzu girin
     }
 
     // Uygulama yaşam döngüsü için CoroutineScope
