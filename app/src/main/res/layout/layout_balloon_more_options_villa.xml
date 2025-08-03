@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layout_menu_balloon"
+    android:background="@drawable/background_balloon"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_new_villa"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icNewVilla"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:padding="7dp"
+                android:src="@drawable/ic_add_villa"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/titleNewVilla"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:text="Yeni Villa Ekle"
+                android:textColor="@color/white"
+                app:layout_constraintBottom_toBottomOf="@id/icNewVilla"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/icNewVilla"
+                app:layout_constraintTop_toTopOf="@id/icNewVilla"
+                app:layout_constraintHorizontal_bias="0" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_import"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/btn_new_villa"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icImport"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_import"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleImport"
+                android:text="CSV Dosyasından İçe Aktar"
+                android:textColor="@color/white"
+                android:lines="1"
+                app:layout_constraintStart_toEndOf="@id/icImport"
+                app:layout_constraintTop_toTopOf="@id/icImport"
+                app:layout_constraintBottom_toBottomOf="@id/icImport"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:id="@+id/divider"
+            app:layout_constraintTop_toBottomOf="@id/btn_import"
+            app:layout_constraintStart_toStartOf="@id/btn_import"
+            app:layout_constraintEnd_toEndOf="@id/btn_import"
+            android:background="@color/cardBackground"
+            android:layout_marginTop="5dp"/>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_settings"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/divider"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginTop="5dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icSettings"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_settings"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleSettings"
+                android:text="Ayarlar"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icSettings"
+                app:layout_constraintTop_toTopOf="@id/icSettings"
+                app:layout_constraintBottom_toBottomOf="@id/icSettings"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</eightbitlab.com.blurview.BlurView>

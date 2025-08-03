@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Delete
+import androidx.room.OnConflictStrategy
 import androidx.room.Transaction
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaWithContacts
@@ -15,14 +16,23 @@ interface VillaDao {
     @Insert
     suspend fun insert(villa: Villa): Long // Eklenen villanın ID'sini döndürür
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(villas: List<Villa>): List<Long>
+
     @Update
     suspend fun update(villa: Villa)
 
     @Delete
     suspend fun delete(villa: Villa)
 
+    @Query("DELETE FROM villas WHERE villaId = :id")
+    suspend fun deleteById(id: Int)
+
     @Query("SELECT * FROM Villas")
     fun getAllVillas(): Flow<List<Villa>> // Tüm villaları gözlemlenebilir bir şekilde döndürür
+
+    @Query("SELECT * FROM Villas ORDER BY villaNo ASC") // Villa numarasına göre sıralı
+    suspend fun getAllVillasAsList(): List<Villa> // Flow olmayan versiyon
 
     @Query("SELECT * FROM Villas WHERE villaId = :villaId")
     suspend fun getVillaById(villaId: Int): Villa?
@@ -40,4 +50,7 @@ interface VillaDao {
     @Transaction
     @Query("SELECT * FROM Villas WHERE villaId = :villaId")
     suspend fun getVillaWithContactsById(villaId: Int): VillaWithContacts?
+
+    @Query("SELECT DISTINCT villaStreet FROM villas WHERE villaStreet IS NOT NULL AND villaStreet != '' ORDER BY villaStreet ASC")
+    fun getUniqueStreetNames(): Flow<List<String>>
 }

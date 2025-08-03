@@ -19,6 +19,9 @@ interface CargoCompanyDao {
     @Delete
     suspend fun delete(company: CargoCompany)
 
+    @Query("DELETE FROM CargoCompanies WHERE companyId = :id")
+    suspend fun deleteById(id: Int)
+
     @Query("SELECT * FROM CargoCompanies")
     fun getAllCargoCompanies(): Flow<List<CargoCompany>>
 

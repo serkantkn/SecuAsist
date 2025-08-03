@@ -72,11 +72,36 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="8dp" />
 
-                <EditText
-                    android:id="@+id/etVillaStreet"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/til_villa_street"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox.ExposedDropdownMenu"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:hint="Sokak"
+                    android:layout_marginTop="8dp"
+                    android:hint="Sokak / Cadde"
+                    android:textColorHint="@color/textColorSecondary"
+                    app:boxBackgroundColor="@android:color/transparent"
+                    app:boxStrokeWidth="0dp"
+                    app:boxStrokeWidthFocused="0dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/etVillaNotes">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/actv_villa_street"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/white"
+                        android:background="@drawable/background_edittext"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <EditText
+                    android:id="@+id/etVillaNavigationA"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:hint="A Kapısından Navigasyon Bilgisi"
                     android:textColorHint="@color/textColorSecondary"
                     android:textColor="@color/white"
                     android:inputType="text"
@@ -85,16 +110,16 @@
                     android:paddingEnd="10dp"
                     android:paddingTop="10dp"
                     android:paddingBottom="10dp"
-                    app:layout_constraintTop_toBottomOf="@+id/etVillaNotes"
+                    app:layout_constraintTop_toBottomOf="@+id/til_villa_street"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="8dp" />
 
                 <EditText
-                    android:id="@+id/etVillaNavigation"
+                    android:id="@+id/etVillaNavigationB"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:hint="Navigasyon Bilgisi"
+                    android:hint="B Kapısından Navigasyon Bilgisi"
                     android:textColorHint="@color/textColorSecondary"
                     android:textColor="@color/white"
                     android:inputType="text"
@@ -103,7 +128,7 @@
                     android:paddingEnd="10dp"
                     android:paddingTop="10dp"
                     android:paddingBottom="10dp"
-                    app:layout_constraintTop_toBottomOf="@+id/etVillaStreet"
+                    app:layout_constraintTop_toBottomOf="@+id/etVillaNavigationA"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="8dp" />
@@ -114,7 +139,7 @@
                     android:layout_height="wrap_content"
                     android:text="Villada Çalışma Var"
                     android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/etVillaNavigation"
+                    app:layout_constraintTop_toBottomOf="@+id/etVillaNavigationB"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="16dp" />

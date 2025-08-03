@@ -36,4 +36,7 @@ interface CargoDao {
     // Kargo teslim durumunu güncelleme
     @Query("UPDATE Cargos SET isCalled = :isCalled, isMissed = :isMissed, callDate = :callDate, callAttemptCount = :callAttemptCount WHERE cargoId = :cargoId")
     suspend fun updateCargoCallStatus(cargoId: Int, isCalled: Int, isMissed: Int, callDate: String?, callAttemptCount: Int)
+
+    @Query("SELECT EXISTS (SELECT 1 FROM Cargos WHERE companyId = :targetCompanyId AND isCalled = 0 LIMIT 1)")
+    suspend fun hasUncalledCargosForCompany(targetCompanyId: Int): Boolean
 }

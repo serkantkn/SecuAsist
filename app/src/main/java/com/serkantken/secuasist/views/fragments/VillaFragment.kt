@@ -5,17 +5,18 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.launch
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import com.serkantken.secuasist.R
 import com.serkantken.secuasist.adapters.VillaAdapter
 import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.databinding.FragmentVillaBinding
 import com.serkantken.secuasist.utils.Tools
 import com.serkantken.secuasist.views.activities.MainActivity
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class VillaFragment : Fragment() {
@@ -23,6 +24,16 @@ class VillaFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var villaAdapter: VillaAdapter
     private lateinit var appDatabase: AppDatabase
+    private var villaObserverJob: Job? = null
+    private var currentSortType = VillaSortType.VILLA_NO_ASC
+
+    enum class VillaSortType {
+        VILLA_NO_ASC, VILLA_NO_DESC, STREET_NAME_ASC, EMPTY_FIRST
+    }
+
+    enum class StatusFilter {
+        UNDER_CONSTRUCTION, IS_SPECIAL, IS_RENTAL, NO_CARGO_CALLS
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         _binding = FragmentVillaBinding.inflate(inflater, container, false)
@@ -44,14 +55,15 @@ class VillaFragment : Fragment() {
             insets
         }
         setupRecyclerView()
+        setupSwipeToRefresh()
+        binding.swipeRefreshLayout.isRefreshing = true
         observeVillas()
     }
 
     private fun setupRecyclerView() {
         villaAdapter = VillaAdapter(
             onItemClick = { villa ->
-                // MainActivity'deki showAddEditVillaDialog fonksiyonunu çağır
-                (activity as? MainActivity)?.showAddEditVillaDialog(villa)
+                (activity as? MainActivity)?.showVillaInfoBalloon(villa)
             },
             onItemLongClick = { villa ->
                 (activity as? MainActivity)?.showAddEditVillaDialog(villa)
@@ -64,17 +76,126 @@ class VillaFragment : Fragment() {
         }
     }
 
+    private fun setupSwipeToRefresh() {
+        binding.swipeRefreshLayout.setOnRefreshListener {
+            // Kullanıcı yenileme hareketi yaptığında, sadece veri gözlemlemeyi yeniden tetikle.
+            // Başka hiçbir şey yapma.
+            observeVillas()
+        }
+    }
+
+    // MainActivity'den sıralamayı değiştirmek için çağrılacak fonksiyon
+    fun sortVillasBy(sortType: VillaSortType) {
+        currentSortType = sortType
+
+        // Kullanıcıya sıralamanın başladığına dair görsel geri bildirim verelim.
+        binding.swipeRefreshLayout.isRefreshing = true
+        observeVillas() // Veri yüklemesini başlat. Yükleme bitince callback animasyonu durduracak.
+    }
+
+    data class VillaFilterState(
+        val selectedStreet: String? = null,
+        val activeStatusFilters: Set<StatusFilter> = emptySet(),
+        val sortBy: VillaSortType = VillaSortType.VILLA_NO_ASC,
+        val searchQuery: String? = null // YENİ ALAN
+    )
+
+    fun setSearchQuery(query: String) {
+        // Mevcut durumu koruyarak sadece arama sorgusunu güncelle.
+        filterState.value = filterState.value.copy(searchQuery = query)
+    }
+
+    // YENİ: Filtre durumunu bir StateFlow olarak tutuyoruz.
+    // Bu, filtrelerde bir değişiklik olduğunda otomatik olarak yeniden veri çekilmesini sağlar.
+    private val filterState = MutableStateFlow(VillaFilterState())
+
+    // YENİ: Filtreleri temizleyen ve varsayılan duruma dönen fonksiyon
+    fun clearFilters() {
+        // filterState'i başlangıç değerine geri döndür.
+        // StateFlow, bu değişikliği algılayıp combine bloğunu yeniden tetikleyecek.
+        filterState.value = VillaFilterState()
+    }
+
+    // YENİ: Belirli bir sokağa göre filtreleyen fonksiyon
+    fun setStreetFilter(streetName: String) {
+        // Mevcut durumu koruyarak sadece sokağı güncelle.
+        filterState.value = filterState.value.copy(selectedStreet = streetName)
+    }
+
+    // YENİ: Durum filtrelerini güncelleyen fonksiyon.
+    fun setStatusFilters(newFilters: Set<StatusFilter>) {
+        // Mevcut filtre durumunu koruyarak sadece durum filtreleri set'ini güncelle.
+        filterState.value = filterState.value.copy(activeStatusFilters = newFilters)
+    }
+
+    fun getCurrentFilterState(): VillaFilterState {
+        return filterState.value
+    }
+
     private fun observeVillas() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            appDatabase.villaDao().getAllVillasWithContacts().collect { villaWithContactsList ->
-                villaAdapter.submitList(villaWithContactsList)
-                // (activity as? MainActivity)?.showToast("Villalar güncellendi: ${villaWithContactsList.size} adet.")
-            }
+        villaObserverJob?.cancel()
+        villaObserverJob = viewLifecycleOwner.lifecycleScope.launch {
+            appDatabase.villaDao().getAllVillasWithContacts()
+                .combine(filterState) { allVillas, currentFilter ->
+                    var filteredList = allVillas
+
+                    // 1. Sokağa Göre Filtrele
+                    if (!currentFilter.selectedStreet.isNullOrEmpty()) {
+                        filteredList = filteredList.filter {
+                            it.villa.villaStreet == currentFilter.selectedStreet
+                        }
+                    }
+
+                    // 2. Duruma Göre Filtrele
+                    if (currentFilter.activeStatusFilters.isNotEmpty()) {
+                        filteredList = filteredList.filter { villaWithContacts ->
+                            val villa = villaWithContacts.villa
+                            currentFilter.activeStatusFilters.all { filter ->
+                                when (filter) {
+                                    StatusFilter.UNDER_CONSTRUCTION -> villa.isVillaUnderConstruction == 1
+                                    StatusFilter.IS_SPECIAL -> villa.isVillaSpecial == 1
+                                    StatusFilter.IS_RENTAL -> villa.isVillaRental == 1
+                                    StatusFilter.NO_CARGO_CALLS -> villa.isVillaCallForCargo == 0
+                                }
+                            }
+                        }
+                    }
+
+                    // --- YENİ BÖLÜM: ARAMA FİLTRESİ ---
+                    if (!currentFilter.searchQuery.isNullOrBlank()) {
+                        val query = currentFilter.searchQuery.trim()
+                        filteredList = filteredList.filter { villaWithContacts ->
+                            val villa = villaWithContacts.villa
+                            // Villa numarasında veya notlarda (büyük/küçük harf duyarsız) ara
+                            villa.villaNo.toString().contains(query) ||
+                                    (villa.villaNotes?.contains(query, ignoreCase = true) ?: false)
+                        }
+                    }
+                    // --- YENİ BÖLÜM BİTTİ ---
+
+                    // 4. Sıralama
+                    when (currentFilter.sortBy) {
+                        VillaSortType.VILLA_NO_ASC -> {
+                            filteredList.sortedBy { it.villa.villaNo }
+                        }
+                        else -> filteredList
+                    }
+                }
+                .collectLatest { villas ->
+                    villaAdapter.submitList(villas) {
+                        if (binding.swipeRefreshLayout.isRefreshing) {
+                            binding.swipeRefreshLayout.isRefreshing = false
+                        }
+                        if (villas.isNotEmpty()) {
+                            binding.recyclerView.smoothScrollToPosition(0)
+                        }
+                    }
+                }
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null // View Binding için hafıza sızıntılarını önle
+        _binding = null // Bellek sızıntılarını önlemek için view binding'i temizle
     }
 }

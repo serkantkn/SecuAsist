@@ -1,5 +1,6 @@
 package com.serkantken.secuasist.adapters
 
+import android.app.Activity
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -8,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.serkantken.secuasist.databinding.ItemVillaBinding
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaWithContacts
+import com.serkantken.secuasist.utils.Tools
 
 class VillaAdapter(
     // Artık VillaWithContacts objelerini işleyeceğiz
@@ -49,7 +51,8 @@ class VillaAdapter(
             binding.tvVillaNo.text = villaWithContacts.villa.villaNo.toString()
 
             // Ana iletişim kurulacak kişiyi bul (örneğin ilk kişi veya isRealOwner=0 olan ilk kişi)
-            val primaryContact = villaWithContacts.contacts.firstOrNull { it.contactName.isNotBlank() } // Sadece adı olan ilk kişiyi al
+            val primaryContact = villaWithContacts.contacts.firstOrNull { it.contactName?.isNotBlank()
+                ?: false } // Sadece adı olan ilk kişiyi al
             // Veya daha spesifik: isRealOwner = 0 (kiracı) olan birincil kişi
             // val tenant = villaWithContacts.contacts.firstOrNull { it.contactType == "Tenant" }
 

@@ -9,6 +9,7 @@ import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.CompanyContact
 import com.serkantken.secuasist.models.Contact
+import com.serkantken.secuasist.models.Intercom
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
 
@@ -17,10 +18,11 @@ import com.serkantken.secuasist.models.VillaContact
         Villa::class,
         Contact::class,
         VillaContact::class,
-        Camera::class,
         CargoCompany::class,
         CompanyContact::class,
-        Cargo::class
+        Cargo::class,
+        Camera::class,
+        Intercom::class
     ],
     version = 1, // Veritabanı şemasında her değişiklik yaptığınızda bu numarayı artırmalısınız
     exportSchema = true // Şema yedeği dışarı aktarılacak
@@ -31,10 +33,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun villaDao(): VillaDao
     abstract fun contactDao(): ContactDao
     abstract fun villaContactDao(): VillaContactDao
-    abstract fun cameraDao(): CameraDao
     abstract fun cargoCompanyDao(): CargoCompanyDao
     abstract fun companyContactDao(): CompanyContactDao
     abstract fun cargoDao(): CargoDao
+    abstract fun cameraDao(): CameraDao
+    abstract fun intercomDao(): IntercomDao
+
 
     companion object {
         @Volatile

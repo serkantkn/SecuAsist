@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="street_names">
+        <item>Ana Yol</item>
+        <item>Mogan 1 Sk.</item>
+        <item>Salda Ana Yol</item>
+        <item>Salda 2 Sk.</item>
+        <item>Salda 3 Sk.</item>
+        <item>Salda 4 Sk.</item>
+        <item>Salda 5 Sk.</item>
+        <item>Salda 6 Sk.</item>
+        <item>Salda 7 Sk.</item>
+        <item>Salda 9 Sk.</item>
+        <item>Salda 10 Sk.</item>
+        <item>Salda 11 Sk.</item>
+        <item>Hazar 12 Sk.</item>
+        <item>Hazar 13 Sk.</item>
+        <item>Hazar 14 Sk.</item>
+        <item>Hazar 15 Sk.</item>
+        <item>Hazar 16 Sk.</item>
+        <item>Mogan 17 Sk.</item>
+        <item>Hazar 18 Sk.</item>
+        <item>Mogan 19 Sk.</item>
+        <item>Hazar 20 Sk.</item>
+        <item>Mogan 21 Sk.</item>
+        <item>Hazar 22 Sk.</item>
+        <item>Mogan 23 Sk.</item>
+        <item>Bafa 24 Sk.</item>
+        <item>Hazar 25 Sk.</item>
+        <item>Bafa 26 Sk.</item>
+        <item>Bafa 27 Sk.</item>
+        <item>Bafa 28 Sk.</item>
+        <item>Manyas 29 Sk.</item>
+        <item>Bafa 30 Sk.</item>
+        <item>Manyas 31 Sk.</item>
+        <item>Bafa 32 Sk.</item>
+        <item>Manyas 33 Sk.</item>
+        <item>Bafa 34 Sk.</item>
+        <item>Bafa 35 Sk.</item>
+        <item>Palas 36 Sk.</item>
+        <item>Palas 37 Sk.</item>
+        <item>Palas 38 Sk.</item>
+        <item>Palas 39 Sk.</item>
+        <item>Palas 40 Sk.</item>
+        <item>Ana Yol Sonu Site Çıkışı</item>
+        <item>Seyfe 41 Sk.</item>
+        <item>Seyfe 42 Sk.</item>
+        <item>Seyfe 43 Sk.</item>
+        <item>Seyfe 44 Sk.</item>
+    </string-array>
+</resources>

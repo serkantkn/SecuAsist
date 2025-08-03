@@ -7,11 +7,12 @@ import androidx.room.PrimaryKey
 data class Villa(
     @PrimaryKey(autoGenerate = true)
     val villaId: Int = 0,
-    val villaNo: Int, // UNIQUE olarak tanımlandığı için burada da benzersizliği sağlamak önemli
+    val villaNo: Int,
     val villaNotes: String?,
     val villaStreet: String?,
-    val villaNavigation: String?,
-    val isVillaUnderConstruction: Int = 0, // 0: False, 1: True
+    val villaNavigationA: String?,
+    val villaNavigationB: String?,
+    val isVillaUnderConstruction: Int = 0,
     val isVillaSpecial: Int = 0,
     val isVillaRental: Int = 0,
     val isVillaCallFromHome: Int = 0,

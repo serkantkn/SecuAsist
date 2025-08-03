@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.serkantken.secuasist.models.Contact
+import kotlinx.coroutines.flow.Flow // Flow için import eklendi
 
 @Dao
 interface ContactDao {
@@ -20,8 +21,14 @@ interface ContactDao {
     @Delete
     suspend fun delete(contact: Contact)
 
+    @Query("DELETE FROM Contacts WHERE contactId = :id")
+    suspend fun deleteById(id: Int)
+
     @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
-    fun getAllContacts(): LiveData<List<Contact>>
+    fun getAllContacts(): LiveData<List<Contact>> // Bu metod korundu
+
+    @Query("SELECT * FROM Contacts ORDER BY contactName ASC") // Aynı sorgu, farklı dönüş tipi
+    fun getAllContactsAsFlow(): Flow<List<Contact>> // Yeni Flow tabanlı metod
 
     @Query("SELECT * FROM Contacts WHERE contactId = :contactId")
     suspend fun getContactById(contactId: Int): Contact?

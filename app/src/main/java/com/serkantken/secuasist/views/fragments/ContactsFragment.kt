@@ -5,56 +5,175 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.launch
+import androidx.appcompat.app.AlertDialog
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.map
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.serkantken.secuasist.R
+import com.serkantken.secuasist.adapters.ContactsAdapter
+import com.serkantken.secuasist.database.AppDatabase
+import com.serkantken.secuasist.databinding.FragmentContactsBinding
+import com.serkantken.secuasist.models.Contact
+import com.serkantken.secuasist.models.VillaContact
+import com.serkantken.secuasist.utils.Tools
+import com.serkantken.secuasist.views.activities.MainActivity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlin.text.contains
+import kotlin.text.filter
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-private const val ARG_PARAM1 = "param1"
-private const val ARG_PARAM2 = "param2"
-
-/**
- * A simple [Fragment] subclass.
- * Use the [ContactsFragment.newInstance] factory method to
- * create an instance of this fragment.
- */
 class ContactsFragment : Fragment() {
-    // TODO: Rename and change types of parameters
-    private var param1: String? = null
-    private var param2: String? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        arguments?.let {
-            param1 = it.getString(ARG_PARAM1)
-            param2 = it.getString(ARG_PARAM2)
-        }
-    }
+    private var _binding: FragmentContactsBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var contactsAdapter: ContactsAdapter
+    private lateinit var appDatabase: AppDatabase
+
+    private var currentSearchQuery: String? = null
+    private val searchQuery = MutableStateFlow<String?>(null)
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_contacts, container, false)
+        _binding = FragmentContactsBinding.inflate(inflater, container, false)
+        appDatabase = AppDatabase.getDatabase(requireContext())
+        return binding.root
     }
 
-    companion object {
-        /**
-         * Use this factory method to create a new instance of
-         * this fragment using the provided parameters.
-         *
-         * @param param1 Parameter 1.
-         * @param param2 Parameter 2.
-         * @return A new instance of fragment ContactsFragment.
-         */
-        // TODO: Rename and change types and number of parameters
-        @JvmStatic
-        fun newInstance(param1: String, param2: String) =
-            ContactsFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_PARAM1, param1)
-                    putString(ARG_PARAM2, param2)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.rvContacts) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(
+                Tools(requireActivity()).convertDpToPixel(16),
+                systemBars.top + Tools(requireActivity()).convertDpToPixel(55),
+                Tools(requireActivity()).convertDpToPixel(16),
+                systemBars.bottom + Tools(requireActivity()).convertDpToPixel(72)
+            )
+            insets
+        }
+
+        setupRecyclerView()
+        observeContacts()
+    }
+
+    private fun setupRecyclerView() {
+        contactsAdapter = ContactsAdapter(
+            onItemClick = { contact, _ -> // VillaContact bilgisi bu fragment'ta genelde null olacak
+                (activity as? MainActivity)?.showAddEditContactDialog(contact, null)
+            },
+            onDeleteClick = { contact, _ ->
+                showDeleteConfirmationDialog(contact)
+            }
+        )
+        // Eğer _binding.root doğrudan RecyclerView ise:
+        // val recyclerView = binding.root as RecyclerView
+        // recyclerView.apply { ... }
+        // Eğer FragmentContactsBinding.inflate doğru şekilde RecyclerView'a referans veriyorsa:
+        binding.rvContacts.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = contactsAdapter
+            // MainActivity'den padding yönetiliyorsa aşağıdaki paddingler gereksiz olabilir
+            // setPadding(0, getStatusBarHeight(), 0, getNavigationBarHeight())
+        }
+    }
+
+    private fun showDeleteConfirmationDialog(contact: Contact) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Kişiyi Sil")
+            .setMessage("${contact.contactName} adlı kişiyi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")
+            .setPositiveButton("Evet, Sil") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        // Önce bu kişiyle ilişkili tüm VillaContact kayıtlarını sil
+                        // Bu adım önemli, yoksa Foreign Key kısıtlamaları hataya neden olabilir.
+                        // VillaContactDao'da contactId'ye göre silme metodu eklemeniz gerekebilir.
+                        // appDatabase.villaContactDao().deleteContactsByContactId(contact.contactId) // Örnek
+
+                        // Sonra kişiyi sil
+                        appDatabase.contactDao().delete(contact)
+                        (activity as? MainActivity)?.sendContactDeleteToWebSocket(contact.contactId)
+                        (activity as? MainActivity)?.showToast("${contact.contactName} silindi.")
+                        // Liste otomatik olarak Flow ile güncellenecektir.
+                    } catch (e: Exception) {
+                        (activity as? MainActivity)?.showToast("Silinirken hata oluştu: ${e.localizedMessage}")
+                    }
                 }
             }
+            .setNegativeButton("İptal", null)
+            .show()
+    }
+
+    fun setSearchQuery(query: String) {
+        searchQuery.value = query
+    }
+
+    private fun observeContacts() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Veritabanından gelen asıl akış ile arama sorgusu akışını birleştir
+            appDatabase.contactDao().getAllContactsAsFlow() // Veya sizin kullandığınız fonksiyon
+                .combine(searchQuery) { allContacts, query ->
+                    if (query.isNullOrBlank()) {
+                        allContacts // Arama boşsa, tüm listeyi döndür
+                    } else {
+                        // Arama doluysa, isim veya telefonda ara (büyük/küçük harf duyarsız)
+                        allContacts.filter { contact ->
+                            contact.contactName?.contains(query, ignoreCase = true) ?: false ||
+                                    contact.contactPhone?.contains(query, ignoreCase = true) ?: false
+                        }
+                    }
+                }
+                .collectLatest { filteredContacts ->
+                    // Adapter'ınıza filtrelenmiş listeyi gönderin
+                    contactsAdapter.submitList(filteredContacts)
+                }
+        }
+    }
+
+    // Dönüş tipi Flow<List<Contact>> olarak güncellendi
+    private fun getFilteredContactsFlow(): Flow<List<Contact>> {
+        val contactsFlow = appDatabase.contactDao().getAllContactsAsFlow()
+        return contactsFlow.map { contactList ->
+            if (currentSearchQuery.isNullOrBlank()) {
+                contactList
+            } else {
+                contactList.filter {
+                    it.contactName?.contains(currentSearchQuery!!, ignoreCase = true) == true ||
+                            it.contactPhone?.contains(currentSearchQuery!!, ignoreCase = true) == true
+                }
+            }
+            // Pair<Contact, VillaContact?>'e yapılan map işlemi kaldırıldı.
+        }
+    }
+
+    // Bu metod MainActivity'deki arama çubuğundan çağrılacak
+    fun filterContacts(query: String?) {
+        currentSearchQuery = query
+        // Veri akışını yeniden tetiklemek için observeContacts'ı doğrudan çağırmak yerine,
+        // LiveData veya StateFlow kullanmak daha reaktif olurdu.
+        // Şimdilik, basitçe listeyi yeniden toplamak için observe'u tekrar çağırabiliriz
+        // veya daha iyisi, Flow'un doğası gereği currentSearchQuery değiştiğinde
+        // getFilteredContactsFlow yeni bir emisyon yapacak ve collectLatest bunu alacaktır.
+        // Bu yüzden sadece query'yi güncellemek yeterli olabilir, ancak emin olmak için
+        // listeyi yeniden yükleyebiliriz. En temizi ViewModel ile olurdu.
+        // Şimdilik, Flow'un yeniden tetiklenmesine güvenelim veya basitçe:
+        lifecycleScope.launch {
+            contactsAdapter.submitList(getFilteredContactsFlow().first()) // Anlık güncelleme için
+        }
+    }
+
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
     }
 }

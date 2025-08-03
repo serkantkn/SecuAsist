@@ -74,7 +74,7 @@
             app:layout_constraintTop_toBottomOf="@+id/tvDialogTitle"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/btnAddContactToVilla"
+            app:layout_constraintBottom_toTopOf="@id/btnClose"
             tools:listitem="@layout/item_contact"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>

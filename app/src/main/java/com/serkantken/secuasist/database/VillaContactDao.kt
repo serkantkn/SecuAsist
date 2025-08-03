@@ -23,9 +23,15 @@ interface VillaContactDao {
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId")
     fun getContactsForVilla(villaId: Int): Flow<List<Contact>>
 
+    @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId")
+    suspend fun getContactsForVillaNonFlow(villaId: Int): List<Contact> // Flow olmayan versiyon
+
     // Belirli bir villanın gerçek sahiplerini çekmek için
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.isRealOwner = 1")
     fun getRealOwnersForVilla(villaId: Int): Flow<List<Contact>>
+
+    @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.isRealOwner = 1")
+    suspend fun getRealOwnersForVillaNonFlow(villaId: Int): List<Contact> // Flow olmayan versiyon
 
     // Belirli bir villanın belirli bir contactType'a sahip kişilerini çekmek için
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.contactType = :contactType")

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layout_menu_balloon"
+    android:background="@drawable/background_balloon"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_new_person"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintHorizontal_bias="0">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icNewPerson"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:padding="7dp"
+                android:src="@drawable/ic_add_person"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/titleNewPerson"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:text="Yeni Kişi Ekle"
+                android:textColor="@color/white"
+                app:layout_constraintBottom_toBottomOf="@id/icNewPerson"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/icNewPerson"
+                app:layout_constraintTop_toTopOf="@id/icNewPerson"
+                app:layout_constraintHorizontal_bias="0" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_existing_person"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/btn_new_person"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icExistingPerson"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_person_search"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleExistingPerson"
+                android:text="Mevcut Kişilerden Seç"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icExistingPerson"
+                app:layout_constraintTop_toTopOf="@id/icExistingPerson"
+                app:layout_constraintBottom_toBottomOf="@id/icExistingPerson"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</eightbitlab.com.blurview.BlurView>

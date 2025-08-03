@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<eightbitlab.com.blurview.BlurView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layout_menu_balloon"
+    android:background="@drawable/background_balloon"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_filter_by_street"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icFilterByStreet"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:padding="7dp"
+                android:src="@drawable/ic_sort"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/titleFilterByStreet"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:text="Sokağa Göre Filtrele"
+                android:textColor="@color/white"
+                app:layout_constraintBottom_toBottomOf="@id/icFilterByStreet"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/icFilterByStreet"
+                app:layout_constraintTop_toTopOf="@id/icFilterByStreet"
+                app:layout_constraintHorizontal_bias="0" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_filter_by_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/btn_filter_by_street"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icFilterByStatus"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_sort_by_alpha"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleFilterByStatus"
+                android:text="Duruma Göre Filtrele"
+                android:textColor="@color/white"
+                android:lines="1"
+                app:layout_constraintStart_toEndOf="@id/icFilterByStatus"
+                app:layout_constraintTop_toTopOf="@id/icFilterByStatus"
+                app:layout_constraintBottom_toBottomOf="@id/icFilterByStatus"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_clear_filter"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/btn_filter_by_status"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginTop="5dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:id="@+id/divider"
+                android:background="@color/cardBackground"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"/>
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icClearFilter"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_delete"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                android:layout_marginTop="5dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleClearFilter"
+                android:text="Filtreyi Temizle"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icClearFilter"
+                app:layout_constraintTop_toTopOf="@id/icClearFilter"
+                app:layout_constraintBottom_toBottomOf="@id/icClearFilter"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</eightbitlab.com.blurview.BlurView>
