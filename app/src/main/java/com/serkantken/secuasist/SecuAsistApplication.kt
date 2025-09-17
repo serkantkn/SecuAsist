@@ -1,15 +1,25 @@
 package com.serkantken.secuasist
 
 import android.app.Application
+import android.util.Log
+import com.orhanobut.hawk.Hawk
+import com.serkantken.secuasist.network.WebSocketClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import android.util.Log // Log için
-import com.serkantken.secuasist.network.WebSocketClient
 
 class SecuAsistApplication : Application() {
 
     val webSocketClient: WebSocketClient by lazy {
-        WebSocketClient("192.168.1.34", 8765) // Kendi sunucu IP'nizi ve portunuzu girin
+        val savedIp = Hawk.get<String?>("server_ip", null)
+        val defaultIp = "192.168.1.34" // Hawk'ta IP yoksa veya geçersizse kullanılacak varsayılan IP
+        val serverIpToUse = if (savedIp.isNullOrEmpty() || !android.net.InetAddresses.isNumericAddress(savedIp)) {
+            Log.w("SecuAsistApplication", "Hawk'ta geçerli IP bulunamadı veya formatı yanlış, varsayılan IP kullanılıyor: $defaultIp")
+            defaultIp
+        } else {
+            Log.i("SecuAsistApplication", "Hawk'tan okunan IP kullanılıyor: $savedIp")
+            savedIp
+        }
+        WebSocketClient(serverIpToUse, 8765)
     }
 
     // Uygulama yaşam döngüsü için CoroutineScope
@@ -17,6 +27,7 @@ class SecuAsistApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        Hawk.init(this).build()
         Log.d("SecuAsistApplication", "Uygulama başlatıldı, WebSocket bağlanıyor...")
         webSocketClient.connect()
 

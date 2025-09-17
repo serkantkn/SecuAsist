@@ -1,187 +1,477 @@
 package com.serkantken.secuasist.views.activities
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.launch
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.serkantken.secuasist.R
+import androidx.recyclerview.widget.RecyclerView
+import com.orhanobut.hawk.Hawk
+import com.serkantken.secuasist.adapters.CallingContactAdapter
 import com.serkantken.secuasist.adapters.CallingVillaAdapter
-import com.serkantken.secuasist.adapters.ContactsAdapter
 import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.databinding.ActivityCallingBinding
+import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.DisplayableVilla
 import com.serkantken.secuasist.models.VillaCallingState
-import com.serkantken.secuasist.views.fragments.SelectCargoRecipientsSheet
+import com.serkantken.secuasist.utils.Tools
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CallingActivity : AppCompatActivity() {
+    private companion object {
+        const val TAG = "CallingActivity"
+    }
 
     private lateinit var binding: ActivityCallingBinding
     private lateinit var db: AppDatabase
     private lateinit var callingVillaAdapter: CallingVillaAdapter
-    private lateinit var contactsAdapter: ContactsAdapter // Alttaki kişiler için
+    private lateinit var callingContactAdapter: CallingContactAdapter
 
     private var displayableVillas = mutableListOf<DisplayableVilla>()
-    private var cargoIds: ArrayList<Int>? = null
-    private var currentInProgressVillaId: Int? = null
+    // private var allContacts = mutableListOf<Contact>() // Bu artık kullanılmayacak
+    private var contactsForSelectedVillaMap = mutableMapOf<Int, List<Contact>>()
+
+    private var currentSelectedVilla: DisplayableVilla? = null
+    private var currentlySelectedContactFromAdapter: Contact? = null
+
+    // private val gson = Gson() // Gerekmiyorsa kaldırılabilir
+    private val CALL_PERMISSION_REQUEST_CODE = 101
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCallingBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+        enableEdgeToEdge()
+        window.isNavigationBarContrastEnforced = false
+        window.navigationBarColor = ContextCompat.getColor(this, android.R.color.transparent)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.toolbarLayout) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            v.setPadding(0, systemBars.top + Tools(this).convertDpToPixel(5), 0, 0)
+            binding.rvVillaList.setPadding(
+                + Tools(this).convertDpToPixel(12),
+                systemBars.top + Tools(this).convertDpToPixel(55),
+                + Tools(this).convertDpToPixel(12),
+                systemBars.bottom + Tools(this).convertDpToPixel(200)
+            )
+            val marginparams = binding.blurContactCallLayout.layoutParams as ViewGroup.MarginLayoutParams
+            marginparams.setMargins(Tools(this).convertDpToPixel(16), 0, Tools(this).convertDpToPixel(16), systemBars.bottom)
+            binding.blurContactCallLayout.layoutParams = marginparams
             insets
         }
 
-        db = AppDatabase.getDatabase(this)
-        cargoIds = intent.getIntegerArrayListExtra(SelectCargoRecipientsSheet.EXTRA_CARGO_IDS)
+        Tools(this).blur(arrayOf(binding.blurToolbarButtons, binding.blurContactCallLayout), 10f, true)
 
-        if (cargoIds.isNullOrEmpty()) {
-            // Hata yönetimi, kargo ID'leri olmadan bu aktivite çalışamaz
+        if (!Hawk.isBuilt()) {
+            Hawk.init(this).build()
+        }
+        db = AppDatabase.getDatabase(this)
+
+        setupRecyclerViews()
+        setupActionButtons()
+        requestPhonePermissionIfNeeded()
+
+        // Intent'ten kargo listesini al
+        val cargoList = intent.getSerializableExtra("CARGO_LIST") as? ArrayList<Cargo>
+
+        if (cargoList != null && cargoList.isNotEmpty()) {
+            val targetVillaIds = cargoList.map { it.villaId }.distinct()
+            loadInitialData(targetVillaIds, cargoList)
+        } else {
+            finishActivityWithMessage("Gerekli kargo bilgileri eksik veya geçersiz.")
+        }
+    }
+
+    private fun requestPhonePermissionIfNeeded() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CALL_PHONE), CALL_PERMISSION_REQUEST_CODE)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == CALL_PERMISSION_REQUEST_CODE) {
+            if (!(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                Toast.makeText(this, "Arama yapabilmek için telefon izni gereklidir.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun loadInitialData(targetVillaIds: List<Int>, cargoList: ArrayList<Cargo>?) {
+        lifecycleScope.launch {
+            try {
+                val allVillasFromDb = db.villaDao().getAllVillasAsList()
+
+                val filteredVillas = allVillasFromDb.filter { it.villaId in targetVillaIds }
+
+                if (filteredVillas.isEmpty()) {
+                    finishActivityWithMessage("Kargolara ait gösterilecek villa bulunamadı.")
+                    return@launch
+                }
+
+                if (cargoList == null) { // Ekstra güvenlik kontrolü
+                    finishActivityWithMessage("Kargo listesi yüklenemedi.")
+                    return@launch
+                }
+
+                displayableVillas.clear()
+                contactsForSelectedVillaMap.clear()
+
+                // Villaların kişilerini ve DisplayableVilla nesnelerini oluştur
+                val deferreds = filteredVillas.map { villa ->
+                    async { // Her villa için asenkron işlem
+                        var contactsForVilla =
+                            db.villaContactDao().getRealOwnersForVillaNonFlow(villa.villaId)
+                        if (contactsForVilla.isEmpty()) {
+                            contactsForVilla =
+                                db.villaContactDao().getContactsForVillaNonFlow(villa.villaId)
+                        }
+                        contactsForSelectedVillaMap[villa.villaId] = contactsForVilla
+
+                        val ownerName =
+                            contactsForVilla.firstOrNull()?.contactName ?: villa.villaNotes
+                            ?: "Sahibi Bilinmiyor"
+
+                        // Villa ile ilişkili kargoyu bul ve cargoId'yi al
+                        // filteredVillas, cargoList'teki villaId'lere göre oluşturulduğu için
+                        // her zaman bir eşleşme olmalı.
+                        val associatedCargo = cargoList.find { it.villaId == villa.villaId }
+                        if (associatedCargo == null) {
+                            null
+                        } else {
+                            val cargoId = associatedCargo.cargoId
+                            // Tüm villaları önce PENDING olarak oluştur
+                            DisplayableVilla(cargoId, villa, ownerName, VillaCallingState.PENDING)
+                        }
+                    }
+                }
+                // Tüm asenkron işlemleri bekle, null olmayan sonuçları al ve villaNo'ya göre sırala
+                val tempDisplayableVillas =
+                    deferreds.awaitAll().filterNotNull().sortedBy { it.villa.villaNo }
+
+                displayableVillas.addAll(tempDisplayableVillas)
+
+                // Sıralanmış listenin ilk elemanını IN_PROGRESS yap (eğer liste boş değilse)
+                if (displayableVillas.isNotEmpty()) {
+                    displayableVillas.first().state = VillaCallingState.IN_PROGRESS
+                }
+
+                // Villa adapter'ını güncelle
+                callingVillaAdapter.submitList(displayableVillas.toList())
+
+                // Başlangıçta seçili olan (IN_PROGRESS) villayı bul
+                currentSelectedVilla =
+                    displayableVillas.firstOrNull() // firstOrNull() zaten IN_PROGRESS olanı (ilkini) verecektir.
+
+                if (currentSelectedVilla != null) {
+                    val initialContacts =
+                        contactsForSelectedVillaMap[currentSelectedVilla!!.villa.villaId] ?: emptyList()
+                    callingContactAdapter.differ.submitList(initialContacts)
+                    if (initialContacts.isNotEmpty()) {
+                        currentlySelectedContactFromAdapter = initialContacts.first()
+                        callingContactAdapter.selectedPosition = 0
+                        callingContactAdapter.notifyItemChanged(0)
+                        scrollToCenter(0, binding.rvContacts)
+                    } else {
+                        currentlySelectedContactFromAdapter = null
+                        callingContactAdapter.selectedPosition = -1 // Seçim olmadığını belirt
+                    }
+                } else {
+                    callingContactAdapter.differ.submitList(emptyList()) // Kişi listesini temizle
+                }
+
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@CallingActivity,
+                    "Veri yüklenirken bir hata oluştu: ${e.localizedMessage}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun setupRecyclerViews() {
+        callingVillaAdapter = CallingVillaAdapter { clickedDisplayableVilla ->
+            handleVillaClick(clickedDisplayableVilla)
+        }
+        binding.rvVillaList.apply {
+            layoutManager = LinearLayoutManager(this@CallingActivity)
+            clipToPadding = false
+            adapter = callingVillaAdapter
+        }
+
+        callingContactAdapter = CallingContactAdapter { selectedContact ->
+            handleContactSelected(selectedContact)
+        }
+        binding.rvContacts.apply {
+            layoutManager = LinearLayoutManager(this@CallingActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = callingContactAdapter
+        }
+    }
+
+    private fun setupActionButtons() {
+        binding.btnClose.setOnClickListener {
             finish()
+        }
+
+        binding.btnCall.setOnClickListener {
+            // ... (önceki btnCall içeriği buraya gelecek, bir değişiklik yok) ...
+            if (currentSelectedVilla == null) {
+                Toast.makeText(this, "Lütfen önce bir villa seçin.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (currentlySelectedContactFromAdapter == null) {
+                Toast.makeText(this, "Lütfen aranacak bir kişi seçin.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Arama izni verilmemiş. Lütfen izin verin.", Toast.LENGTH_LONG).show()
+                requestPhonePermissionIfNeeded()
+                return@setOnClickListener
+            }
+
+            val phoneNumber = currentlySelectedContactFromAdapter?.contactPhone
+            if (phoneNumber.isNullOrBlank()) {
+                Toast.makeText(this, "Seçili kişinin telefon numarası bulunmuyor.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // Kargo takibi için arama logu oluşturma veya kargo durumunu güncelleme (opsiyonel)
+            // Örnek: currentSelectedVilla'nın villaId'si ve companyId (eğer biliniyorsa) ile
+            // ilgili kargonun arandığını veritabanına kaydet.
+            // Bu kısım projenizin detaylı iş mantığına göre eklenebilir.
+
+            val callIntent = Intent(Intent.ACTION_CALL, "tel:$phoneNumber".toUri())
+            try {
+                startActivity(callIntent)
+                updateVillaState(currentSelectedVilla, VillaCallingState.CALLED)
+                lifecycleScope.launch {
+                    delay(2000)
+                    showCallResultDialog()
+                }
+            } catch (e: SecurityException) {
+                Toast.makeText(this, "Arama başlatılamadı. İzinleri kontrol edin.", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        binding.btnCallFromHome.setOnClickListener {
+            if (currentSelectedVilla == null) {
+                Toast.makeText(this, "Lütfen önce bir villa seçin.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa evden arandı olarak işaretlendi.", Toast.LENGTH_SHORT).show()
+            updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_SUCCESS) // Örnek durum
+            // İlgili kargonun durumunu DB'de güncellemek gerekebilir.
+            moveToNextPendingVilla()
+        }
+
+        binding.btnSkip.setOnClickListener {
+            if (currentSelectedVilla == null) {
+                Toast.makeText(this, "Atlanacak bir villa seçili değil.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa atlandı.", Toast.LENGTH_SHORT).show()
+            updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_FAILED) // Örnek durum
+            // İlgili kargonun durumunu DB'de güncellemek gerekebilir.
+            moveToNextPendingVilla()
+        }
+    }
+
+    private fun showCallResultDialog() {
+        if (currentSelectedVilla == null) {
             return
         }
 
-        setupVillaRecyclerView()
-        setupContactsRecyclerView() // Kişi RecyclerView'ı için de bir setup metodu
-
-        loadInitialData()
-    }
-
-    private fun setupVillaRecyclerView() {
-        callingVillaAdapter = CallingVillaAdapter { clickedVilla ->
-            handleVillaClick(clickedVilla)
-        }
-        binding.rvVillaList.apply { // XML'deki RecyclerView ID'niz (rvVillaCarousel veya rvVillasList)
-            layoutManager =
-                LinearLayoutManager(this@CallingActivity,
-                    LinearLayoutManager.VERTICAL, false)
-            adapter = callingVillaAdapter
-            // Ortalamayı daha pürüzsüz yapmak için item animator'u kapatmayı düşünebilirsiniz,
-            // ya da özel animasyonlar için açık bırakabilirsiniz.
-            // itemAnimator = null
-        }
-    }
-    private fun setupContactsRecyclerView() {
-        contactsAdapter = ContactsAdapter(
-            onItemClick = { contact, _ -> // VillaContact? parametresini burada kullanmayacağımız için _ ile geçiştiriyoruz
-                // TODO: Kişiye tıklama olayını işle.
-                // Örneğin, bu kişiyi mevcut IN_PROGRESS villası için ara.
-                // val phoneNumber = contact.contactPhone
-                // directCall(phoneNumber) // Veya bir arama intent'i başlat
-                // Log.d("CallingActivity", "Contact clicked: ${contact.contactName}, Phone: ${contact.contactPhone}")
-                // Gerekirse, hangi villayla ilişkili olduğunu currentInProgressVillaId üzerinden bilebiliriz.
-            },
-            onDeleteClick = { contact, _ ->
-                // CallingActivity'deki bu kişi listesinde silme işlemi muhtemelen uygulanmayacak.
-                // Log.d("CallingActivity", "Delete clicked for contact ${contact.contactName}, but not handled in this context.")
+        val villaNo = currentSelectedVilla!!.villa.villaNo
+        AlertDialog.Builder(this)
+            .setTitle("Arama Sonucu: $villaNo")
+            .setMessage("$villaNo numaralı villa ile yapılan görüşme sonucunu belirtin:")
+            .setPositiveButton("Ulaşıldı") { dialog, _ ->
+                updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_SUCCESS)
+                moveToNextPendingVilla()
+                dialog.dismiss()
             }
-        )
-        binding.rvContacts.apply { // XML'deki kişi RecyclerView ID'niz
-            layoutManager = LinearLayoutManager(this@CallingActivity) // Dikey veya yatay olabilir
-            adapter = contactsAdapter
-        }
-    }
+            .setNegativeButton("Ulaşılamadı") { dialog, _ ->
+                updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_FAILED)
+                moveToNextPendingVilla()
+                dialog.dismiss()
+            }
+            .setNeutralButton("Tekrar Ara") { dialog, _ ->
+                dialog.dismiss() // Önce diyaloğu kapat
 
-    private fun loadInitialData() {
-        lifecycleScope.launch {
-            if (cargoIds.isNullOrEmpty()) return@launch
-
-            val villasToShow = mutableListOf<DisplayableVilla>()
-            // İlk kargonun villasını IN_PROGRESS yap, diğerlerini PENDING
-            cargoIds!!.forEachIndexed { index, cargoId ->
-                val cargo = db.cargoDao().getCargoById(cargoId) ?: return@forEachIndexed
-                val villa = db.villaDao().getVillaById(cargo.villaId) ?: return@forEachIndexed
-
-                // Sahip/Aranacak kişiyi bulma mantığı:
-                // Önce cargo.whoCalled (ContactId) ile kişiyi almayı dene.
-                // Yoksa villanın gerçek sahiplerini al.
-                // O da yoksa villanın herhangi bir ilişkili kişisini al.
-                var ownerContact: Contact? = cargo.whoCalled?.let { db.contactDao().getContactById(it) }
-                if (ownerContact == null) {
-                    ownerContact = db.villaContactDao().getRealOwnersForVillaNonFlow(villa.villaId).firstOrNull()
+                if (currentlySelectedContactFromAdapter == null) {
+                    Toast.makeText(this, "Aranacak kişi seçili değil.", Toast.LENGTH_SHORT).show()
+                    // Bu durumda villanın durumunu IN_PROGRESS'e geri çekmek mantıklı olabilir                    // ki kullanıcı yeni bir kişi seçebilsin veya farklı bir işlem yapabilsin.
+                    updateVillaState(currentSelectedVilla, VillaCallingState.IN_PROGRESS)
+                    return@setNeutralButton
                 }
-                if (ownerContact == null) {
-                    ownerContact = db.villaContactDao().getContactsForVillaNonFlow(villa.villaId).firstOrNull()
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Arama izni verilmemiş. Lütfen izin verin.", Toast.LENGTH_LONG).show()
+                    requestPhonePermissionIfNeeded()
+                    // İzin istendikten sonra villanın durumunu CALLED olarak bırakmak mantıklı,
+                    // onResume tekrar tetiklenip diyaloğu açabilir veya kullanıcı izin verince manuel dener.
+                    // updateVillaState(currentSelectedVilla, VillaCallingState.CALLED) // Zaten CALLED olmalı
+                    return@setNeutralButton
                 }
 
-                val state = if (index == 0) VillaCallingState.IN_PROGRESS else VillaCallingState.PENDING
-                if (state == VillaCallingState.IN_PROGRESS) {
-                    currentInProgressVillaId = villa.villaId
+                val phoneNumber = currentlySelectedContactFromAdapter?.contactPhone
+                if (phoneNumber.isNullOrBlank()) {
+                    Toast.makeText(this, "Seçili kişinin telefon numarası bulunmuyor.", Toast.LENGTH_SHORT).show()
+                    updateVillaState(currentSelectedVilla, VillaCallingState.IN_PROGRESS) // Kişi seçimi için
+                    return@setNeutralButton
                 }
-                villasToShow.add(DisplayableVilla(villa, ownerContact?.contactName, state))
+
+                val callIntent = Intent(Intent.ACTION_CALL, "tel:$phoneNumber".toUri())
+                try {
+                    startActivity(callIntent)
+                    // Durumu tekrar CALLED olarak ayarla ki onResume'da bu durum tekrar yakalanabilsin.
+                    // Bu zaten mevcut durum olmalı ama garantiye alalım.
+                    updateVillaState(currentSelectedVilla, VillaCallingState.CALLED)
+                    lifecycleScope.launch {
+                        delay(2000)
+                        showCallResultDialog()
+                    }
+                } catch (e: SecurityException) {
+                    Toast.makeText(this, "Arama başlatılamadı. İzinleri kontrol edin.", Toast.LENGTH_LONG).show()
+                    // Arama başarısız olursa, IN_PROGRESS'e geri dönmek mantıklı olabilir.
+                    updateVillaState(currentSelectedVilla, VillaCallingState.IN_PROGRESS)
+                }
             }
+            .setCancelable(false) // Kullanıcının bir seçim yapmasını zorunlu kıl
+            .show()
+    }
 
-            displayableVillas.clear()
-            displayableVillas.addAll(villasToShow)
-            callingVillaAdapter.submitList(displayableVillas.toList()) // Adaptöre yeni listeyi ver
+    private fun handleVillaClick(clickedDisplayableVilla: DisplayableVilla) {
+        if (clickedDisplayableVilla.state == VillaCallingState.IN_PROGRESS) return
 
-            // IN_PROGRESS olan villayı ortaya kaydır ve kişilerini yükle
-            val inProgressIndex = displayableVillas.indexOfFirst { it.state == VillaCallingState.IN_PROGRESS }
-            if (inProgressIndex != -1) {
-                scrollToCenter(inProgressIndex)
-                loadContactsForVilla(displayableVillas[inProgressIndex].villa.villaId)
+        val previousInProgressVilla = displayableVillas.find { it.state == VillaCallingState.IN_PROGRESS }
+        previousInProgressVilla?.let {
+            // Eğer önceki villa zaten CALLED, SUCCESS, FAILED gibi bir sonuca ulaşmadıysa PENDING yap.
+            if (it.state == VillaCallingState.IN_PROGRESS || it.state == VillaCallingState.PENDING) {
+                it.state = VillaCallingState.PENDING
+            }
+            val previousIndex = displayableVillas.indexOf(it)
+            if (previousIndex != -1) {
+                callingVillaAdapter.notifyItemChanged(previousIndex)
+            }
+        }
+
+        clickedDisplayableVilla.state = VillaCallingState.IN_PROGRESS
+        currentSelectedVilla = clickedDisplayableVilla
+        val clickedIndex = displayableVillas.indexOf(clickedDisplayableVilla)
+        if (clickedIndex != -1) {
+            callingVillaAdapter.notifyItemChanged(clickedIndex)
+            binding.rvVillaList.smoothScrollToPosition(clickedIndex)
+        }
+
+        // Seçilen villanın kişilerini yükle/göster
+        val contacts = contactsForSelectedVillaMap[clickedDisplayableVilla.villa.villaId] ?: emptyList()
+        callingContactAdapter.differ.submitList(contacts)
+        if (contacts.isNotEmpty()) {
+            currentlySelectedContactFromAdapter = contacts.first()
+            callingContactAdapter.selectedPosition = 0
+            callingContactAdapter.notifyItemChanged(0) // Adapter içindeki seçimi güncelle
+            scrollToCenter(0, binding.rvContacts)
+        } else {
+            currentlySelectedContactFromAdapter = null
+            callingContactAdapter.selectedPosition = -1
+        }
+    }
+
+    private fun handleContactSelected(selectedContact: Contact) {
+        this.currentlySelectedContactFromAdapter = selectedContact
+        // Adapter zaten seçimi görsel olarak güncelliyor (`notifyItemChanged` ile)
+        // İsteğe bağlı olarak seçilen kişiyi RecyclerView'da ortala
+        val position = callingContactAdapter.differ.currentList.indexOf(selectedContact)
+        if (position != -1) {
+            scrollToCenter(position, binding.rvContacts)
+        }
+    }
+
+    private fun updateVillaState(villaToUpdate: DisplayableVilla?, newState: VillaCallingState) {
+        villaToUpdate?.let {
+            it.state = newState
+            val index = displayableVillas.indexOf(it)
+            if (index != -1) {
+                callingVillaAdapter.notifyItemChanged(index)
+            }
+            // Burada ilgili kargoların veritabanındaki durumlarını da güncellemek isteyebilirsiniz.
+            // Örneğin, bu villaya ait ve henüz aranmamış kargoların `isCalled`, `isMissed`, `callDate` alanları.
+            // Bu, projenizin kargo takip mantığına göre detaylandırılmalıdır.
+            // Örnek:
+            // lifecycleScope.launch {
+            //     val cargosToUpdate = db.cargoDao().getUncalledCargosForVilla(it.villa.villaId)
+            //     cargosToUpdate.forEach { cargo ->
+            //         cargo.isCalled = if (newState == VillaCallingState.CALLED_SUCCESS || newState == VillaCallingState.CALLED) 1 else 0
+            //         cargo.isMissed = if (newState == VillaCallingState.CALLED_FAILED) 1 else 0
+            //         cargo.callDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date()) // Örnek tarih formatı
+            //         db.cargoDao().update(cargo)
+            //     }
+            // }
+        }
+    }
+
+    private fun moveToNextPendingVilla() {
+        val currentInProgressIndex = displayableVillas.indexOfFirst { it.state == VillaCallingState.IN_PROGRESS || it.state == VillaCallingState.CALLED_FAILED || it.state == VillaCallingState.CALLED_SUCCESS }
+
+        var nextPendingVilla: DisplayableVilla? = null
+        if (currentInProgressIndex != -1 && currentInProgressIndex + 1 < displayableVillas.size) {
+            for (i in (currentInProgressIndex + 1) until displayableVillas.size) {
+                if (displayableVillas[i].state == VillaCallingState.PENDING) {
+                    nextPendingVilla = displayableVillas[i]
+                    break
+                }
+            }
+        }
+
+        if (nextPendingVilla == null) { // Baştan ara
+            nextPendingVilla = displayableVillas.firstOrNull { it.state == VillaCallingState.PENDING }
+        }
+
+        if (nextPendingVilla != null) {
+            handleVillaClick(nextPendingVilla)
+        } else {
+            Toast.makeText(this, "Tüm villalar işlendi.", Toast.LENGTH_LONG).show()
+            // Opsiyonel: finish()
+        }
+    }
+
+    private fun scrollToCenter(position: Int, recyclerView: RecyclerView) {
+        // ... (scrollToCenter içeriği öncekiyle aynı, bir değişiklik yok) ...
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+        layoutManager?.let {
+            val firstVisibleItemPosition = it.findFirstVisibleItemPosition()
+            val lastVisibleItemPosition = it.findLastVisibleItemPosition()
+            val visibleItems = lastVisibleItemPosition - firstVisibleItemPosition + 1
+
+            if (position < firstVisibleItemPosition || position > lastVisibleItemPosition) {
+                it.scrollToPositionWithOffset(position, recyclerView.width / 2 - (recyclerView.findViewHolderForAdapterPosition(position)?.itemView?.width ?: 0) / 2)
+            } else {
+                val currentItemView = it.findViewByPosition(position)
+                val itemWidth = currentItemView?.width ?: (recyclerView.width / visibleItems) // Fallback
+                val targetScrollX = (itemWidth * position) - (recyclerView.width / 2) + (itemWidth / 2)
+                //recyclerView.smoothScrollBy(targetScrollX - it.getOffsetToStart(), 0)
             }
         }
     }
 
-    private fun handleVillaClick(clickedVillaDto: DisplayableVilla) {
-        val clickedVillaId = clickedVillaDto.villa.villaId
-        // Eğer zaten IN_PROGRESS olan villaya tıklandıysa bir şey yapma
-        if (currentInProgressVillaId == clickedVillaId) return
-
-        val newVillasList = displayableVillas.map { villa ->
-            when (villa.villa.villaId) {
-                clickedVillaId -> villa.copy(state = VillaCallingState.IN_PROGRESS)
-                currentInProgressVillaId -> villa.copy(state = VillaCallingState.PENDING) // Eski IN_PROGRESS PENDING oldu
-                else -> villa // Diğerleri durumunu korur
-            }
-        }
-
-        currentInProgressVillaId = clickedVillaId
-        displayableVillas.clear()
-        displayableVillas.addAll(newVillasList)
-        callingVillaAdapter.submitList(displayableVillas.toList())
-
-        val newInProgressIndex = displayableVillas.indexOfFirst { it.state == VillaCallingState.IN_PROGRESS }
-        if (newInProgressIndex != -1) {
-            scrollToCenter(newInProgressIndex)
-            loadContactsForVilla(displayableVillas[newInProgressIndex].villa.villaId)
-            // TODO: Arama butonlarının durumunu/işlevini güncelle
-        }
+    private fun finishActivityWithMessage(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        finish()
     }
-
-    private fun scrollToCenter(position: Int) {
-        val layoutManager = binding.rvVillaList.layoutManager as LinearLayoutManager
-        val recyclerViewHeight = binding.rvVillaList.height
-        // Öğenin yüksekliğini almamız gerekiyor, bu her zaman bind sırasında mevcut olmayabilir.
-        // Ortalama bir yükseklik veya ilk öğenin yüksekliği kullanılabilir.
-        // Daha kesin bir ortalama için, viewholder'dan yüksekliği almak ve callback ile bildirmek gerekir.
-        // Şimdilik, basit bir offset ile pozisyona kaydıralım.
-        // Tam ortalama için: val offset = recyclerViewHeight / 2 - (view?.height ?: 0) / 2
-        // layoutManager.scrollToPositionWithOffset(position, offset)
-
-        // Daha basit ve genellikle işe yarayan bir yaklaşım:
-        layoutManager.scrollToPositionWithOffset(position, recyclerViewHeight / 3) // Ekranın yaklaşık üçte birine kaydırır
-        // Veya sadece scrollToPosition(position) da kullanabilirsiniz
-        // eğer eleman tam ortaya gelmese de listenin o kısmına gelmesi yeterliyse.
-    }
-
-    private fun loadContactsForVilla(villaId: Int) {
-        lifecycleScope.launch {
-            val contacts = db.villaContactDao().getContactsForVillaNonFlow(villaId)
-            contactsAdapter.submitList(contacts)
-            // TODO: Eğer kişi yoksa "kişi bulunamadı" mesajı göster
-        }
-    }
-
-    // TODO: btnCall, btnCallFromHome, btnSkip için tıklama olaylarını ve işlevlerini ekle
-    // Bu butonlar currentInProgressVillaId'yi ve onun seçili kişisini (eğer varsa) kullanmalı.
 }

@@ -6,25 +6,35 @@
     android:layout_height="match_parent"
     tools:context=".views.fragments.FaultTrackingFragment">
 
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabLayoutCameraIntercom"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:tabTextColor="@android:color/white"
-        app:tabIndicatorColor="@android:color/white"
-        app:tabMode="fixed"
-        app:tabGravity="fill"/>
-
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewPagerCameraIntercom"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/tabLayoutCameraIntercom"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <eightbitlab.com.blurview.BlurView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/blur_nav_view"
+        android:background="@drawable/background_blur"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvFaultTabs"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            android:padding="5dp"
+            android:clipToPadding="false"
+            android:scrollbars="none"
+            tools:listitem="@layout/item_fault_tab" />
+
+    </eightbitlab.com.blurview.BlurView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

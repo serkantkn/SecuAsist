@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Chip seçili olduğunda kullanılacak renk -->
+    <item android:color="#40898989" android:state_checked="true"/>
+    <!-- Varsayılan (seçili değilken) durumda kullanılacak renk -->
+    <item android:color="@android:color/transparent" android:state_checked="false"/>
+</selector>

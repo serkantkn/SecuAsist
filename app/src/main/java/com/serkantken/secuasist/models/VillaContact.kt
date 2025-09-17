@@ -15,13 +15,14 @@ import androidx.room.PrimaryKey
             childColumns = ["contactId"],
             onDelete = ForeignKey.CASCADE) // Kişi silinirse ilgili bağlantılar da silinsin
     ],
-    primaryKeys = ["villaId", "contactId", "contactType"] // Benzersizlik için composite primary key
+    primaryKeys = ["villaId", "contactId"] // Benzersizlik için composite primary key
 )
 data class VillaContact(
     // val id: Int = 0, // Eğer composite primary key kullanıyorsak bu alana gerek kalmaz
     val villaId: Int,
     val contactId: Int,
-    val isRealOwner: Int = 0, // 0: Kiracı/İletişim, 1: Gerçek Sahip
-    val contactType: String, // Örn: 'Owner', 'Tenant', 'Emergency', 'RealOwner'
-    val notes: String?
+    val isRealOwner: Boolean = false,
+    val contactType: String?,
+    val notes: String?,
+    var orderIndex: Int = 0
 )

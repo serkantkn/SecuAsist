@@ -27,6 +27,7 @@
             android:layout_height="wrap_content"
             app:layout_constraintTop_toBottomOf="@id/windowTitle"
             app:layout_constraintBottom_toTopOf="@id/btnSave"
+            app:layout_constraintVertical_bias="0"
             android:layout_marginTop="10dp"
             android:layout_marginBottom="10dp">
 
@@ -133,71 +134,62 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="8dp" />
 
-                <CheckBox
-                    android:id="@+id/cbIsUnderConstruction"
-                    android:layout_width="0dp"
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_villa_status"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Villada Çalışma Var"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/etVillaNavigationB"
+                    android:layout_marginTop="16dp"
+                    app:chipSpacingHorizontal="8dp"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="16dp" />
+                    app:layout_constraintTop_toBottomOf="@id/etVillaNavigationB"
+                    app:singleLine="false"
+                    app:singleSelection="false">
 
-                <CheckBox
-                    android:id="@+id/cbIsSpecial"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Özel Villa"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/cbIsUnderConstruction"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="8dp" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_under_construction"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tadilatta"/>
 
-                <CheckBox
-                    android:id="@+id/cbIsRental"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Kiralık Villa"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/cbIsSpecial"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="8dp" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_special"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Özel Villa"/>
 
-                <CheckBox
-                    android:id="@+id/cbIsCallFromHome"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Sadece Ev Telefonundan Ara"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/cbIsRental"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="8dp" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_rental"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Kiralık"/>
 
-                <CheckBox
-                    android:id="@+id/cbIsCallForCargo"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Kargo İçin Aranmasın"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/cbIsCallFromHome"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="8dp" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_call_from_home"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Evden Aranabilir"/>
 
-                <CheckBox
-                    android:id="@+id/cbIsEmpty"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Boş Villa"
-                    android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@+id/cbIsCallForCargo"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    android:layout_marginTop="8dp" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_call_for_cargo"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:chipStrokeWidth="1dp"
+                        android:text="Kargo İçin Arama"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_is_empty"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Boş"/>
+
+                </com.google.android.material.chip.ChipGroup>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

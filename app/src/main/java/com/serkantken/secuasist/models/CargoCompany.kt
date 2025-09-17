@@ -7,6 +7,14 @@ import androidx.room.PrimaryKey
 data class CargoCompany(
     @PrimaryKey(autoGenerate = true)
     val companyId: Int = 0,
-    val companyName: String, // UNIQUE olacak
+    val companyName: String?, // UNIQUE olacak
     val isCargoInOperation: Int = 0 // 0: Yok, 1: Var
-)
+) : SearchableItem {
+    override fun getDisplayId(): String? {
+        return companyName
+    }
+
+    override fun getDisplayName(): String? {
+        return companyName
+    }
+}

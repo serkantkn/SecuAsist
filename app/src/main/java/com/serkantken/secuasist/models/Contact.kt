@@ -8,5 +8,6 @@ data class Contact(
     @PrimaryKey(autoGenerate = true)
     val contactId: Int = 0,
     val contactName: String?,
-    val contactPhone: String?
+    val contactPhone: String?,
+    var lastCallTimestamp: Long? = null
 )

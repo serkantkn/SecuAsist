@@ -11,7 +11,8 @@
     <androidx.recyclerview.widget.RecyclerView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:id="@+id/rvVillaList"/>
+        android:id="@+id/rvVillaList"
+        tools:listitem="@layout/item_villa"/>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/toolbarLayout"
@@ -63,101 +64,113 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <eightbitlab.com.blurview.BlurView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:id="@+id/contact_call_layout"
-        android:background="@drawable/background_bottom_sheet"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:paddingTop="8dp">
+        android:id="@+id/blur_contact_call_layout"
+        android:background="@drawable/background_window"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        <androidx.recyclerview.widget.RecyclerView
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:id="@+id/rv_Contacts"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/btnCall"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:layout_marginBottom="8dp"/>
+            android:id="@+id/contact_call_layout"
+            android:paddingVertical="16dp">
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:id="@+id/btnCallFromHome"
-            android:background="@drawable/background_blur"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="@id/btnCall"
-            app:layout_constraintBottom_toBottomOf="@id/btnCall"
-            android:layout_marginStart="16dp">
-
-            <com.makeramen.roundedimageview.RoundedImageView
-                android:id="@+id/icCallFromHome"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
-                android:padding="5dp"
-                android:src="@drawable/ic_home"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"/>
-
-            <TextView
+            <androidx.recyclerview.widget.RecyclerView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:id="@+id/titleCallFromHome"
-                android:text="Evden Arandı"
-                android:textColor="@color/white"
-                app:layout_constraintStart_toEndOf="@id/icCallFromHome"
-                app:layout_constraintEnd_toEndOf="parent"
+                android:id="@+id/rv_Contacts"
                 app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/btnCall"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginBottom="8dp"
+                android:clipToPadding="false"
+                android:paddingHorizontal="16dp"
+                tools:listitem="@layout/item_calling_contact"
+                android:orientation="horizontal"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/btnCallFromHome"
+                android:background="@drawable/background_blur"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@id/btnCall"
+                app:layout_constraintBottom_toBottomOf="@id/btnCall"
+                android:layout_marginStart="16dp">
+
+                <com.makeramen.roundedimageview.RoundedImageView
+                    android:id="@+id/icCallFromHome"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:padding="5dp"
+                    android:src="@drawable/ic_home"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/titleCallFromHome"
+                    android:text="Evden Arandı"
+                    android:textColor="@color/white"
+                    app:layout_constraintStart_toEndOf="@id/icCallFromHome"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    android:layout_marginEnd="16dp"/>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/btnSkip"
+                android:background="@drawable/background_blur"
+                app:layout_constraintTop_toTopOf="@id/btnCall"
+                app:layout_constraintBottom_toBottomOf="@id/btnCall"
+                app:layout_constraintStart_toEndOf="@id/btnCallFromHome"
+                android:layout_marginStart="10dp">
+
+                <com.makeramen.roundedimageview.RoundedImageView
+                    android:id="@+id/icSkip"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_skip"
+                    android:padding="5dp"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/titleSkip"
+                    android:text="Atla"
+                    android:textColor="@color/white"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@id/icSkip"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    android:layout_marginEnd="16dp"/>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/btnCall"
+                android:layout_width="62dp"
+                android:layout_height="62dp"
+                android:src="@drawable/ic_call"
+                android:padding="10dp"
+                android:background="@drawable/background_blur"
                 app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 android:layout_marginEnd="16dp"/>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:id="@+id/btnSkip"
-            android:background="@drawable/background_blur"
-            app:layout_constraintTop_toTopOf="@id/btnCall"
-            app:layout_constraintBottom_toBottomOf="@id/btnCall"
-            app:layout_constraintStart_toEndOf="@id/btnCallFromHome"
-            android:layout_marginStart="10dp">
-
-            <com.makeramen.roundedimageview.RoundedImageView
-                android:id="@+id/icSkip"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
-                android:src="@drawable/ic_skip"
-                android:padding="5dp"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="parent"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/titleSkip"
-                android:text="Atla"
-                android:textColor="@color/white"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toEndOf="@id/icSkip"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                android:layout_marginEnd="16dp"/>
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <com.makeramen.roundedimageview.RoundedImageView
-            android:id="@+id/btnCall"
-            android:layout_width="62dp"
-            android:layout_height="62dp"
-            android:src="@drawable/ic_call"
-            android:padding="10dp"
-            android:background="@drawable/background_blur"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginEnd="16dp"/>
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </eightbitlab.com.blurview.BlurView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -7,8 +7,8 @@ import com.serkantken.secuasist.models.VillaContact
 
 // Temel bir WebSocket mesaj yapısı için
 data class WebSocketMessage<T>(
-    val type: String, // "add_villa", "add_contact", "add_cargo" vb.
-    val data: T       // Mesajın içeriği (örneğin VillaDto, CargoDto)
+    val data: T,       // Mesajın içeriği (örneğin VillaDto, CargoDto)
+    val type: String // "add_villa", "add_contact", "add_cargo" vb.
 )
 
 // Villas tablosu için JSON modeli
@@ -40,8 +40,8 @@ data class ContactDto(
 data class VillaContactDto(
     val villaId: Int,
     val contactId: Int,
-    val isRealOwner: Int = 0,
-    val contactType: String,
+    val isRealOwner: Boolean = false,
+    val contactType: String?,
     val notes: String? = null
 )
 
@@ -56,7 +56,7 @@ data class CameraDto(
 // CargoCompanies tablosu için JSON modeli
 data class CargoCompanyDto(
     val companyId: Int? = null,
-    val companyName: String,
+    val companyName: String?,
     val isCargoInOperation: Int = 0,
     val contacts: List<ContactDto>? = null // İlişkili kişileri içerecek (şoförler vb.)
 )
@@ -107,7 +107,7 @@ fun ContactDto.toContact(): Contact {
     return Contact(
         contactId = this.contactId ?: 0,
         contactName = this.contactName,
-        contactPhone = this.contactPhone
+        contactPhone = this.contactPhone,
     )
 }
 

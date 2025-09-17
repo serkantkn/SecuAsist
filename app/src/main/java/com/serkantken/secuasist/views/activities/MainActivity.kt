@@ -1,34 +1,45 @@
 package com.serkantken.secuasist.views.activities
 
 //noinspection SuspiciousImport
+import android.Manifest
 import android.R
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.DisplayMetrics
+import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
+import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
+import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.ChangeBounds
 import androidx.transition.TransitionManager
 import androidx.viewpager2.widget.ViewPager2
 import com.google.gson.Gson
 import com.serkantken.secuasist.SecuAsistApplication
+import com.serkantken.secuasist.adapters.AssignedDeliverersAdapter
 import com.serkantken.secuasist.adapters.ContactsAdapter
+import com.serkantken.secuasist.adapters.DraggableContactsAdapter
 import com.serkantken.secuasist.adapters.MainTabsAdapter
 import com.serkantken.secuasist.adapters.MainViewPagerAdapter
 import com.serkantken.secuasist.adapters.StreetFilterAdapter
@@ -39,7 +50,9 @@ import com.serkantken.secuasist.databinding.DialogAddEditContactBinding
 import com.serkantken.secuasist.databinding.DialogAddEditVillaBinding
 import com.serkantken.secuasist.databinding.DialogFilterByStatusBinding
 import com.serkantken.secuasist.databinding.DialogFilterByStreetBinding
+import com.serkantken.secuasist.databinding.DialogManageCompanyDeliverersBinding
 import com.serkantken.secuasist.databinding.DialogManageVillaContactsBinding
+import com.serkantken.secuasist.databinding.DialogSelectContactBinding
 import com.serkantken.secuasist.databinding.LayoutBalloonVillaInfoBinding
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.Contact
@@ -59,30 +72,36 @@ import com.serkantken.secuasist.network.toVillaContact
 import com.serkantken.secuasist.utils.Tools
 import com.serkantken.secuasist.views.fragments.CargoFragment
 import com.serkantken.secuasist.views.fragments.ContactsFragment
-import com.serkantken.secuasist.views.fragments.SelectCargoRecipientsSheet
 import com.serkantken.secuasist.views.fragments.VillaFragment
 import com.skydoves.balloon.Balloon
 import com.skydoves.balloon.BalloonAnimation
 import com.skydoves.balloon.BalloonSizeSpec
 import com.skydoves.balloon.createBalloon
+import com.skydoves.balloon.overlay.BalloonOverlayOval
+import com.skydoves.balloon.overlay.BalloonOverlayRoundRect
 import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var webSocketClient: WebSocketClient
     private lateinit var appDatabase: AppDatabase
-    private lateinit var mainTabsAdapter: MainTabsAdapter // EKLEYİN
-    private val tabsList = mutableListOf<MainTab>() // EKLEYİN
-    private val gson = Gson() // Gson instance'ı
-    private lateinit var csvFilePickerLauncher: ActivityResultLauncher<String>
+    private lateinit var mainTabsAdapter: MainTabsAdapter
+    private val tabsList = mutableListOf<MainTab>()
+    private val gson = Gson()
+    private lateinit var csvFilePickerLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var contactCsvFilePickerLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var requestContactCsvPermissionLauncher: ActivityResultLauncher<String>
     private var isBalloonShowing = false
     private lateinit var balloonSortVillas: Balloon
     private var isSearchModeActive = false
@@ -95,9 +114,56 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        csvFilePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            uri?.let { processCsvFile(it) } ?: run { showToast("Dosya seçilmedi.") }
+        enableEdgeToEdge()
+        csvFilePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let {
+                try {
+                    val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    contentResolver.takePersistableUriPermission(it, takeFlags)
+                } catch (e: SecurityException) {
+                    Log.e("MainActivity", "Failed to take persistable URI permission", e)
+                }
+                processCsvFile(it)
+            } ?: run { showToast("Dosya seçilmedi.") }
         }
+        contactCsvFilePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri?.let {
+                try {
+                    val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    contentResolver.takePersistableUriPermission(it, takeFlags)
+                    Log.d("MainActivity_ContactCSV", "Kişi CSV için kalıcı okuma izni alındı: $it")
+                } catch (e: SecurityException) {
+                    Log.e("MainActivity_ContactCSV", "Kişi CSV için kalıcı URI izni alınamadı", e)
+                }
+                processContactCsvFile(it) // Bu fonksiyonu birazdan oluşturacağız
+            } ?: run {
+                showToast("Kişi CSV dosyası seçilmedi.")
+            }
+        }
+        requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                // İzin verildi, dosya seçiciyi şimdi gerçekten başlat
+                launchCsvFilePicker()
+            } else {
+                // İzin verilmedi, kullanıcıya bilgi ver
+                showToast("Dosya okuma izni verilmedi.")
+                // Kullanıcıya neden izne ihtiyacınız olduğunu açıklayan bir diyalog gösterebilirsiniz.
+                // Veya ayarlara yönlendirebilirsiniz.
+            }
+        }
+        requestContactCsvPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                // İzin verildi, dosya seçiciyi şimdi gerçekten başlat
+                launchContactCsvFilePicker()
+            } else {
+                // İzin verilmedi, kullanıcıya bilgi ver
+                showToast("Dosya okuma izni verilmedi.")
+                // Kullanıcıya neden izne ihtiyacınız olduğunu açıklayan bir diyalog gösterebilirsiniz.
+                // Veya ayarlara yönlendirebilirsiniz.
+            }
+        }
+        window.isNavigationBarContrastEnforced = false
+        window.navigationBarColor = getColor(R.color.transparent)
         ViewCompat.setOnApplyWindowInsetsListener(binding.toolbarLayout) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(0, systemBars.top + Tools(this).convertDpToPixel(5), 0, 0)
@@ -105,12 +171,13 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        Tools(this).blur(arrayOf(binding.blurFab, binding.blurToolbarButtons, binding.blurMessage, binding.blurNavView), 10f, true)
+        Tools(this).blur(arrayOf(binding.blurFab, binding.blurToolbarButtons, binding.blurMessage, binding.blurNavView, binding.blurSearchbox), 10f, true)
         appDatabase = AppDatabase.Companion.getDatabase(this)
         webSocketClient = (application as SecuAsistApplication).webSocketClient
 
         setupViewPager()
         setupMainTabsRecyclerView()
+        observeCargoNotificationStatus()
         setupListeners()
         observeWebSocketMessages()
 
@@ -120,7 +187,8 @@ class MainActivity : AppCompatActivity() {
         val id: Int, // Benzersiz bir kimlik (ViewPager'ın pozisyonuyla eşleşebilir)
         val title: String,
         val iconResId: Int, // Drawable resource ID'si
-        var isSelected: Boolean = false
+        var isSelected: Boolean = false,
+        var hasNotification: Boolean = false
     )
 
     private fun setupViewPager() {
@@ -179,10 +247,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupMainTabsRecyclerView() {
         // Tab verilerini oluştur
         tabsList.clear()
-        tabsList.add(MainTab(0, "Villa Listesi", com.serkantken.secuasist.R.drawable.ic_home, true)) // İlk tab seçili başlasın
-        tabsList.add(MainTab(1, "Kişi Listesi", com.serkantken.secuasist.R.drawable.ic_person, false))
-        tabsList.add(MainTab(2, "Kargo Yönetimi", com.serkantken.secuasist.R.drawable.ic_cargo, false))
-        tabsList.add(MainTab(3, "Arıza Takibi", com.serkantken.secuasist.R.drawable.ic_videocam, false))
+        tabsList.add(MainTab(0, "Villa Listesi", com.serkantken.secuasist.R.drawable.ic_home, isSelected = true, hasNotification = false)) // İlk tab seçili başlasın
+        tabsList.add(MainTab(1, "Kişi Listesi", com.serkantken.secuasist.R.drawable.ic_person, isSelected = false, hasNotification = false))
+        tabsList.add(MainTab(2, "Kargo Yönetimi", com.serkantken.secuasist.R.drawable.ic_cargo, isSelected = false, hasNotification = false))
+        tabsList.add(MainTab(3, "Arıza Takibi", com.serkantken.secuasist.R.drawable.ic_videocam, isSelected = false, hasNotification = false))
         // İkonları kendi projenizdeki drawable'lar ile değiştirin (ic_home, ic_cargo vb.)
 
         mainTabsAdapter = MainTabsAdapter { clickedTab ->
@@ -200,6 +268,25 @@ class MainActivity : AppCompatActivity() {
         }
         mainTabsAdapter.submitList(tabsList)
         mainTabsAdapter.selectTab(0) // Başlangıçta ilk tab seçili
+    }
+
+    private fun observeCargoNotificationStatus() {
+        lifecycleScope.launch {
+            appDatabase.cargoDao().hasAnyUncalledCargosFlow().collectLatest { hasUncalled ->
+                val cargoTabIndex = tabsList.indexOfFirst { it.id == 2 } // Kargo sekmesinin ID'si 2
+                if (cargoTabIndex != -1) {
+                    val currentTabState = tabsList[cargoTabIndex]
+                    if (currentTabState.hasNotification != hasUncalled) { // Sadece değişiklik varsa güncelle
+                        tabsList[cargoTabIndex] = currentTabState.copy(hasNotification = hasUncalled)
+                        // Adapter'a sadece değişen öğeyi bildir, böylece animasyonlar düzgün çalışır
+                        // ve tüm liste yeniden çizilmez.
+                        // mainTabsAdapter.submitList(tabsList.toList()) // Bu tüm listeyi günceller, daha az verimli.
+                        mainTabsAdapter.notifyItemChanged(cargoTabIndex)
+                        Log.d("MainActivity", "Cargo notification status updated for tab $cargoTabIndex: $hasUncalled")
+                    }
+                }
+            }
+        }
     }
 
     private fun updateMainActionButton(fragmentPosition: Int) {
@@ -228,12 +315,14 @@ class MainActivity : AppCompatActivity() {
                     binding.etSearch.hint = "Kişi ara"
                 }
                 2 -> {
-                    binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_add)
-                    binding.icFab.setOnClickListener { showAddEditCargoCompanyDialog(null) }
+                    binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_report)
+                    binding.icFab.setOnClickListener {
+                        val intent = Intent(this, CargoReportActivity::class.java)
+                        startActivity(intent)
+                    }
                     binding.btnSearch.visibility = View.VISIBLE
                     binding.etSearch.hint = "Kargo şirketi ara"
                 }
-                // 'else' gerekmiyor çünkü shouldShowFab zaten bu durumları kapsıyor.
             }
         }
 
@@ -310,8 +399,24 @@ class MainActivity : AppCompatActivity() {
 
             // Arama kutusunu temizle ve filtreyi sıfırla
             binding.etSearch.text?.clear()
-            val villaFragment = supportFragmentManager.findFragmentByTag("f0") as? VillaFragment
-            villaFragment?.setSearchQuery("")
+            val currentItem = binding.viewPager.currentItem
+            when (currentItem) {
+                0 -> {
+                    val fragment = supportFragmentManager.findFragmentByTag("f$currentItem") as? VillaFragment
+                    fragment?.setSearchQuery("")
+                    Log.d("SearchToggle", "VillaFragment search query cleared.")
+                }
+                1 -> {
+                    val fragment = supportFragmentManager.findFragmentByTag("f$currentItem") as? ContactsFragment
+                    fragment?.setSearchQuery("")
+                    Log.d("SearchToggle", "ContactsFragment search query cleared.")
+                }
+                2 -> {
+                    val fragment = supportFragmentManager.findFragmentByTag("f$currentItem") as? CargoFragment
+                    fragment?.setSearchQuery("")
+                    Log.d("SearchToggle", "CargoFragment search query cleared.")
+                }
+            }
 
             // Klavyeyi gizle
             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
@@ -357,35 +462,86 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnMore.setOnClickListener {
-            val balloon: Balloon
-            if (binding.viewPager.currentItem == 0) {
-                balloon = createBalloon(this) {
-                    setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_villa)
-                    setArrowSize(0)
-                    setWidth(BalloonSizeSpec.WRAP)
-                    setHeight(BalloonSizeSpec.WRAP)
-                    setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                    setBalloonAnimation(BalloonAnimation.CIRCULAR)
-                    setDismissWhenTouchOutside(true)
-                    setLifecycleOwner(this@MainActivity)
-                    build()
+            val balloon: Balloon = createBalloon(this) {
+                when (binding.viewPager.currentItem) {
+                    0 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_villa)
+                    1 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_contact)
+                    2 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_cargo)
+                    else -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_fault)
                 }
-                val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
-                val btnNewVilla = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_new_villa)
-                val btnImport = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_import)
-                Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
-                binding.toolbarButtonLayout.visibility = View.INVISIBLE
-                balloon.showAlignTop(binding.toolbarButtonLayout, 90, it.height+50)
-                balloon.setOnBalloonDismissListener {
-                    binding.toolbarButtonLayout.visibility = View.VISIBLE
+                setArrowSize(0)
+                setWidth(BalloonSizeSpec.WRAP)
+                setHeight(BalloonSizeSpec.WRAP)
+                setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
+                setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                setDismissWhenTouchOutside(true)
+                setIsVisibleOverlay(true)
+                setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
+                overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
+                setLifecycleOwner(this@MainActivity)
+                build()
+            }
+
+            val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
+            Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
+            binding.toolbarButtonLayout.visibility = View.INVISIBLE
+            balloon.showAlignTop(binding.toolbarButtonLayout, 90, it.height+50)
+            balloon.setOnBalloonDismissListener {
+                binding.toolbarButtonLayout.visibility = View.VISIBLE
+            }
+
+            when (binding.viewPager.currentItem) {
+                0 -> {
+                    val btnNewVilla = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_new_villa)
+                    val btnImport = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_import)
+                    val btnSettings = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_settings)
+                    btnSettings.setOnClickListener {
+                        val intent = Intent(this, SettingsActivity::class.java)
+                        startActivity(intent)
+                        balloon.dismiss()
+                    }
+                    btnNewVilla.setOnClickListener {
+                        showAddEditVillaDialog(null)
+                        balloon.dismiss()
+                    }
+                    btnImport.setOnClickListener {
+                        launchCsvFilePicker()
+                        balloon.dismiss()
+                    }
                 }
-                btnNewVilla.setOnClickListener {
-                    showAddEditVillaDialog(null)
-                    balloon.dismiss()
+                1 -> {
+                    val btnImport = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_import)
+                    val btnSettings = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_settings)
+                    btnSettings.setOnClickListener {
+                        val intent = Intent(this, SettingsActivity::class.java)
+                        startActivity(intent)
+                        balloon.dismiss()
+                    }
+                    btnImport.setOnClickListener {
+                        launchContactCsvFilePicker()
+                        balloon.dismiss()
+                    }
                 }
-                btnImport.setOnClickListener {
-                    launchCsvFilePicker()
-                    balloon.dismiss()
+                2 -> {
+                    val btnNewCargoCompany = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_new_cargo_company)
+                    val btnSettings = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_settings)
+                    btnSettings.setOnClickListener {
+                        val intent = Intent(this, SettingsActivity::class.java)
+                        startActivity(intent)
+                        balloon.dismiss()
+                    }
+                    btnNewCargoCompany.setOnClickListener {
+                        showAddEditCargoCompanyDialog(null)
+                        balloon.dismiss()
+                    }
+                }
+                else -> {
+                    val btnSettings = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_settings)
+                    btnSettings.setOnClickListener {
+                        val intent = Intent(this, SettingsActivity::class.java)
+                        startActivity(intent)
+                        balloon.dismiss()
+                    }
                 }
             }
         }
@@ -403,8 +559,11 @@ class MainActivity : AppCompatActivity() {
                 setWidth(BalloonSizeSpec.WRAP)
                 setHeight(BalloonSizeSpec.WRAP)
                 setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                setBalloonAnimation(BalloonAnimation.CIRCULAR)
+                setBalloonAnimation(BalloonAnimation.OVERSHOOT)
                 setDismissWhenTouchOutside(true)
+                setIsVisibleOverlay(true)
+                setOverlayShape(BalloonOverlayOval)
+                overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
                 setLifecycleOwner(this@MainActivity)
                 build()
             }
@@ -417,6 +576,7 @@ class MainActivity : AppCompatActivity() {
             balloonSortVillas.showAlignTop(binding.blurFab, 0, Tools(this@MainActivity).convertDpToPixel(-10))
             balloonSortVillas.setOnBalloonDismissListener {
                 binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_filter)
+                isBalloonShowing = false
             }
 
             val villaFragment = supportFragmentManager.findFragmentByTag("f" + binding.viewPager.currentItem) as? VillaFragment
@@ -484,7 +644,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Diyalog penceresinin arkaplanını şeffaf yapıp göster
-            alertDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            alertDialog.window?.setBackgroundDrawableResource(R.color.transparent)
             alertDialog.show()
         }
     }
@@ -531,75 +691,440 @@ class MainActivity : AppCompatActivity() {
         alertDialog.show()
     }
 
-    // YENİ: Dosya seçiciyi başlatan fonksiyon
-    private fun launchCsvFilePicker() {
-        csvFilePickerLauncher.launch("text/csv")
+    fun launchCsvFilePickerWithPermissionCheck() { // Bu metodu public yapın ki menüden çağrılabilsin
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // İzin zaten verilmiş
+                launchCsvFilePicker()
+            }
+            shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE) -> {
+                // Kullanıcı izni daha önce reddetti, nedenini açıklayan bir diyalog göster
+                AlertDialog.Builder(this)
+                    .setTitle("İzin Gerekli")
+                    .setMessage("CSV dosyasını içe aktarmak için dosyalarınıza erişim izni vermeniz gerekiyor.")
+                    .setPositiveButton("İzin Ver") { _, _ ->
+                        requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                    .setNegativeButton("İptal") { dialog, _ ->
+                        dialog.dismiss()
+                        Toast.makeText(this, "Dosya okuma izni reddedildi.", Toast.LENGTH_SHORT).show()
+                    }
+                    .show()
+            }
+            else -> {
+                // İzin henüz istenmemiş veya "bir daha sorma" seçilmiş, izni iste
+                requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
     }
 
-    // YENİ: Seçilen dosyayı işleyecek fonksiyon (şimdilik placeholder)
+    private fun launchCsvFilePicker() {
+        val mimeTypes = arrayOf(
+            "text/csv",
+            "text/comma-separated-values",
+            "application/csv",
+            "text/plain"
+            // "*/*" OpenDocument ile genellikle doğrudan desteklenmez, belirli türler beklenir.
+        )
+        try {
+            csvFilePickerLauncher.launch(mimeTypes) // Dizi olarak MIME türlerini ver
+        } catch (e: Exception) {
+            showToast("Dosya seçici açılamadı.")
+            Log.e("MainActivity", "Error launching OpenDocument file picker: ", e)
+        }
+    }
+
     private fun processCsvFile(fileUri: Uri) {
-        activityScope.launch(Dispatchers.IO) { // Dosya okuma ve DB işlemleri için IO thread'i
-            val villaListesi = mutableListOf<Villa>()
+        Log.d("MainActivity_CSV", "processCsvFile (Update/Insert Logic) çağrıldı. URI: $fileUri")
+        activityScope.launch(Dispatchers.IO) {
+            val villasToInsert = mutableListOf<Villa>()
+            val villasToUpdate = mutableListOf<Villa>() // Güncellenecek villalar için ayrı liste
             var hataliSatirSayisi = 0
+            var eklenenVillaSayisi = 0
+            var guncellenenVillaSayisi = 0
 
             try {
                 contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        // Eğer CSV'nin ilk satırı başlık ise, .drop(1) ekleyerek atlayabilirsiniz
-                        // Örnek: reader.readLines().drop(1).forEach { line ->
-                        reader.readLines().forEach { line ->
-                            if (line.isBlank()) return@forEach // Boş satırları atla
+                    val linesFromReader = mutableListOf<String>()
+                    BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
+                        linesFromReader.addAll(reader.readLines())
+                    }
 
-                            try {
-                                // Tırnak içindeki virgülleri korumak için basit bir regex ile ayırma
-                                val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-                                    .map { it.trim().removeSurrounding("\"") }
+                    if (linesFromReader.isEmpty()) {
+                        Log.w("MainActivity_CSV", "CSV dosyası boş veya okunamadı.")
+                        launch(Dispatchers.Main) { showToast("CSV dosyası boş veya okunamadı.")}
+                        return@launch
+                    }
 
-                                val villa = Villa(
-                                    villaId = 0,
-                                    villaNo = columns.getOrNull(0)?.toIntOrNull() ?: throw IllegalArgumentException("VillaNo Hatalı"),
-                                    villaNotes = columns.getOrNull(1),
-                                    villaStreet = columns.getOrNull(2),
-                                    villaNavigationA = columns.getOrNull(3),
-                                    villaNavigationB = columns.getOrNull(4),
-                                    isVillaUnderConstruction = columns.getOrNull(5)?.toIntOrNull() ?: 0,
-                                    isVillaSpecial = columns.getOrNull(6)?.toIntOrNull() ?: 0,
-                                    isVillaRental = columns.getOrNull(7)?.toIntOrNull() ?: 0,
-                                    isVillaCallFromHome = columns.getOrNull(8)?.toIntOrNull() ?: 0,
-                                    isVillaCallForCargo = columns.getOrNull(9)?.toIntOrNull() ?: 0,
-                                    isVillaEmpty = columns.getOrNull(10)?.toIntOrNull() ?: 0
+                    val processedLines = linesFromReader.toMutableList()
+                    if (processedLines.isNotEmpty() && processedLines[0].startsWith("\uFEFF")) {
+                        Log.d("MainActivity_CSV", "UTF-8 BOM tespit edildi ve ilk satırdan kaldırılıyor.")
+                        processedLines[0] = processedLines[0].substring(1)
+                    }
+
+                    if (processedLines.isEmpty() || (processedLines.size == 1 && processedLines[0].isBlank())) {
+                        Log.w("MainActivity_CSV", "BOM temizliği sonrası veya tek boş satır, işlenecek veri yok.")
+                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.")}
+                        return@launch
+                    }
+
+                    // Başlık Satırı Kontrolü (Opsiyonel ama iyi bir pratik)
+                    // Eğer CSV'nizde başlık satırı olma ihtimali varsa:
+                    // val headerLine = processedLines.firstOrNull()?.lowercase()
+                    // val hasHeader = headerLine != null && headerLine.contains("villano") // vb.
+                    // val dataLines = if (hasHeader && processedLines.isNotEmpty()) {
+                    //    Log.d("MainActivity_CSV", "Başlık satırı algılandı ve atlanıyor: $headerLine")
+                    //    processedLines.drop(1)
+                    // } else {
+                    //    processedLines
+                    // }
+                    // ForEach döngüsünde `dataLines` kullanılır. Şimdilik başlık olmadığını varsayıyoruz.
+
+                    processedLines.forEachIndexed { index, line ->
+                        if (line.isBlank()) {
+                            Log.d("MainActivity_CSV", "Satır ${index + 1} boş, atlanıyor.")
+                            return@forEachIndexed
+                        }
+
+                        try {
+                            val columns = line.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+                                .map { it.trim().removeSurrounding("\"") }
+
+                            val villaNoStr = columns.getOrNull(0)
+                            val villaNo = villaNoStr?.toIntOrNull()
+                                ?: throw IllegalArgumentException("VillaNo Hatalı/Eksik: '$villaNoStr' Satır: '$line'")
+
+                            // CSV'den gelen diğer veriler
+                            val csvVillaNotes = columns.getOrNull(1)
+                            val csvVillaStreet = columns.getOrNull(2)
+                            val csvVillaNavigationA = columns.getOrNull(3)
+                            val csvVillaNavigationB = columns.getOrNull(4)
+                            val csvIsVillaUnderConstruction = columns.getOrNull(5)?.toIntOrNull() ?: 0
+                            val csvIsVillaSpecial = columns.getOrNull(6)?.toIntOrNull() ?: 0
+                            val csvIsVillaRental = columns.getOrNull(7)?.toIntOrNull() ?: 0
+                            val csvIsVillaCallFromHome = columns.getOrNull(8)?.toIntOrNull() ?: 0
+                            val csvIsVillaCallForCargo = columns.getOrNull(9)?.toIntOrNull() ?: 0
+                            val csvIsVillaEmpty = columns.getOrNull(10)?.toIntOrNull() ?: 0
+
+                            val existingVilla = appDatabase.villaDao().getVillaByNo(villaNo)
+
+                            if (existingVilla != null) {
+                                // Villa mevcut, güncelle
+                                existingVilla.villaNotes = csvVillaNotes
+                                existingVilla.villaStreet = csvVillaStreet
+                                existingVilla.villaNavigationA = csvVillaNavigationA
+                                existingVilla.villaNavigationB = csvVillaNavigationB
+                                existingVilla.isVillaUnderConstruction = csvIsVillaUnderConstruction
+                                existingVilla.isVillaSpecial = csvIsVillaSpecial
+                                existingVilla.isVillaRental = csvIsVillaRental
+                                existingVilla.isVillaCallFromHome = csvIsVillaCallFromHome
+                                existingVilla.isVillaCallForCargo = csvIsVillaCallForCargo
+                                existingVilla.isVillaEmpty = csvIsVillaEmpty
+                                // villaId ve villaNo değişmez
+                                villasToUpdate.add(existingVilla)
+                            } else {
+                                // Villa yeni, ekle
+                                val newVilla = Villa(
+                                    // villaId = 0, // Otomatik
+                                    villaNo = villaNo,
+                                    villaNotes = csvVillaNotes,
+                                    villaStreet = csvVillaStreet,
+                                    villaNavigationA = csvVillaNavigationA,
+                                    villaNavigationB = csvVillaNavigationB,
+                                    isVillaUnderConstruction = csvIsVillaUnderConstruction,
+                                    isVillaSpecial = csvIsVillaSpecial,
+                                    isVillaRental = csvIsVillaRental,
+                                    isVillaCallFromHome = csvIsVillaCallFromHome,
+                                    isVillaCallForCargo = csvIsVillaCallForCargo,
+                                    isVillaEmpty = csvIsVillaEmpty
                                 )
-                                villaListesi.add(villa)
-                            } catch (e: Exception) {
-                                // Satırda format hatası varsa (örn: villaNo sayı değilse)
-                                hataliSatirSayisi++
+                                villasToInsert.add(newVilla)
                             }
+                        } catch (e: NumberFormatException) {
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Sayı Formatı Hatası: '$line'. Hata: ${e.message}")
+                        } catch (e: IllegalArgumentException) {
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Veri Hatası: '$line'. Hata: ${e.message}")
+                        } catch (e: Exception) {
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Genel Hata: '$line'. Hata: ${e.message}", e)
                         }
                     }
+                } ?: run {
+                    Log.e("MainActivity_CSV", "contentResolver.openInputStream(fileUri) null döndü.")
+                    launch(Dispatchers.Main) { showToast("Dosya akışı açılamadı.") }
+                    return@launch
                 }
 
-                if (villaListesi.isNotEmpty()) {
-                    val sonuc = appDatabase.villaDao().insertAll(villaListesi)
-                    val basariliEklemeSayisi = sonuc.count { it != -1L }
-                    val atlananKayitSayisi = sonuc.size - basariliEklemeSayisi
+                // Veritabanı işlemleri
+                if (villasToInsert.isNotEmpty()) {
+                    val insertResults = appDatabase.villaDao().insertAll(villasToInsert)
+                    eklenenVillaSayisi = insertResults.count { it != -1L } // Başarılı eklemeler (IGNORE stratejisi için)
+                    Log.d("MainActivity_CSV", "$eklenenVillaSayisi yeni villa eklendi.")
+                }
 
-                    // Sonucu ana thread'de göster
-                    launch(Dispatchers.Main) {
-                        var message = "$basariliEklemeSayisi yeni villa eklendi."
-                        if (atlananKayitSayisi > 0) message += " $atlananKayitSayisi villa zaten mevcut olduğu için atlandı."
-                        if (hataliSatirSayisi > 0) message += " $hataliSatirSayisi satır hatalı veri nedeniyle işlenemedi."
-                        showToast(message)
+                if (villasToUpdate.isNotEmpty()) {
+                    villasToUpdate.forEach { villaToUpdate ->
+                        appDatabase.villaDao().update(villaToUpdate)
                     }
-                } else {
-                    launch(Dispatchers.Main) {
-                        showToast("CSV dosyasında işlenecek geçerli veri bulunamadı.")
-                    }
+                    guncellenenVillaSayisi = villasToUpdate.size
+                    Log.d("MainActivity_CSV", "$guncellenenVillaSayisi mevcut villa güncellendi.")
+                }
+
+                launch(Dispatchers.Main) {
+                    var message = ""
+                    if (eklenenVillaSayisi > 0) message += "$eklenenVillaSayisi yeni villa eklendi. "
+                    if (guncellenenVillaSayisi > 0) message += "$guncellenenVillaSayisi mevcut villa güncellendi. "
+                    if (hataliSatirSayisi > 0) message += "$hataliSatirSayisi satır hatalıydı."
+                    if (message.isBlank() && hataliSatirSayisi == 0) message = "İşlenecek yeni veya güncellenecek villa bulunamadı."
+
+                    showToast(message.trim())
+                    Log.d("MainActivity_CSV", "Villa CSV İşlem sonucu: ${message.trim()}")
                 }
 
             } catch (e: Exception) {
-                // Genel dosya okuma hatası
                 launch(Dispatchers.Main) {
                     showToast("Dosya okunurken bir hata oluştu: ${e.message}")
+                    Log.e("MainActivity_CSV", "CSV dosyası okunurken genel hata", e)
+                }
+            }
+        }
+    }
+
+    private fun launchContactCsvFilePicker() {
+        val mimeTypes = arrayOf(
+            "text/csv",
+            "text/comma-separated-values",
+            "application/csv",
+            "text/plain"
+        )
+        try {
+            contactCsvFilePickerLauncher.launch(mimeTypes)
+        } catch (e: Exception) {
+            showToast("Kişi CSV dosyası seçici açılamadı.")
+            Log.e("MainActivity_ContactCSV", "Kişi CSV dosyası seçici başlatılırken hata: ", e)
+        }
+    }
+
+    private fun processContactCsvFile(fileUri: Uri) {
+        Log.d("MainActivity_ContactRelCSV", "processContactAndRelationsCsvFile çağrıldı. URI: $fileUri")
+        activityScope.launch(Dispatchers.IO) {
+            var hataliSatirSayisi = 0
+            var eklenenKisiSayisi = 0
+            var guncellenenKisiSayisi = 0
+            var eklenenIliskiSayisi = 0
+            var atlananVillaNoSayisi = 0 // CSV'de belirtilen ama DB'de olmayan villa no'lar
+
+            try {
+                contentResolver.openInputStream(fileUri)?.use { inputStream ->
+                    val linesFromReader = mutableListOf<String>()
+                    BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
+                        linesFromReader.addAll(reader.readLines())
+                    }
+
+                    if (linesFromReader.isEmpty()) {
+                        Log.w("MainActivity_ContactRelCSV", "CSV dosyası boş.")
+                        launch(Dispatchers.Main) { showToast("Seçilen CSV dosyası boş.") }
+                        return@launch
+                    }
+
+                    val processedLines = linesFromReader.toMutableList()
+                    if (processedLines.isNotEmpty() && processedLines[0].startsWith("\uFEFF")) {
+                        Log.d("MainActivity_ContactRelCSV", "UTF-8 BOM tespit edildi.")
+                        processedLines[0] = processedLines[0].substring(1)
+                    }
+                    if (processedLines.isEmpty() || (processedLines.size == 1 && processedLines[0].isBlank())) {
+                        Log.w("MainActivity_ContactRelCSV", "İşlenecek veri yok.")
+                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.")}
+                        return@launch
+                    }
+
+                    val headerLine = processedLines.firstOrNull()?.lowercase()
+                    val hasHeader = headerLine != null &&
+                            (headerLine.contains("ad") || headerLine.contains("isim")) &&
+                            headerLine.contains("telefon") &&
+                            headerLine.contains("villa") // Başlıkta "villa" kelimesi de olsun
+
+                    val dataLines = if (hasHeader && processedLines.isNotEmpty()) {
+                        Log.d("MainActivity_ContactRelCSV", "Başlık satırı algılandı: $headerLine")
+                        processedLines.drop(1)
+                    } else {
+                        processedLines
+                    }
+
+                    if (dataLines.isEmpty()) {
+                        Log.w("MainActivity_ContactRelCSV", "Veri satırı bulunamadı.")
+                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.") }
+                        return@launch
+                    }
+
+                    dataLines.forEachIndexed { index, line ->
+                        if (line.isBlank()) {
+                            Log.d("MainActivity_ContactRelCSV", "Satır ${index + 1} (veri) boş.")
+                            return@forEachIndexed
+                        }
+
+                        var currentContactId: Int = 0 // O an işlenen kişinin ID'si
+
+                        try {
+                            val columns = line.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+                                .map { it.trim().removeSurrounding("\"") }
+
+                            if (columns.size < 2) { // Ad ve Telefon en azından olmalı
+                                throw IllegalArgumentException("Yetersiz sütun (${columns.size}). Beklenen en az 2 (Ad, Telefon).")
+                            }
+
+                            // --- Kişi İşlemleri ---
+                            val csvContactName = columns.getOrNull(0)?.takeIf { it.isNotBlank() }
+                                ?: throw IllegalArgumentException("Kişi Adı (1. sütun) boş.")
+
+                            val csvContactPhoneInput = columns.getOrNull(1)
+                            if (csvContactPhoneInput.isNullOrBlank()) {
+                                throw IllegalArgumentException("Telefon Numarası (2. sütun) boş.")
+                            }
+                            val csvContactPhoneRaw = csvContactPhoneInput.filter { it.isDigit() }
+                            val csvContactPhone = when {
+                                csvContactPhoneRaw.startsWith("90") && csvContactPhoneRaw.length == 12 -> "+$csvContactPhoneRaw"
+                                csvContactPhoneRaw.length == 10 -> "+90$csvContactPhoneRaw"
+                                csvContactPhoneRaw.startsWith("+90") && csvContactPhoneRaw.length == 13 -> csvContactPhoneRaw
+                                else -> throw IllegalArgumentException("Telefon formatı geçersiz: '$csvContactPhoneInput'.")
+                            }
+
+                            val existingContact = appDatabase.contactDao().getContactByPhone(csvContactPhone)
+                            val currentTime = System.currentTimeMillis()
+
+                            if (existingContact != null) {
+                                currentContactId = existingContact.contactId
+                                if (existingContact.contactName != csvContactName) {
+                                    val updatedContact = existingContact.copy(
+                                        contactName = csvContactName
+                                    )
+                                    appDatabase.contactDao().update(updatedContact)
+                                    guncellenenKisiSayisi++
+                                    Log.i("MainActivity_ContactRelCSV", "Kişi güncellendi: ID $currentContactId, Tel: $csvContactPhone")
+                                } else {
+                                    Log.i("MainActivity_ContactRelCSV", "Kişi mevcut, bilgi aynı: ID $currentContactId, Tel: $csvContactPhone")
+                                }
+                            } else {
+                                val newContact = Contact(
+                                    contactName = csvContactName,
+                                    contactPhone = csvContactPhone
+                                )
+                                // `insert` metodunuzun Long (ID) döndürdüğünü ve ID'nin 0'dan büyük olduğunu varsayıyorum.
+                                // Eğer insert metodu Contact nesnesini veya void dönerse bu kısım ayarlanmalı.
+                                val insertedId = appDatabase.contactDao().insert(newContact)
+                                if (insertedId > 0) { // Başarılı ekleme
+                                    // Eğer insert metodu nesneyi dönerse: currentContactId = insertedContact.contactId
+                                    // Eğer insert metodu Long ID dönerse:
+                                    // Eğer Dao'da getContactByPhone() suspend ise burada doğrudan çağrılabilir.
+                                    // Veya insert sonrası son eklenen ID'yi almanın bir yolu olmalı.
+                                    // Şimdilik en güvenli yol, ekledikten sonra telefonla tekrar çekmek.
+                                    val justInsertedContact = appDatabase.contactDao().getContactByPhone(csvContactPhone)
+                                    if (justInsertedContact != null) {
+                                        currentContactId = justInsertedContact.contactId
+                                        eklenenKisiSayisi++
+                                        Log.i("MainActivity_ContactRelCSV", "Kişi eklendi: ID $currentContactId, Tel: $csvContactPhone")
+                                    } else {
+                                        throw IllegalStateException("Yeni eklenen kişi hemen bulunamadı: $csvContactPhone")
+                                    }
+                                } else {
+                                    throw IllegalStateException("Kişi eklenemedi (insert ID <= 0): $csvContactPhone")
+                                }
+                            }
+
+                            if (currentContactId == 0) {
+                                throw IllegalStateException("Kişi ID'si alınamadı: $csvContactPhone")
+                            }
+
+                            // --- Villa İlişkileri ---
+                            val associatedVillaNumbersStr = columns.getOrNull(2) // 3. sütun
+                            if (!associatedVillaNumbersStr.isNullOrBlank()) {
+                                val villaNumbersToAssociate = associatedVillaNumbersStr.split(',')
+                                    .mapNotNull { it.trim().toIntOrNull() }
+
+                                villaNumbersToAssociate.forEach { villaNo ->
+                                    val villa = appDatabase.villaDao().getVillaByNo(villaNo)
+                                    if (villa != null) {
+                                        val villaContact = VillaContact(
+                                            villaId = villa.villaId,
+                                            contactId = currentContactId,
+                                            isRealOwner = false,
+                                            contactType = TODO(),
+                                            notes = TODO(),
+                                            orderIndex = TODO()
+                                            // isRealOwner, contactType, notes, orderIndex varsayılan değerlerini alacak
+                                        )
+                                        val relationInsertResult = appDatabase.villaContactDao().insert(villaContact)
+                                        if (relationInsertResult != -1L) { // IGNORE stratejisi -1L dönebilir (zaten varsa veya hata)
+                                            // Eğer IGNORE ve kayıt zaten varsa, -1L döner.
+                                            // Eğer insert metodunuz Long ID değil de başka bir şey dönerse bu kontrolü güncelleyin.
+                                            // Ya da basitçe, hata vermediği sürece eklendi/zaten vardı sayabiliriz.
+                                            // Başarılı bir ekleme (ya da zaten vardı ve ignore edildi)
+                                            // Gerçekten yeni eklendiğini saymak için, insert öncesi bir kontrol gerekebilir.
+                                            // Şimdilik, çakışma olmadıysa sayalım.
+                                            var relationExists = false // Bunu kontrol etmenin daha iyi bir yolu lazım
+                                            // val existingRel = appDatabase.villaContactDao().getRelation(villa.villaId, currentContactId)
+                                            // if (existingRel == null) { ... }
+                                            // Bu kontrol için VillaContactDao'da getRelation gibi bir metod olmalı.
+                                            // Şimdilik OnConflictStrategy.IGNORE'a güveniyoruz.
+
+                                            // Eğer insert metodu her zaman pozitif bir ID dönerse (IGNORE değilse)
+                                            // if (relationInsertResult > 0) eklenenIliskiSayisi++
+                                            // IGNORE ile, gerçekten yeni mi eklendiğini anlamak için insert öncesi select gerekir.
+                                            // Şimdilik her başarılı insert girişimini (hata fırlatmayan) sayalım.
+                                            eklenenIliskiSayisi++ // Bu sayaç, "ilişki kurulmaya çalışıldı" demek daha doğru olabilir.
+                                            Log.i("MainActivity_ContactRelCSV", "İlişki eklendi/mevcuttu: VillaID ${villa.villaId} - ContactID $currentContactId")
+
+                                        } else {
+                                            Log.w("MainActivity_ContactRelCSV", "İlişki eklenemedi veya zaten mevcut (IGNORE): VillaID ${villa.villaId} - ContactID $currentContactId")
+                                        }
+                                    } else {
+                                        Log.w("MainActivity_ContactRelCSV", "İlişki için Villa bulunamadı: VillaNo $villaNo")
+                                        atlananVillaNoSayisi++
+                                    }
+                                }
+                            }
+
+                        } catch (e: IllegalArgumentException) {
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Veri Hatası: '$line'. Hata: ${e.message}")
+                        } catch (e: IllegalStateException){
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Mantık Hatası: '$line'. Hata: ${e.message}")
+                        } catch (e: Exception) {
+                            hataliSatirSayisi++
+                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Genel Hata: '$line'. Hata: ${e.message}", e)
+                        }
+                    } // forEachIndexed sonu
+
+                } ?: run {
+                    Log.e("MainActivity_ContactRelCSV", "CSV dosyası için contentResolver.openInputStream(fileUri) null döndü.")
+                    launch(Dispatchers.Main) { showToast("Dosya akışı açılamadı.") }
+                    return@launch
+                }
+
+                // Sonuçları göster
+                launch(Dispatchers.Main) {
+                    var message = ""
+                    if (eklenenKisiSayisi > 0) message += "$eklenenKisiSayisi yeni kişi eklendi. "
+                    if (guncellenenKisiSayisi > 0) message += "$guncellenenKisiSayisi kişi güncellendi. "
+                    if (eklenenIliskiSayisi > 0) message += "$eklenenIliskiSayisi villa-kişi ilişkisi kuruldu/mevcuttu. "
+                    if (atlananVillaNoSayisi > 0) message += "$atlananVillaNoSayisi ilişkide belirtilen villa bulunamadı. "
+                    if (hataliSatirSayisi > 0) message += "$hataliSatirSayisi satır hatalıydı."
+                    if (message.isBlank() && hataliSatirSayisi == 0) message = "İşlenecek yeni veri bulunamadı."
+
+                    showToast(message.trim())
+                    Log.d("MainActivity_ContactRelCSV", "İşlem sonucu: ${message.trim()}")
+                }
+
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    showToast("CSV dosyası okunurken bir hata oluştu: ${e.message}")
+                    Log.e("MainActivity_ContactRelCSV", "CSV dosyası okunurken genel hata", e)
                 }
             }
         }
@@ -717,12 +1242,13 @@ class MainActivity : AppCompatActivity() {
             dialogBinding.actvVillaStreet.setText(villaToEdit?.villaStreet, false)
             dialogBinding.etVillaNavigationA.setText(villaToEdit?.villaNavigationA)
             dialogBinding.etVillaNavigationB.setText(villaToEdit?.villaNavigationB)
-            dialogBinding.cbIsUnderConstruction.isChecked = villaToEdit?.isVillaUnderConstruction == 1
-            dialogBinding.cbIsSpecial.isChecked = villaToEdit?.isVillaSpecial == 1
-            dialogBinding.cbIsRental.isChecked = villaToEdit?.isVillaRental == 1
-            dialogBinding.cbIsCallFromHome.isChecked = villaToEdit?.isVillaCallFromHome == 1
-            dialogBinding.cbIsCallForCargo.isChecked = villaToEdit?.isVillaCallForCargo == 1
-            dialogBinding.cbIsEmpty.isChecked = villaToEdit?.isVillaEmpty == 1
+            dialogBinding.chipIsUnderConstruction.isChecked = villaToEdit?.isVillaUnderConstruction == 1
+            dialogBinding.chipIsSpecial.isChecked = villaToEdit?.isVillaSpecial == 1
+            dialogBinding.chipIsRental.isChecked = villaToEdit?.isVillaRental == 1
+            dialogBinding.chipIsCallFromHome.isChecked = villaToEdit?.isVillaCallFromHome == 1
+            dialogBinding.chipIsCallForCargo.isChecked = villaToEdit?.isVillaCallForCargo == 1
+            dialogBinding.chipIsEmpty.isChecked = villaToEdit?.isVillaEmpty == 1
+
             dialogBinding.etVillaNo.isEnabled = false
             dialogBinding.btnVillaContacts.visibility = View.VISIBLE
         } else {
@@ -738,13 +1264,13 @@ class MainActivity : AppCompatActivity() {
             dialogBinding.btnSave.setOnClickListener {
                 val villaNo = dialogBinding.etVillaNo.text.toString().toIntOrNull()
                 if (villaNo == null) {
-                    showToast("Villa Numarası geçerli değil.")
+                    showBalloon(dialogBinding.etVillaNo, "Villa numarası geçerli değil.", 2)
                     return@setOnClickListener
                 }
 
                 val selectedStreet = dialogBinding.actvVillaStreet.text.toString()
                 if (selectedStreet.isBlank()) {
-                    showToast("Lütfen bir sokak seçin.")
+                    showBalloon(dialogBinding.tilVillaStreet, "Lütfen bir sokak seçin.", 2)
                     return@setOnClickListener
                 }
 
@@ -755,25 +1281,26 @@ class MainActivity : AppCompatActivity() {
                     villaStreet = selectedStreet,
                     villaNavigationA = dialogBinding.etVillaNavigationA.text.toString().takeIf { it.isNotBlank() },
                     villaNavigationB = dialogBinding.etVillaNavigationB.text.toString().takeIf { it.isNotBlank() },
-                    isVillaUnderConstruction = if (dialogBinding.cbIsUnderConstruction.isChecked) 1 else 0,
-                    isVillaSpecial = if (dialogBinding.cbIsSpecial.isChecked) 1 else 0,
-                    isVillaRental = if (dialogBinding.cbIsRental.isChecked) 1 else 0,
-                    isVillaCallFromHome = if (dialogBinding.cbIsCallFromHome.isChecked) 1 else 0,
-                    isVillaCallForCargo = if (dialogBinding.cbIsCallForCargo.isChecked) 1 else 0,
-                    isVillaEmpty = if (dialogBinding.cbIsEmpty.isChecked) 1 else 0
+                    isVillaUnderConstruction = if (dialogBinding.chipIsUnderConstruction.isChecked) 1 else 0,
+                    isVillaSpecial = if (dialogBinding.chipIsSpecial.isChecked) 1 else 0,
+                    isVillaRental = if (dialogBinding.chipIsRental.isChecked) 1 else 0,
+                    isVillaCallFromHome = if (dialogBinding.chipIsCallFromHome.isChecked) 1 else 0,
+                    isVillaCallForCargo = if (dialogBinding.chipIsCallForCargo.isChecked) 1 else 0,
+                    isVillaEmpty = if (dialogBinding.chipIsEmpty.isChecked) 1 else 0
                 )
 
                 activityScope.launch {
                     if (isEditMode) {
                         appDatabase.villaDao().update(villa)
                         showToast("Villa ${villa.villaNo} güncellendi.")
-                        // WebSocket güncellemesi burada olabilir
+                        sendVillaDataToWebSocket(villa, "update_villa")
                     } else {
                         val existingVilla = appDatabase.villaDao().getVillaByNo(villa.villaNo)
                         if (existingVilla == null) {
-                            appDatabase.villaDao().insert(villa)
+                            val newId = appDatabase.villaDao().insert(villa) // insert'in yeni ID'yi döndürdüğünü varsayalım
                             showToast("Villa ${villa.villaNo} eklendi.")
-                            // WebSocket güncellemesi burada olabilir
+                            val newVillaWithId = villa.copy(villaId = newId.toInt())
+                            sendVillaDataToWebSocket(newVillaWithId, "add_villa")
                         } else {
                             showToast("Bu villa numarası zaten mevcut.")
                         }
@@ -806,16 +1333,27 @@ class MainActivity : AppCompatActivity() {
 
         dialogBinding.apply {
             windowTitle.text = "Villa ${villa.villaNo}"
-            notesText.text = villa.villaNotes
+            if (villa.villaNotes != null) notesText.text = villa.villaNotes else notesText.visibility = View.GONE
             streetTitle.text = villa.villaStreet
+            streetTitle.isSelected = true
             navigationText.text = villa.villaNavigationA
             cameraText.text = "Bulunamadı"
-            rgNavigation.setOnCheckedChangeListener { _, checkedId ->
-                when (checkedId) {
-                    com.serkantken.secuasist.R.id.rb_gate_a -> navigationText.text = villa.villaNavigationA
-                    com.serkantken.secuasist.R.id.rb_gate_b -> navigationText.text = villa.villaNavigationB
+            chipGroupNavigation.setOnCheckedChangeListener { chipGroupNavigation, chipId ->
+                navigationText.text = when (chipId) {
+                    com.serkantken.secuasist.R.id.chip_gate_a -> villa.villaNavigationA
+                    com.serkantken.secuasist.R.id.chip_gate_b -> villa.villaNavigationB
+                    else -> villa.villaNavigationA
                 }
             }
+            chipIsEmpty.visibility = if (villa.isVillaEmpty == 1) View.VISIBLE else View.GONE
+            chipUnderConstruction.visibility = if (villa.isVillaUnderConstruction == 1) View.VISIBLE else View.GONE
+            specialVilla.visibility = if (villa.isVillaSpecial == 1) View.VISIBLE else View.GONE
+            rental.visibility = if (villa.isVillaRental == 1) View.VISIBLE else View.GONE
+            noCallForCargo.visibility = if (villa.isVillaCallForCargo == 1) View.VISIBLE else View.GONE
+            callFromHome.visibility = if (villa.isVillaCallFromHome == 1) View.VISIBLE else View.GONE
+            if (villa.villaNotes == null && villa.isVillaEmpty == 0 && villa.isVillaUnderConstruction == 0 && villa.isVillaSpecial == 0 && villa.isVillaRental == 0 && villa.isVillaCallForCargo == 0 && villa.isVillaCallFromHome == 0)
+                areaNotes.visibility = View.GONE
+
             btnClose.setOnClickListener {
                 dialog.dismiss()
             }
@@ -823,85 +1361,142 @@ class MainActivity : AppCompatActivity() {
                 showAddEditVillaDialog(villa)
                 dialog.dismiss()
             }
-            dialogBinding.rcVillaContacts.layoutManager = LinearLayoutManager(this@MainActivity)
-            dialogBinding.rcVillaContacts.adapter = ContactsAdapter(
+            val contactsAdapter = ContactsAdapter(
+                this@MainActivity,
                 onItemClick = { _, _ -> },
-                onDeleteClick = { _, _ -> }
+                onCallClick = { contact ->
+                    val phoneNumber = contact.contactPhone
+                    if (phoneNumber.isNullOrBlank()) {
+                        Toast.makeText(this@MainActivity, "Bu kişiye ait telefon numarası bulunamadı.", Toast.LENGTH_SHORT).show()
+                        return@ContactsAdapter
+                    }
+
+                    lifecycleScope.launch {
+                        contact.lastCallTimestamp = System.currentTimeMillis()
+                        appDatabase.contactDao().update(contact)
+                    }
+                    val intent = Intent(Intent.ACTION_CALL)
+                    intent.data = "tel:$phoneNumber".toUri()
+
+                    try {
+                        startActivity(intent)
+                    } catch (e: SecurityException) {
+                        Toast.makeText(this@MainActivity, "Telefon arama izni verilmemiş.", Toast.LENGTH_LONG).show()
+                        e.printStackTrace()
+                    }
+                },
+                onDeleteClick = { _ -> },
+                isShowingInfo = true,
+                isChoosingContact = false
             )
+            dialogBinding.rcVillaContacts.layoutManager = LinearLayoutManager(this@MainActivity)
+            dialogBinding.rcVillaContacts.adapter = contactsAdapter
+
+            lifecycleScope.launch {
+                appDatabase.villaContactDao().getContactsForVilla(villa.villaId).collect { contacts ->
+                    if (contacts.isEmpty()) {
+                        rcVillaContacts.visibility = View.INVISIBLE
+                    } else {
+                        rcVillaContacts.visibility = View.VISIBLE
+                        contactsAdapter.submitList(contacts)
+                    }
+                }
+            }
+
             dialog.window?.setBackgroundDrawableResource(R.color.transparent)
             dialog.show()
         }
     }
 
+    lateinit var villaContactsBinding : DialogManageVillaContactsBinding
     private fun showManageVillaContactsDialog(villa: Villa) {
-        val dialogBinding = DialogManageVillaContactsBinding.inflate(layoutInflater)
-        Tools(this).blur(arrayOf(dialogBinding.blur), 10f, true)
+        villaContactsBinding = DialogManageVillaContactsBinding.inflate(layoutInflater)
+        Tools(this).blur(arrayOf(villaContactsBinding.blur), 10f, true)
+        val dialog = AlertDialog.Builder(this).setView(villaContactsBinding.root).create()
 
-        val contactsAdapter = ContactsAdapter(
-            onItemClick = { contact, _ ->
-                showAddEditContactDialog(contact, villa.villaId)
-            },
-            onDeleteClick = { contact, _ ->
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("İlişkiyi Sil") // Başlığı "Kişi Sil" yerine "İlişkiyi Sil" olarak değiştirmek daha doğru olabilir
-                    .setMessage("Villa ${villa.villaNo} için ${contact.contactName} adlı kişinin ilişkisini silmek istediğinize emin misiniz?")
-                    .setPositiveButton("Evet, Sil") { dialog, _ ->
-                        activityScope.launch {
-                            try {
-                                // 1. Villa-Kişi ilişkisini sil
-                                appDatabase.villaContactDao()
-                                    .deleteByVillaIdAndContactId(villa.villaId, contact.contactId)
-                                sendVillaContactDeleteToWebSocket(
-                                    villa.villaId,
-                                    contact.contactId
-                                ) // Bu, VillaContact silme mesajı
-                                showToast("${contact.contactName} adlı kişinin Villa ${villa.villaNo} ile ilişkisi silindi.")
+        lateinit var draggableAdapter: DraggableContactsAdapter
 
-                                // 2. Kişinin başka ilişkisi kalıp kalmadığını kontrol et
-                                val associationsCount = appDatabase.villaContactDao()
-                                    .getVillaAssociationsCount(contact.contactId)
-                                if (associationsCount == 0) {
-                                    // 3. Başka ilişki kalmadıysa, kişiyi tamamen silmeyi öner
-                                    AlertDialog.Builder(this@MainActivity)
-                                        .setTitle("Kişiyi Sistemden Sil")
-                                        .setMessage("${contact.contactName} adlı kişinin başka hiçbir villa ile ilişkisi kalmadı. Bu kişiyi sistemden tamamen silmek ister misiniz?")
-                                        .setPositiveButton("Evet, Tamamen Sil") { _, _ ->
-                                            activityScope.launch {
-                                                try {
-                                                    appDatabase.contactDao()
-                                                        .delete(contact) // ContactDao'da @Delete suspend fun delete(contact: Contact) olmalı
-                                                    showToast("${contact.contactName} sistemden tamamen silindi.")
-                                                    sendContactDeleteToWebSocket(contact.contactId)
-                                                } catch (e: Exception) {
-                                                    showToast("${contact.contactName} sistemden silinirken hata oluştu: ${e.localizedMessage}")
-                                                }
-                                            }
+        draggableAdapter = DraggableContactsAdapter { contact ->
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("İlişkiyi Sil")
+                .setMessage("Villa ${villa.villaNo} için ${contact.contactName} adlı kişinin ilişkisini silmek istediğinize emin misiniz?")
+                .setPositiveButton("Evet, Sil") { _, _ ->
+                    activityScope.launch(Dispatchers.IO) {
+                        appDatabase.villaContactDao().deleteByVillaIdAndContactId(villa.villaId, contact.contactId)
+
+                        val currentList = draggableAdapter.currentList.toMutableList()
+                        currentList.remove(contact)
+
+                        launch(Dispatchers.Main) {
+                            draggableAdapter.submitList(currentList)
+                            showToast("${contact.contactName} ilişkisi silindi.")
+                        }
+
+                        val associationsCount = appDatabase.villaContactDao().getVillaAssociationsCount(contact.contactId)
+                        if (associationsCount == 0) {
+                            launch(Dispatchers.Main) {
+                                AlertDialog.Builder(this@MainActivity)
+                                    .setTitle("Kişiyi Sistemden Sil")
+                                    .setMessage("${contact.contactName} adlı kişinin başka villa ile ilişkisi kalmadı. Bu kişiyi sistemden tamamen silmek ister misiniz?")
+                                    .setPositiveButton("Evet, Tamamen Sil") { _, _ ->
+                                        activityScope.launch(Dispatchers.IO) {
+                                            appDatabase.contactDao().delete(contact)
+                                            launch(Dispatchers.Main) { showToast("${contact.contactName} sistemden tamamen silindi.") }
                                         }
-                                        .setNegativeButton("Hayır, Kişiyi Tut", null)
-                                        .show()
-                                }
-                            } catch (e: Exception) {
-                                showToast("İlişki silinirken hata oluştu: ${e.localizedMessage}")
+                                    }
+                                    .setNegativeButton("Hayır, Kişiyi Tut", null)
+                                    .show()
                             }
                         }
                     }
-                    .setNegativeButton("İptal", null)
-                    .show()
-            }
-        )
-        dialogBinding.recyclerViewVillaContacts.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = contactsAdapter
+                }
+                .setNegativeButton("İptal", null)
+                .show()
         }
 
-        activityScope.launch {
+        villaContactsBinding.recyclerViewVillaContacts.adapter = draggableAdapter
+        villaContactsBinding.recyclerViewVillaContacts.layoutManager = LinearLayoutManager(this)
+
+        val itemTouchHelperCallback = object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
+            override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                draggableAdapter.onRowMoved(viewHolder.adapterPosition, target.adapterPosition)
+                return true
+            }
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+        }
+        ItemTouchHelper(itemTouchHelperCallback).attachToRecyclerView(villaContactsBinding.recyclerViewVillaContacts)
+
+        lifecycleScope.launch {
             appDatabase.villaContactDao().getContactsForVilla(villa.villaId).collect { contacts ->
-                contactsAdapter.submitList(contacts)
-                dialogBinding.tvDialogTitle.text = "Villa ${villa.villaNo} Kişileri (${contacts.size})"
+                if (contacts.isEmpty()) {
+                    villaContactsBinding.layoutEmptyList.visibility = View.VISIBLE
+                } else {
+                    draggableAdapter.submitList(contacts)
+                }
             }
         }
 
-        dialogBinding.btnAddContactToVilla.setOnClickListener {
+        villaContactsBinding.btnClose.setOnClickListener {
+            activityScope.launch(Dispatchers.IO) {
+                val finalList = draggableAdapter.getFinalList()
+                val existingRelations = appDatabase.villaContactDao().getVillaContactRelations(villa.villaId)
+                val updatedRelations = mutableListOf<VillaContact>()
+                finalList.forEachIndexed { newIndex, contact ->
+                    val relationToUpdate = existingRelations.find { it.contactId == contact.contactId }
+                    relationToUpdate?.let {
+                        it.orderIndex = newIndex
+                        updatedRelations.add(it)
+                    }
+                }
+                if (updatedRelations.isNotEmpty()) {
+                    appDatabase.villaContactDao().updateVillaContacts(updatedRelations)
+                }
+            }
+            dialog.dismiss()
+        }
+
+        villaContactsBinding.btnAddContactToVilla.setOnClickListener {
             it.visibility = View.INVISIBLE
             val balloon = createBalloon(this) {
                 setLayout(com.serkantken.secuasist.R.layout.layout_balloon_new_villa_contact)
@@ -910,6 +1505,8 @@ class MainActivity : AppCompatActivity() {
                 setHeight(BalloonSizeSpec.WRAP)
                 setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
                 setBalloonAnimation(BalloonAnimation.CIRCULAR)
+                setIsVisibleOverlay(true)
+                setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
                 setLifecycleOwner(this@MainActivity)
                 build()
             }
@@ -930,16 +1527,8 @@ class MainActivity : AppCompatActivity() {
             //showAddEditContactDialog(null, villa.villaId)
         }
 
-        val alertDialog = AlertDialog.Builder(this)
-            .setView(dialogBinding.root)
-            .create()
-
-        dialogBinding.btnClose.setOnClickListener {
-            alertDialog.dismiss()
-        }
-
-        alertDialog.window?.setBackgroundDrawableResource(R.color.transparent)
-        alertDialog.show()
+        dialog.window?.setBackgroundDrawableResource(R.color.transparent)
+        dialog.show()
     }
 
     fun showAddEditContactDialog(contactToEdit: Contact?, villaIdForAssociation: Int?) {
@@ -972,74 +1561,182 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showExistingContactsSelectionDialog(villaIdToAssociate: Int) {
-        val contactsLiveData = appDatabase.contactDao().getAllContacts()
+    private fun linkContactToVilla(contact: Contact, villaId: Int, onComplete: () -> Unit) {
+        activityScope.launch {
+            // İlişkinin daha önce var olup olmadığını kontrol et
+            val existingRelation = appDatabase.villaContactDao().getVillaContact(
+                villaId, contact.contactId,
+                contactType = "Diğer"
+            )
+            if (existingRelation != null) {
+                showToast("${contact.contactName} zaten bu villa ile ilişkili.")
+            } else {
+                val newRelation = VillaContact(
+                    villaId = villaId,
+                    contactId = contact.contactId,
+                    isRealOwner = false, // Varsayılan değerler
+                    contactType = "Diğer",
+                    notes = null,
+                    orderIndex = 999 // Yeni eklenenler sona gitsin diye yüksek bir değer
+            )
+                appDatabase.villaContactDao().insert(newRelation)
+                showToast("${contact.contactName} villaya eklendi.")
+                sendVillaContactAddToWebSocket(newRelation)
+            }
+            onComplete() // İşlem bittiğinde çağrılacak (diyaloğu kapatmak için)
+        }
+    }
 
-        // Observer'ı bir değişken olarak tanımlıyoruz
-        val observer = object : Observer<List<Contact>> {
-            override fun onChanged(value: List<Contact>) {
-                // Veri alındıktan ve diyalog gösterilmeden hemen önce gözlemciyi kaldırıyoruz.
-                // Bu, bu spesifik diyalog gösterimi için gözlemcinin sadece bir kez çalışmasını sağlar.
-                contactsLiveData.removeObserver(this)
+    private fun showManageCompanyDeliverersDialog(company: CargoCompany) {
+        val dialogBinding = DialogManageCompanyDeliverersBinding.inflate(LayoutInflater.from(this))
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogBinding.root)
+            .create()
 
-                if (value.isEmpty()) {
-                    showToast("Sistemde kayıtlı kişi bulunmuyor. Önce yeni kişi oluşturun.")
-                    // Eğer burada return ediyorsak ve dialog gösterilmiyorsa,
-                    // kullanıcı tekrar "Mevcut kişilerden seç" dediğinde yeni bir observer eklenecektir. Bu doğru.
-                    return
-                }
+        dialogBinding.tvDialogTitle.text = "${company.companyName} - Kuryeleri Yönet"
 
-                val contactNames = value.map { it.contactName ?: "İsimsiz" }.toTypedArray()
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Mevcut Kişilerden Seç")
-                    .setItems(contactNames) { dialog, which ->
-                        val selectedContact = value[which]
-                        activityScope.launch {
-                            val defaultContactType = "Diğer"
-                            val existingRelation = appDatabase.villaContactDao().getVillaContact(
-                                villaIdToAssociate,
-                                selectedContact.contactId,
-                                defaultContactType
-                            )
-                            if (existingRelation != null && existingRelation.contactType == defaultContactType) {
-                                showToast("${selectedContact.contactName} zaten bu villa ile '$defaultContactType' tipinde ilişkili.")
-                            } else {
-                                val villaContact = VillaContact(
-                                    villaId = villaIdToAssociate,
-                                    contactId = selectedContact.contactId,
-                                    isRealOwner = 0,
-                                    contactType = defaultContactType,
-                                    notes = null
-                                )
-                                appDatabase.villaContactDao().insert(villaContact)
-                                showToast("${selectedContact.contactName}, villaya '$defaultContactType' tipiyle eklendi.")
-                                sendVillaContactAddToWebSocket(
-                                    VillaContact(
-                                        villaIdToAssociate,
-                                        selectedContact.contactId,
-                                        villaContact.isRealOwner,
-                                        villaContact.contactType,
-                                        villaContact.notes
-                                    )
-                                )
-                            }
-                        }
-                        dialog.dismiss()
-                    }
-                    .setNegativeButton("İptal") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    // .setOnDismissListener {
-                    //     // Gözlemci zaten onChanged içinde kaldırıldığı için bu kısım
-                    //     // bu spesifik senaryoda gerekmeyebilir. Ama genel bir kural olarak
-                    //     // diyalog kapandığında kaynakları temizlemek iyidir.
-                    //     // contactsLiveData.removeObserver(this) // 'this' burada Observer'a referans vermez.
-                    // }
-                    .show()
+        val assignedDeliverersAdapter = AssignedDeliverersAdapter { contactToRemove ->
+            // Dağıtıcıyı şirketten kaldır
+            lifecycleScope.launch {
+                appDatabase.companyDelivererDao().removeDelivererFromCompany(company.companyId, contactToRemove.contactId)
+                // İsteğe bağlı: kullanıcıya geri bildirim ver (Toast vb.)
             }
         }
-        // Gözlemciyi LiveData'ya ekliyoruz
-        contactsLiveData.observe(this, observer)
+
+        dialogBinding.recyclerViewCompanyContacts.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = assignedDeliverersAdapter
+        }
+
+        // Şirkete atanmış dağıtıcıları yükle ve adapter'a ver
+        lifecycleScope.launch {
+            appDatabase.companyDelivererDao().getDeliverersForCompanyFlow(company.companyId)
+                .collectLatest { deliverers ->
+                    assignedDeliverersAdapter.submitList(deliverers.sortedBy { it.contactName }) // Alfabetik sırala
+                    if (deliverers.isEmpty()) {
+                        dialogBinding.layoutEmptyList.visibility = View.VISIBLE
+                    } else {
+                        dialogBinding.layoutEmptyList.visibility = View.GONE
+                    }
+                }
+        }
+
+        dialogBinding.btnAddContactToCompany.setOnClickListener {
+            it.visibility = View.INVISIBLE
+            val balloon = createBalloon(this) {
+                setLayout(com.serkantken.secuasist.R.layout.layout_balloon_new_villa_contact)
+                setArrowSize(0)
+                setWidth(BalloonSizeSpec.WRAP)
+                setHeight(BalloonSizeSpec.WRAP)
+                setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
+                setBalloonAnimation(BalloonAnimation.CIRCULAR)
+                setIsVisibleOverlay(true)
+                setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
+                setLifecycleOwner(this@MainActivity)
+                build()
+            }
+            balloon.showAlignTop(it, 50, it.height+10)
+            val blur: BlurView = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.layout_menu_balloon)
+            //Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
+            balloon.setOnBalloonDismissListener { it.visibility = View.VISIBLE }
+            val newContact: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_new_person)
+            val existingContacts: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_existing_person)
+            newContact.setOnClickListener {
+                //showAddEditContactDialog(null) { newContactId ->
+                    // Yeni kişi başarıyla oluşturulduysa, bu şirkete dağıtıcı olarak ata
+                    //lifecycleScope.launch {
+                        //val crossRef = CompanyDelivererCrossRef(companyId = company.companyId, contactId = newContactId)
+                        //appDatabase.companyDelivererDao().addDelivererToCompany(crossRef)
+                        // İsteğe bağlı: kullanıcıya geri bildirim ve listenin güncellenmesi
+                        // (Flow otomatik güncelleyecektir)
+                    //}
+                //}
+                balloon.dismiss()
+            }
+            existingContacts.setOnClickListener {
+                showSelectContactsToAssignDialog(company)
+                balloon.dismiss()
+            }
+            // Yeni kişi oluşturma ve atama dialogunu göster
+
+        }
+
+        dialogBinding.btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun showSelectContactsToAssignDialog(company: CargoCompany) {
+        // Bu metod, o şirkete henüz atanmamış tüm kişileri listeler
+        // ve seçilenlerin şirkete atanmasını sağlar.
+        // Bu metodun implementasyonu bir sonraki adımda yapılacak.
+        // Şimdilik bir Toast mesajı gösterelim.
+        Toast.makeText(this, "Mevcut kişilerden seçme özelliği eklenecek.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showExistingContactsSelectionDialog(villaIdToAssociate: Int) {
+        val dialogBinding = DialogSelectContactBinding.inflate(layoutInflater)
+        Tools(this).blur(arrayOf(dialogBinding.blur), 15f, true)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogBinding.root)
+            .create()
+
+        var allContacts = listOf<Contact>()
+
+        val contactsAdapter = ContactsAdapter(
+            this@MainActivity,
+            onItemClick = { selectedContact, _ ->
+                linkContactToVilla(selectedContact, villaIdToAssociate) {
+                    villaContactsBinding.layoutEmptyList.visibility = View.GONE
+                    dialog.dismiss()
+                }
+            },
+            onCallClick = { _ -> /* Bu diyalogda arama işlevi yok */ },
+            onDeleteClick = { _ -> /* Bu diyalogda silme işlevi yok */ },
+            isShowingInfo = false,
+            isChoosingContact = true
+        )
+
+        dialogBinding.rvContacts.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = contactsAdapter
+        }
+
+        dialogBinding.etSearchContact.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
+            override fun afterTextChanged(s: Editable?) {
+                val query = s.toString().lowercase().trim()
+                val filteredList = if (query.isBlank()) {
+                    allContacts
+                } else {
+                    allContacts.filter {
+                        it.contactName?.lowercase()?.contains(query) == true ||
+                                it.contactPhone?.contains(query) == true
+                    }
+                }
+                contactsAdapter.submitList(filteredList)
+            }
+        })
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val contactsFromDb = appDatabase.contactDao().getAllContactsAsList()
+            allContacts = contactsFromDb
+
+            launch(Dispatchers.Main) {
+                contactsAdapter.submitList(allContacts)
+            }
+        }
+
+        dialogBinding.btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.window?.setBackgroundDrawableResource(R.color.transparent)
+        dialog.show()
     }
 
     private fun proceedWithNewContactCreationDialog(contactToEdit: Contact?, villaIdForAssociation: Int?, isEditModeOverride: Boolean? = null) {
@@ -1165,7 +1862,7 @@ class MainActivity : AppCompatActivity() {
                 val villaContact = VillaContact(
                     villaId = villaId,
                     contactId = contact.contactId,
-                    isRealOwner = 0, // Varsayılan
+                    isRealOwner = false, // Varsayılan
                     contactType = "Diğer", // Varsayılan
                     notes = null
                 )
@@ -1200,7 +1897,7 @@ class MainActivity : AppCompatActivity() {
             .setView(dialogBinding.root)
             .create()
 
-        alertDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        alertDialog.window?.setBackgroundDrawableResource(R.color.transparent)
 
         dialogBinding.btnSave.setOnClickListener {
             val companyName = dialogBinding.etCompanyName.text.toString().trim()
@@ -1216,13 +1913,7 @@ class MainActivity : AppCompatActivity() {
                         val updatedCompany = companyToEdit!!.copy(companyName = companyName)
                         appDatabase.cargoCompanyDao().update(updatedCompany) // cargoDao'da update fonksiyonunuz olmalı
                         showToast("${updatedCompany.companyName} güncellendi.")
-                        val cargoCompanyDto = CargoCompanyDto(
-                            companyId = updatedCompany.companyId, // Güncelleme için ID gönderiliyor
-                            companyName = updatedCompany.companyName
-                            // isCargoInOperation ve contacts varsayılan değerlerini (0 ve null) alacak
-                        )
-                        val message = gson.toJson(WebSocketMessage("update_cargo_company", cargoCompanyDto))
-                        webSocketClient.sendMessage(message)
+                        sendCargoCompanyAddOrUpdateToWebSocket(updatedCompany)
                     } else {
                         // CargoCompany modelinizde companyId'nin autoGenerate olduğunu varsayıyorum.
                         // Bu yüzden önce DB'ye ekleyip ID'sini alıyoruz.
@@ -1234,19 +1925,7 @@ class MainActivity : AppCompatActivity() {
                         if (newGeneratedId > 0) {
                             val newCompanyWithId = tempNewCompany.copy(companyId = newGeneratedId.toInt())
                             showToast("$companyName eklendi (ID: ${newCompanyWithId.companyId}).")
-
-                            // WebSocket ile sunucuya ekleme mesajı gönder
-                            val cargoCompanyDto = CargoCompanyDto(
-                                // companyId yeni eklemede null gönderilebilir, sunucu ID atayacaksa.
-                                // Ya da yerel ID'yi gönderebilirsiniz, sunucu bunu nasıl işleyeceğine bağlı.
-                                // Şimdilik yerel ID'yi gönderelim, sunucu bunu dikkate almayabilir veya alabilir.
-                                // Genelde "add" için client ID göndermez. Sunucunuzun beklentisine göre null yapabilirsiniz.
-                                companyId = newCompanyWithId.companyId, // VEYA null, sunucunuzun beklentisine göre
-                                companyName = newCompanyWithId.companyName
-                                // isCargoInOperation ve contacts varsayılan değerlerini (0 ve null) alacak
-                            )
-                            val message = gson.toJson(WebSocketMessage("add_cargo_company", cargoCompanyDto))
-                            webSocketClient.sendMessage(message)
+                            sendCargoCompanyAddOrUpdateToWebSocket(newCompanyWithId)
                         } else {
                             showToast("Veritabanına eklenirken hata oluştu.")
                         }
@@ -1271,21 +1950,17 @@ class MainActivity : AppCompatActivity() {
         alertDialog.show()
     }
 
-    // Yeni eklenen fonksiyon
-    fun showSelectCargoRecipientsSheet(companyId: Int) {
-        val sheet = SelectCargoRecipientsSheet.newInstance(companyId)
-        sheet.show(supportFragmentManager, SelectCargoRecipientsSheet.TAG)
-    }
-
-    private fun sendVillaAddOrUpdateToWebSocket(villa: Villa) {
-        val type = if (villa.villaId > 0) "update_villa" else "add_villa"
+    private fun sendVillaDataToWebSocket(villa: Villa, type: String) {
         val villaDto = VillaDto(
+            // ID'yi sadece güncelleme ve silme için gönderiyoruz,
+            // yeni eklemede sunucunun ID ataması daha doğru bir pratik olabilir
+            // ama mevcut sistemimizde ID'yi istemciden gönderiyoruz.
             villaId = if (villa.villaId > 0) villa.villaId else null,
             villaNo = villa.villaNo,
-            villaNotes = villa.villaNotes.takeIf { !it.isNullOrBlank() },
-            villaStreet = villa.villaStreet.takeIf { !it.isNullOrBlank() },
-            villaNavigationA = villa.villaNavigationA.takeIf { !it.isNullOrBlank() },
-            villaNavigationB = null,
+            villaNotes = villa.villaNotes,
+            villaStreet = villa.villaStreet,
+            villaNavigationA = villa.villaNavigationA,
+            villaNavigationB = villa.villaNavigationB,
             isVillaUnderConstruction = villa.isVillaUnderConstruction,
             isVillaSpecial = villa.isVillaSpecial,
             isVillaRental = villa.isVillaRental,
@@ -1313,8 +1988,7 @@ class MainActivity : AppCompatActivity() {
             showToast("WebSocket bağlantısı yok. Silme işlemi sunucuya iletilemedi.")
             return
         }
-        val contactDeleteDto =
-            ContactDto(contactId = contactId, contactName = null, contactPhone = null)
+        val contactDeleteDto = ContactDto(contactId = contactId, contactName = null, contactPhone = null)
         val webSocketMessage = WebSocketMessage(
             type = "delete_contact",
             data = gson.toJson(contactDeleteDto) // DTO'yu JSON string'ine çeviriyoruz
@@ -1340,6 +2014,22 @@ class MainActivity : AppCompatActivity() {
     private fun sendVillaContactDeleteToWebSocket(villaId: Int, contactId: Int) {
         val deleteDto = VillaContactDeleteDto(villaId = villaId, contactId = contactId)
         val message = gson.toJson(WebSocketMessage(type = "delete_villacontact", data = deleteDto))
+        webSocketClient.sendMessage(message)
+    }
+
+    private fun sendCargoCompanyAddOrUpdateToWebSocket(company: CargoCompany) {
+        val type = if (company.companyId > 0) "update_cargo_company" else "add_cargo_company"
+        val dto = CargoCompanyDto(
+            companyId = if (company.companyId > 0) company.companyId else null,
+            companyName = company.companyName
+        )
+        val message = gson.toJson(WebSocketMessage(dto, type))
+        webSocketClient.sendMessage(message)
+    }
+
+    private fun sendCargoCompanyDeleteToWebSocket(companyId: Int) {
+        val dto = CargoCompanyDto(companyId = companyId, companyName = null)
+        val message = gson.toJson(WebSocketMessage(dto,"delete_cargo_company" ))
         webSocketClient.sendMessage(message)
     }
 
@@ -1376,6 +2066,24 @@ class MainActivity : AppCompatActivity() {
         }, 7000)
         binding.btnClear.setOnClickListener {
             binding.blurMessage.visibility = View.GONE
+        }
+    }
+
+    fun showBalloon(view: View, message: String, location: Int) {
+        val balloon = createBalloon(this) {
+            setText(message)
+            setArrowSize(5)
+            setWidthRatio(0.5f)
+            setHeight(BalloonSizeSpec.WRAP)
+            setTextSize(15f)
+            autoDismissDuration = 3000
+            build()
+        }
+        when (location) {
+            0 -> balloon.showAlignTop(view)
+            1 -> balloon.showAlignEnd(view)
+            2 -> balloon.showAlignBottom(view)
+            3 -> balloon.showAlignStart(view)
         }
     }
 }

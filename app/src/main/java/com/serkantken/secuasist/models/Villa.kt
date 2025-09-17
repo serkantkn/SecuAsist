@@ -8,14 +8,22 @@ data class Villa(
     @PrimaryKey(autoGenerate = true)
     val villaId: Int = 0,
     val villaNo: Int,
-    val villaNotes: String?,
-    val villaStreet: String?,
-    val villaNavigationA: String?,
-    val villaNavigationB: String?,
-    val isVillaUnderConstruction: Int = 0,
-    val isVillaSpecial: Int = 0,
-    val isVillaRental: Int = 0,
-    val isVillaCallFromHome: Int = 0,
-    val isVillaCallForCargo: Int = 0,
-    val isVillaEmpty: Int = 0
-)
+    var villaNotes: String?,
+    var villaStreet: String?,
+    var villaNavigationA: String?,
+    var villaNavigationB: String?,
+    var isVillaUnderConstruction: Int = 0,
+    var isVillaSpecial: Int = 0,
+    var isVillaRental: Int = 0,
+    var isVillaCallFromHome: Int = 0,
+    var isVillaCallForCargo: Int = 0,
+    var isVillaEmpty: Int = 0
+) : SearchableItem {
+    override fun getDisplayId(): String? {
+        return villaId.toString()
+    }
+
+    override fun getDisplayName(): String? {
+        return villaNo.toString() // Villa için ana gösterim villa numarası olacak
+    }
+}

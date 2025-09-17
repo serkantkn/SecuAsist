@@ -56,7 +56,7 @@ class VillaAdapter(
             // Veya daha spesifik: isRealOwner = 0 (kiracı) olan birincil kişi
             // val tenant = villaWithContacts.contacts.firstOrNull { it.contactType == "Tenant" }
 
-
+            binding.tvVillaOwnerName.isSelected = true
             if (primaryContact != null) {
                 binding.tvVillaOwnerName.text = primaryContact.contactName
             } else {
