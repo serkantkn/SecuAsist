@@ -24,10 +24,10 @@ class MainViewPagerAdapter(fragmentActivity: FragmentActivity) :
 
     override fun createFragment(position: Int): Fragment {
         return when (position) {
-            0 -> VillaFragment() // Villalar
-            1 -> ContactsFragment() // Kişiler
-            2 -> CargoFragment()  // Kargolar
-            3 -> FaultTrackingFragment() // Kameralar
+            0 -> VillaFragment()
+            1 -> ContactsFragment()
+            2 -> CargoFragment()
+            3 -> FaultTrackingFragment()
             else -> throw IllegalArgumentException("Invalid position: $position")
         }
     }

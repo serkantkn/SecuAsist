@@ -15,7 +15,6 @@ class SelectedVillasAdapter(
     inner class SelectedVillaViewHolder(val binding: ItemSelectedVillaBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(selectableVilla: SelectableVilla) {
             binding.tvSelectedVillaNo.text = selectableVilla.villa.villaNo.toString()
-            // item_selected_villa.xml'de sadece villa numarası vardı, bu yüzden başka bir şey bağlamıyoruz.
 
             itemView.setOnClickListener {
                 onItemClicked(selectableVilla)

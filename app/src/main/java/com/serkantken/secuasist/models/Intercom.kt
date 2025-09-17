@@ -17,8 +17,8 @@ import java.util.Date
 data class Intercom(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val villaId: Int, // Hangi villaya ait olduğu
-    val location: String, // "Alt Kat", "Üst Kat", "Bahçe Kapısı" gibi
+    val villaId: Int,
+    val location: String,
     val ipAddress: String,
     var isFaulty: Boolean = false,
     var faultDate: Date? = null

@@ -7,13 +7,14 @@ import androidx.room.Update
 import androidx.room.Delete
 import androidx.room.OnConflictStrategy
 import androidx.room.Transaction
+import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaWithContacts
 import kotlinx.coroutines.flow.Flow // Veri değişikliklerini gözlemlemek için Flow kullanacağız
 
 @Dao
 interface VillaDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(villa: Villa): Long // Eklenen villanın ID'sini döndürür
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -37,7 +38,10 @@ interface VillaDao {
     @Query("SELECT * FROM Villas WHERE villaId = :villaId")
     suspend fun getVillaById(villaId: Int): Villa?
 
-    @Query("SELECT * FROM Villas WHERE villaNo = :villaNo")
+    @Query("SELECT * FROM Villas WHERE villaId IN (:villaIds)")
+    suspend fun getVillasByIds(villaIds: List<Int>): List<Villa>
+
+    @Query("SELECT * FROM Villas WHERE villaNo = :villaNo LIMIT 1")
     suspend fun getVillaByNo(villaNo: Int): Villa?
 
     // Tüm villaları, ilgili iletişim kişileriyle birlikte getiren metod

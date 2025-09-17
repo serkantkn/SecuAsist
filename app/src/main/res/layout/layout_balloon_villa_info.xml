@@ -20,113 +20,245 @@
             android:textColor="@color/white"
             android:textSize="24sp"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"/>
+            app:layout_constraintStart_toStartOf="parent"
+            android:layout_marginStart="16dp"/>
 
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:id="@+id/scrollView"
             app:layout_constraintTop_toBottomOf="@id/windowTitle"
-            android:layout_marginTop="10dp">
+            app:layout_constraintBottom_toTopOf="@id/btnClose"
+            android:layout_marginTop="10dp"
+            app:layout_constraintVertical_chainStyle="spread_inside">
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="wrap_content">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:id="@+id/notesTitle"
-                    android:text="Villa Notları"
-                    android:textColor="@color/textColorSecondary"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"/>
-
-                <TextView
-                    android:id="@+id/notesText"
+                <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="Not"
-                    android:textColor="@color/white"
-                    android:textSize="18sp"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/notesTitle" />
+                    android:id="@+id/area_notes"
+                    android:background="@drawable/background_edittext"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toTopOf="@id/rcVillaContacts"
+                    app:layout_constraintVertical_chainStyle="spread_inside"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="10dp"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:id="@+id/notesTitle"
+                        android:text="Villa Notları"
+                        android:textColor="@color/colorAccent"
+                        android:textSize="18sp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"/>
+
+                    <TextView
+                        android:id="@+id/notesText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Not"
+                        android:textColor="@color/white"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/notesTitle" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chip_group_status"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/notesText">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_is_empty"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Boş"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_under_construction"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Tadilatta"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/special_villa"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Özel İlgi Gerekir"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/rental"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Kiracı"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/no_call_for_cargo"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Kargo İçin Arama"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/call_from_home"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Önce Evi Ara"
+                            android:visibility="gone"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp"
+                            tools:visibility="visible" />
+
+                    </com.google.android.material.chip.ChipGroup>
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    app:layout_constraintHeight_max="250dp"
                     android:id="@+id/rcVillaContacts"
+                    android:clipToPadding="false"
                     tools:listitem="@layout/item_contact"
                     tools:itemCount="2"
-                    app:layout_constraintTop_toBottomOf="@id/notesText"
+                    app:layout_constraintTop_toBottomOf="@id/area_notes"
                     android:layout_marginTop="10dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:id="@+id/streetTitle"
-                    android:text="Salda 1 Sk."
-                    android:textColor="@color/textColorSecondary"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
+                    android:id="@+id/area_street"
+                    android:background="@drawable/background_edittext"
                     app:layout_constraintTop_toBottomOf="@id/rcVillaContacts"
-                    app:layout_constraintStart_toStartOf="parent"
-                    android:layout_marginTop="10dp"/>
+                    app:layout_constraintVertical_chainStyle="spread_inside"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="5dp"
+                    android:paddingBottom="16dp">
 
-                <RadioGroup
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:id="@+id/rgNavigation"
-                    app:layout_constraintTop_toBottomOf="@id/streetTitle"
-                    android:layout_marginTop="3dp"
-                    android:orientation="horizontal"
-                    android:gravity="fill_horizontal">
-
-                    <RadioButton
-                        android:layout_width="wrap_content"
+                    <TextView
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:id="@+id/rb_gate_a"
-                        android:text="A Kapısı"
-                        android:textColor="@color/white"
-                        android:checked="true"/>
+                        android:id="@+id/streetTitle"
+                        android:text="Salda 1 Sk."
+                        android:textColor="@color/colorAccent"
+                        android:textSize="18sp"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:ellipsize="marquee"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        app:layout_constraintTop_toTopOf="@id/chip_group_navigation"
+                        app:layout_constraintBottom_toBottomOf="@id/chip_group_navigation"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toStartOf="@id/chip_group_navigation"
+                        android:layout_marginEnd="10dp"/>
 
-                    <RadioButton
-                        android:layout_width="wrap_content"
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chip_group_navigation"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:id="@+id/rb_gate_b"
-                        android:text="B Kapısı"
+                        app:selectionRequired="true"
+                        app:singleSelection="true"
+                        app:checkedChip="@id/chip_gate_a"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        android:layout_marginTop="3dp">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_gate_a"
+                            style="@style/Widget.App.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="A"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chip_gate_b"
+                            style="@style/Widget.App.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="B"
+                            app:chipBackgroundColor="#33545454"
+                            app:chipStrokeColor="#40898989"
+                            app:chipStrokeWidth="1dp" />
+
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <TextView
+                        android:id="@+id/navigationText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Salda 1 Sk."
                         android:textColor="@color/white"
-                        android:layout_marginStart="20dp"/>
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/chip_group_navigation"
+                        android:layout_marginEnd="11dp"/>
 
-                </RadioGroup>
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <TextView
-                    android:id="@+id/navigationText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="Salda 1 Sk."
-                    android:textColor="@color/white"
-                    android:textSize="18sp"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/rgNavigation" />
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:id="@+id/area_camera"
+                android:background="@drawable/background_edittext"
+                app:layout_constraintTop_toBottomOf="@id/area_street"
+                android:layout_marginTop="10dp"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="16dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:id="@+id/cameraTitle"
                     android:text="Villa Kameraları"
-                    android:textColor="@color/textColorSecondary"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    app:layout_constraintTop_toBottomOf="@id/navigationText"
-                    app:layout_constraintStart_toStartOf="parent"
-                    android:layout_marginTop="15dp"/>
+                    android:textColor="@color/colorAccent"
+                    android:textSize="18sp"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"/>
 
                 <TextView
                     android:id="@+id/cameraText"
@@ -135,10 +267,13 @@
                     android:layout_marginTop="3dp"
                     android:text="172.16.10.73"
                     android:textColor="@color/white"
-                    android:textSize="18sp"
+                    android:textSize="16sp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/cameraTitle" />
+                    app:layout_constraintTop_toBottomOf="@id/cameraTitle"
+                    android:autoSizeMaxTextSize="5dp"/>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

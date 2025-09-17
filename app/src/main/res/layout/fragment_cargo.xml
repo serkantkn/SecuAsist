@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.recyclerview.widget.RecyclerView
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".views.fragments.CargoFragment"
-    android:id="@+id/rvCargoCompanies"/>
+    android:id="@+id/swipe_refresh_layout">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/rvCargoCompanies"
+        android:clipToPadding="false"
+        tools:listitem="@layout/item_cargo_company"/>
+
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

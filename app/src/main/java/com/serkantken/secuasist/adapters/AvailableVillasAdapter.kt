@@ -16,14 +16,6 @@ class AvailableVillasAdapter(
         RecyclerView.ViewHolder(binding.root) {
         fun bind(selectableVilla: SelectableVilla) {
             binding.tvVillaNo.text = selectableVilla.villa.villaNo.toString()
-            // item_villa.xml'de varsayılan kişi adını gösterecek bir TextView varsa:
-            // binding.tvVillaOwnerName.text = selectableVilla.defaultContactName ?: "Kişi atanmamış"
-            // VEYA tvVillaOwnerName'i sadece Villa'nın notları vs. için kullanıyorsanız,
-            // defaultContactName'i göstermek için item_villa.xml'i güncellemeniz gerekebilir.
-            // Şimdilik, VillaFragment'taki kullanımla tutarlı olması için tvVillaOwnerName'i
-            // varsayılan kişi adı için KULLANMIYORUM. Bu sizin item_villa.xml'inize bağlı.
-            // Konuşma geçmişindeki item_villa.xml'de tvVillaOwnerName vardı.
-            // Eğer bunu varsayılan kişi adı için kullanacaksak, aşağıdaki gibi olmalı:
             binding.tvVillaOwnerName.text = selectableVilla.defaultContactName ?: selectableVilla.villa.villaNotes ?: "Bilgi Yok"
 
 

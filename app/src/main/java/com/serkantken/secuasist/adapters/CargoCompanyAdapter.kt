@@ -8,14 +8,9 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.serkantken.secuasist.databinding.ItemCargoCompanyBinding
 import com.serkantken.secuasist.models.CargoCompany
-
-data class DisplayCargoCompany(
-    val company: CargoCompany,
-    val hasUncalledCargos: Boolean
-)
+import com.serkantken.secuasist.models.DisplayCargoCompany
 
 class CargoCompanyAdapter(
-    private val onItemClick: (CargoCompany) -> Unit,
     private val onItemLongClick: (CargoCompany) -> Unit // Uzun tıklama için eklendi
 ) : ListAdapter<DisplayCargoCompany, CargoCompanyAdapter.CargoCompanyViewHolder>(CargoCompanyDiffCallback()) {
 
@@ -27,15 +22,24 @@ class CargoCompanyAdapter(
     override fun onBindViewHolder(holder: CargoCompanyViewHolder, position: Int) {
         val displayCompany = getItem(position)
         // onItemClick ve onItemLongClick'i ViewHolder'a iletiyoruz
-        holder.bind(displayCompany, onItemClick, onItemLongClick)
+        holder.bind(displayCompany, onItemLongClick)
+    }
+
+    interface OnCargoCompanyActionListener {
+        fun onShowActionsClicked(anchorView: View, company: CargoCompany, hasUncalled: Boolean)
+    }
+
+    private var actionListener: OnCargoCompanyActionListener? = null
+
+    fun setOnCargoCompanyActionListener(listener: OnCargoCompanyActionListener) {
+        this.actionListener = listener
     }
 
     inner class CargoCompanyViewHolder(private val binding: ItemCargoCompanyBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(
             displayCompany: DisplayCargoCompany,
-            onItemClick: (CargoCompany) -> Unit,
-            onItemLongClick: (CargoCompany) -> Unit // Uzun tıklama için eklendi
+            onItemLongClick: (CargoCompany) -> Unit
         ) {
             binding.tvCargoCompanyName.text = displayCompany.company.companyName
 
@@ -46,12 +50,16 @@ class CargoCompanyAdapter(
             }
 
             binding.root.setOnClickListener {
-                onItemClick(displayCompany.company)
+                this@CargoCompanyAdapter.actionListener?.onShowActionsClicked(
+                    binding.root,
+                    displayCompany.company,
+                    displayCompany.hasUncalledCargos
+                )
             }
 
             binding.root.setOnLongClickListener {
                 onItemLongClick(displayCompany.company)
-                true // Uzun tıklama olayının tüketildiğini belirtir
+                true
             }
         }
     }

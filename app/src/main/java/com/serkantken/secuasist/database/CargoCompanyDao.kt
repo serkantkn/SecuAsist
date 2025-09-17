@@ -25,6 +25,9 @@ interface CargoCompanyDao {
     @Query("SELECT * FROM CargoCompanies")
     fun getAllCargoCompanies(): Flow<List<CargoCompany>>
 
+    @Query("SELECT * FROM CargoCompanies")
+    suspend fun getAllCompaniesAsList(): List<CargoCompany>
+
     @Query("SELECT * FROM CargoCompanies WHERE companyId = :companyId")
     suspend fun getCargoCompanyById(companyId: Int): CargoCompany?
 

@@ -5,7 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".views.activities.MainActivity"
-    android:background="@drawable/background_gradient">
+    android:background="@drawable/background_gradient"
+    android:fitsSystemWindows="false">
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewPager"
@@ -199,7 +200,7 @@
                 android:layout_height="62dp"
                 android:orientation="horizontal"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-                android:padding="7dp"
+                android:padding="5dp"
                 android:clipToPadding="false"
                 android:scrollbars="none"
                 tools:listitem="@layout/item_main_tab" />

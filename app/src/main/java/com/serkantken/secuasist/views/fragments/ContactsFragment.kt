@@ -1,10 +1,13 @@
 package com.serkantken.secuasist.views.fragments
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.launch
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.text.contains
 import kotlin.text.filter
+import androidx.core.net.toUri
 
 class ContactsFragment : Fragment() {
 
@@ -36,7 +40,6 @@ class ContactsFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var contactsAdapter: ContactsAdapter
     private lateinit var appDatabase: AppDatabase
-
     private var currentSearchQuery: String? = null
     private val searchQuery = MutableStateFlow<String?>(null)
 
@@ -68,22 +71,42 @@ class ContactsFragment : Fragment() {
 
     private fun setupRecyclerView() {
         contactsAdapter = ContactsAdapter(
+            requireActivity(),
             onItemClick = { contact, _ -> // VillaContact bilgisi bu fragment'ta genelde null olacak
                 (activity as? MainActivity)?.showAddEditContactDialog(contact, null)
             },
-            onDeleteClick = { contact, _ ->
+            onCallClick = { contact ->
+                val phoneNumber = contact.contactPhone
+                if (phoneNumber.isNullOrBlank()) {
+                    Toast.makeText(requireContext(), "Bu kişiye ait telefon numarası bulunamadı.", Toast.LENGTH_SHORT).show()
+                    return@ContactsAdapter
+                }
+
+                lifecycleScope.launch {
+                    contact.lastCallTimestamp = System.currentTimeMillis()
+                    appDatabase.contactDao().update(contact)
+                }
+                val intent = Intent(Intent.ACTION_CALL)
+                intent.data = "tel:$phoneNumber".toUri() // "tel:" ön eki zorunludur.
+
+                try {
+                    startActivity(intent)
+                } catch (e: SecurityException) {
+                    // Eğer manifest'e izin eklemeyi unutursak bu hata oluşur.
+                    Toast.makeText(requireContext(), "Telefon arama izni verilmemiş.", Toast.LENGTH_LONG).show()
+                    e.printStackTrace()
+                }
+            },
+            onDeleteClick = { contact ->
                 showDeleteConfirmationDialog(contact)
-            }
+            },
+            isShowingInfo = false,
+            isChoosingContact = false
         )
-        // Eğer _binding.root doğrudan RecyclerView ise:
-        // val recyclerView = binding.root as RecyclerView
-        // recyclerView.apply { ... }
-        // Eğer FragmentContactsBinding.inflate doğru şekilde RecyclerView'a referans veriyorsa:
         binding.rvContacts.apply {
             layoutManager = LinearLayoutManager(requireContext())
+            clipToPadding = false
             adapter = contactsAdapter
-            // MainActivity'den padding yönetiliyorsa aşağıdaki paddingler gereksiz olabilir
-            // setPadding(0, getStatusBarHeight(), 0, getNavigationBarHeight())
         }
     }
 
@@ -94,16 +117,9 @@ class ContactsFragment : Fragment() {
             .setPositiveButton("Evet, Sil") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        // Önce bu kişiyle ilişkili tüm VillaContact kayıtlarını sil
-                        // Bu adım önemli, yoksa Foreign Key kısıtlamaları hataya neden olabilir.
-                        // VillaContactDao'da contactId'ye göre silme metodu eklemeniz gerekebilir.
-                        // appDatabase.villaContactDao().deleteContactsByContactId(contact.contactId) // Örnek
-
-                        // Sonra kişiyi sil
                         appDatabase.contactDao().delete(contact)
                         (activity as? MainActivity)?.sendContactDeleteToWebSocket(contact.contactId)
                         (activity as? MainActivity)?.showToast("${contact.contactName} silindi.")
-                        // Liste otomatik olarak Flow ile güncellenecektir.
                     } catch (e: Exception) {
                         (activity as? MainActivity)?.showToast("Silinirken hata oluştu: ${e.localizedMessage}")
                     }

@@ -4,10 +4,14 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.serkantken.secuasist.models.Camera
 import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.CompanyContact
+import com.serkantken.secuasist.models.CompanyDelivererCrossRef
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.Intercom
 import com.serkantken.secuasist.models.Villa
@@ -22,11 +26,13 @@ import com.serkantken.secuasist.models.VillaContact
         CompanyContact::class,
         Cargo::class,
         Camera::class,
-        Intercom::class
+        Intercom::class,
+        CompanyDelivererCrossRef::class
     ],
-    version = 1, // Veritabanı şemasında her değişiklik yaptığınızda bu numarayı artırmalısınız
-    exportSchema = true // Şema yedeği dışarı aktarılacak
+    version = 1,
+    exportSchema = true
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     // DAO'ları tanımlayın
@@ -38,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cargoDao(): CargoDao
     abstract fun cameraDao(): CameraDao
     abstract fun intercomDao(): IntercomDao
-
+    abstract fun companyDelivererDao(): CompanyDelivererDao
 
     companion object {
         @Volatile
@@ -51,10 +57,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "secuasist_database"
                 )
-                    // İlk defa çalıştığında veritabanı şemasında bir değişiklik varsa
-                    // migration gerekecektir. Şimdilik yıkıcı bir migrate kullanalım,
-                    // daha sonra gerçek migration stratejilerini öğreniriz.
-                    // .fallbackToDestructiveMigration() // DİKKAT: Verileri siler! Geliştirme aşamasında kullanışlıdır.
                     .build()
                 INSTANCE = instance
                 instance

@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.green
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -37,13 +38,23 @@ class CallingVillaAdapter(
 
                 when (displayableVilla.state) {
                     VillaCallingState.IN_PROGRESS -> {
-                        cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_inprogress_villa)
+                        cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur)
                     }
                     VillaCallingState.PENDING -> {
+                        cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_success_villa)
+                    }
+                    VillaCallingState.CALLED_FAILED -> {
                         cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_pending_villa)
                     }
-                    VillaCallingState.CALLED -> {
+                    VillaCallingState.CALLED_SUCCESS -> {
                         cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_called_villa)
+                    }
+                    VillaCallingState.DONE_AT_HOME -> {
+                        cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_called_villa)
+                    }
+
+                    VillaCallingState.CALLED -> {
+                        cardViewVilla.background = ContextCompat.getDrawable(context, R.drawable.background_blur_success_villa)
                     }
                 }
 

@@ -6,7 +6,34 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/background_blur"
-    android:layout_marginBottom="7dp">
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
+    android:layout_marginBottom="10dp">
+
+    <com.makeramen.roundedimageview.RoundedImageView
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:id="@+id/profile_picture"
+        android:scaleType="centerCrop"
+        android:src="@drawable/background_gradient"
+        app:riv_corner_radius="100dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toBottomOf="@id/tvContactPhone"
+        android:layout_marginTop="10dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/tv_contact_letter"
+        android:text="CN"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        app:layout_constraintTop_toTopOf="@id/profile_picture"
+        app:layout_constraintBottom_toBottomOf="@id/profile_picture"
+        app:layout_constraintStart_toStartOf="@id/profile_picture"
+        app:layout_constraintEnd_toEndOf="@id/profile_picture"/>
 
     <TextView
         android:id="@+id/tvContactName"
@@ -19,11 +46,14 @@
         android:ellipsize="end"
         tools:text="Ahmet Yılmaz"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/ivDeleteContact"
+        app:layout_constraintStart_toEndOf="@id/profile_picture"
+        app:layout_constraintEnd_toStartOf="@+id/ivCallContact"
+        app:layout_constraintBottom_toTopOf="@+id/tvContactPhone"
+        app:layout_constraintVertical_bias="0"
+        app:layout_constraintVertical_chainStyle="packed"
         android:layout_marginEnd="10dp"
-        android:layout_marginTop="5dp"
-        android:layout_marginStart="16dp"/>
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"/>
 
     <TextView
         android:id="@+id/tvContactPhone"
@@ -33,25 +63,149 @@
         android:textColor="@color/textColorSecondary"
         tools:text="5551234567"
         app:layout_constraintTop_toBottomOf="@id/tvContactName"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/ivDeleteContact"
+        app:layout_constraintStart_toEndOf="@id/profile_picture"
+        app:layout_constraintEnd_toStartOf="@+id/ivCallContact"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintVertical_bias="0"
         android:layout_marginEnd="10dp"
+        android:layout_marginStart="10dp"
         android:layout_marginTop="5dp"
-        android:layout_marginStart="16dp"
         android:layout_marginBottom="10dp"/>
 
-    <ImageButton
-        android:id="@+id/ivDeleteContact"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:src="@drawable/ic_delete"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Kişiyi Sil"
+    <com.makeramen.roundedimageview.RoundedImageView
+        android:id="@+id/ivCallContact"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_call"
+        android:padding="7dp"
+        android:background="@drawable/background_blur_called_villa"
+        android:contentDescription="Kişiyi Ara"
         app:tint="@color/white"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginEnd="16dp"/>
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/area_detail"
+        app:layout_constraintTop_toBottomOf="@id/tvContactPhone"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/label_recent_call"
+            android:text="Son arama:"
+            android:textColor="@color/colorAccent"
+            android:textSize="15sp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/tv_recent_call_date"
+            android:text="Son arama tarih saat"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toEndOf="@id/label_recent_call"
+            android:layout_marginStart="5dp"/>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btnDelete"
+            android:background="@drawable/background_blur_pending_villa"
+            app:layout_constraintTop_toBottomOf="@id/label_recent_call"
+            android:layout_marginTop="10dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btnEdit"
+            app:layout_constraintHorizontal_chainStyle="packed">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icDelete"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_delete"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btnEdit"
+            android:background="@drawable/background_blur"
+            app:layout_constraintTop_toBottomOf="@id/label_recent_call"
+            android:layout_marginTop="10dp"
+            app:layout_constraintEnd_toStartOf="@id/btnCallDetail"
+            app:layout_constraintStart_toEndOf="@id/btnDelete"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            android:layout_marginHorizontal="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icEdit"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_edit"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleEdit"
+                android:text="Düzenle"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icEdit"
+                app:layout_constraintTop_toTopOf="@id/icEdit"
+                app:layout_constraintBottom_toBottomOf="@id/icEdit"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/btnCallDetail"
+            android:background="@drawable/background_blur_called_villa"
+            app:layout_constraintTop_toBottomOf="@id/label_recent_call"
+            android:layout_marginTop="10dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btnEdit"
+            app:layout_constraintHorizontal_chainStyle="packed">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icCall"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_call"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleCall"
+                android:text="Arama Yap"
+                android:textColor="@color/white"
+                app:layout_constraintStart_toEndOf="@id/icCall"
+                app:layout_constraintTop_toTopOf="@id/icCall"
+                app:layout_constraintBottom_toBottomOf="@id/icCall"
+                app:layout_constraintEnd_toEndOf="parent"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

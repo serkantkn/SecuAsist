@@ -76,21 +76,12 @@ class VillaFragment : Fragment() {
         }
     }
 
-    private fun setupSwipeToRefresh() {
-        binding.swipeRefreshLayout.setOnRefreshListener {
-            // Kullanıcı yenileme hareketi yaptığında, sadece veri gözlemlemeyi yeniden tetikle.
-            // Başka hiçbir şey yapma.
-            observeVillas()
-        }
-    }
+    private fun setupSwipeToRefresh() = binding.swipeRefreshLayout.setOnRefreshListener(::observeVillas)
 
-    // MainActivity'den sıralamayı değiştirmek için çağrılacak fonksiyon
     fun sortVillasBy(sortType: VillaSortType) {
         currentSortType = sortType
-
-        // Kullanıcıya sıralamanın başladığına dair görsel geri bildirim verelim.
         binding.swipeRefreshLayout.isRefreshing = true
-        observeVillas() // Veri yüklemesini başlat. Yükleme bitince callback animasyonu durduracak.
+        observeVillas()
     }
 
     data class VillaFilterState(
@@ -101,30 +92,20 @@ class VillaFragment : Fragment() {
     )
 
     fun setSearchQuery(query: String) {
-        // Mevcut durumu koruyarak sadece arama sorgusunu güncelle.
         filterState.value = filterState.value.copy(searchQuery = query)
     }
 
-    // YENİ: Filtre durumunu bir StateFlow olarak tutuyoruz.
-    // Bu, filtrelerde bir değişiklik olduğunda otomatik olarak yeniden veri çekilmesini sağlar.
     private val filterState = MutableStateFlow(VillaFilterState())
 
-    // YENİ: Filtreleri temizleyen ve varsayılan duruma dönen fonksiyon
     fun clearFilters() {
-        // filterState'i başlangıç değerine geri döndür.
-        // StateFlow, bu değişikliği algılayıp combine bloğunu yeniden tetikleyecek.
         filterState.value = VillaFilterState()
     }
 
-    // YENİ: Belirli bir sokağa göre filtreleyen fonksiyon
     fun setStreetFilter(streetName: String) {
-        // Mevcut durumu koruyarak sadece sokağı güncelle.
         filterState.value = filterState.value.copy(selectedStreet = streetName)
     }
 
-    // YENİ: Durum filtrelerini güncelleyen fonksiyon.
     fun setStatusFilters(newFilters: Set<StatusFilter>) {
-        // Mevcut filtre durumunu koruyarak sadece durum filtreleri set'ini güncelle.
         filterState.value = filterState.value.copy(activeStatusFilters = newFilters)
     }
 
@@ -161,17 +142,15 @@ class VillaFragment : Fragment() {
                         }
                     }
 
-                    // --- YENİ BÖLÜM: ARAMA FİLTRESİ ---
+                    // ARAMA FİLTRESİ ---
                     if (!currentFilter.searchQuery.isNullOrBlank()) {
                         val query = currentFilter.searchQuery.trim()
                         filteredList = filteredList.filter { villaWithContacts ->
                             val villa = villaWithContacts.villa
-                            // Villa numarasında veya notlarda (büyük/küçük harf duyarsız) ara
                             villa.villaNo.toString().contains(query) ||
                                     (villa.villaNotes?.contains(query, ignoreCase = true) ?: false)
                         }
                     }
-                    // --- YENİ BÖLÜM BİTTİ ---
 
                     // 4. Sıralama
                     when (currentFilter.sortBy) {
@@ -196,6 +175,6 @@ class VillaFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null // Bellek sızıntılarını önlemek için view binding'i temizle
+        _binding = null
     }
 }

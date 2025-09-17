@@ -1,6 +1,7 @@
 package com.serkantken.secuasist.adapters
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -38,16 +39,18 @@ class MainTabsAdapter(
             binding.tvTabTitle.text = tab.title
             binding.ivTabIcon.setImageResource(tab.iconResId)
 
+            if (tab.id == 2 && tab.hasNotification) binding.ivPendingCargoIndicator.visibility = View.VISIBLE else binding.ivPendingCargoIndicator.visibility = View.GONE
+
             if (tab.isSelected) {
                 binding.root.setBackgroundResource(R.drawable.background_blur) // Seçili arka plan
                 // İsteğe bağlı: Seçili ikon ve metin rengini de değiştirebilirsiniz
-                //binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.white)) // Örneğin
-                //binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.white))
+                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.colorSecondary)) // Örneğin
+                binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.colorSecondary))
             } else {
                 binding.root.background = null // Seçili olmayan için arka planı kaldır
                 // İsteğe bağlı: Seçili olmayan ikon ve metin rengini varsayılana döndür
-                //binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.textColorSecondary)) // Örneğin
-                //binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.textColorSecondary))
+                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.white)) // Örneğin
+                binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.white))
             }
 
             binding.root.setOnClickListener {
