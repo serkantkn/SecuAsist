@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -32,6 +33,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import kotlin.text.format
 
 class CallingActivity : AppCompatActivity() {
     private companion object {
@@ -275,6 +281,9 @@ class CallingActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa evden arandı olarak işaretlendi.", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = true)
+            }
             updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_SUCCESS) // Örnek durum
             // İlgili kargonun durumunu DB'de güncellemek gerekebilir.
             moveToNextPendingVilla()
@@ -286,6 +295,9 @@ class CallingActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa atlandı.", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = false, wasSkipped = true)
+            }
             updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_FAILED) // Örnek durum
             // İlgili kargonun durumunu DB'de güncellemek gerekebilir.
             moveToNextPendingVilla()
@@ -302,11 +314,17 @@ class CallingActivity : AppCompatActivity() {
             .setTitle("Arama Sonucu: $villaNo")
             .setMessage("$villaNo numaralı villa ile yapılan görüşme sonucunu belirtin:")
             .setPositiveButton("Ulaşıldı") { dialog, _ ->
+                lifecycleScope.launch {
+                    logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = true)
+                }
                 updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_SUCCESS)
                 moveToNextPendingVilla()
                 dialog.dismiss()
             }
             .setNegativeButton("Ulaşılamadı") { dialog, _ ->
+                lifecycleScope.launch {
+                    logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = false)
+                }
                 updateVillaState(currentSelectedVilla, VillaCallingState.CALLED_FAILED)
                 moveToNextPendingVilla()
                 dialog.dismiss()
@@ -447,12 +465,69 @@ class CallingActivity : AppCompatActivity() {
             handleVillaClick(nextPendingVilla)
         } else {
             Toast.makeText(this, "Tüm villalar işlendi.", Toast.LENGTH_LONG).show()
-            // Opsiyonel: finish()
+            lifecycleScope.launch {
+                delay(3000)
+                if (this@CallingActivity.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                    finish()
+                }
+            }
         }
     }
 
+    private suspend fun logCargoInteraction(
+        cargoIdToLog: Int?,
+        outcomeSuccessful: Boolean,
+        wasSkipped: Boolean = false
+    ) {
+        if (cargoIdToLog == null) {
+            Log.e(TAG, "Cannot log cargo interaction: cargoId is null.")
+            return
+        }
+
+        val cargo = db.cargoDao().getCargoById(cargoIdToLog)
+        if (cargo == null) {
+            Log.e(TAG, "Cannot log cargo interaction: Cargo with id $cargoIdToLog not found in DB.")
+            return
+        }
+
+        val newAttemptCount = if (wasSkipped) cargo.callAttemptCount else cargo.callAttemptCount + 1 // Atlanırsa deneme sayısı artmasın
+        val callDateString = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).apply {
+            timeZone = TimeZone.getTimeZone("UTC") // Standart UTC kullanalım
+        }.format(Date())
+
+        // "Atla" durumunda arayan kişi null olabilir veya farklı bir mantık gerekebilir.
+        // Şimdilik, eğer bir kişi seçiliyse onu kullanalım.
+        val contactCalledId = currentlySelectedContactFromAdapter?.contactId
+        val deviceName = Hawk.get("device_name", "Bilinmiyor")
+
+        val finalIsCalled: Int
+        val finalIsMissed: Int
+
+        if (wasSkipped) {
+            finalIsCalled = 0 // Arama yapılmadı
+            finalIsMissed = 1 // Teslimat atlandı/başarısız
+        } else if (outcomeSuccessful) {
+            finalIsCalled = 1 // Arama yapıldı/işlem başarılı
+            finalIsMissed = 0
+        } else { // Başarısız arama/işlem
+            finalIsCalled = 1
+            finalIsMissed = 1
+        }
+
+        val updatedCargo = cargo.copy(
+            isCalled = finalIsCalled,
+            isMissed = finalIsMissed,
+            callDate = callDateString, // Her etkileşimde callDate güncellenir
+            callAttemptCount = newAttemptCount,
+            whoCalled = contactCalledId, // Atla durumunda bu null olabilir, DB'de nullable olmalı
+            callingDeviceName = deviceName
+        )
+
+        db.cargoDao().update(updatedCargo)
+        Log.d(TAG, "Cargo record updated for cargoId: $cargoIdToLog. OutcomeSuccessful: $outcomeSuccessful, Skipped: $wasSkipped, NewAttemptCount: $newAttemptCount")
+    }
+
     private fun scrollToCenter(position: Int, recyclerView: RecyclerView) {
-        // ... (scrollToCenter içeriği öncekiyle aynı, bir değişiklik yok) ...
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
         layoutManager?.let {
             val firstVisibleItemPosition = it.findFirstVisibleItemPosition()
