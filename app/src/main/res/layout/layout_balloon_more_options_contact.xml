@@ -48,11 +48,47 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/btn_import_from_device"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/btn_import"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp">
+
+            <com.makeramen.roundedimageview.RoundedImageView
+                android:id="@+id/icImportFromDevice"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_person"
+                android:padding="7dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/titleImportFromDevice"
+                android:text="Rehberden İçe Aktar"
+                android:textColor="@color/white"
+                android:lines="1"
+                app:layout_constraintStart_toEndOf="@id/icImportFromDevice"
+                app:layout_constraintTop_toTopOf="@id/icImportFromDevice"
+                app:layout_constraintBottom_toBottomOf="@id/icImportFromDevice"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0"
+                android:layout_marginEnd="10dp"/>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:id="@+id/divider"
-            app:layout_constraintTop_toBottomOf="@id/btn_import"
+            app:layout_constraintTop_toBottomOf="@id/btn_import_from_device"
             app:layout_constraintStart_toStartOf="@id/btn_import"
             app:layout_constraintEnd_toEndOf="@id/btn_import"
             android:background="@color/cardBackground"

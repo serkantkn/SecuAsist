@@ -3,10 +3,12 @@ package com.serkantken.secuasist.views.activities
 //noinspection SuspiciousImport
 import android.Manifest
 import android.R
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.ContactsContract
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.DisplayMetrics
@@ -14,6 +16,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.Animation
+import android.view.animation.AnimationUtils
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -56,6 +60,8 @@ import com.serkantken.secuasist.databinding.DialogSelectContactBinding
 import com.serkantken.secuasist.databinding.LayoutBalloonVillaInfoBinding
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.Contact
+import com.serkantken.secuasist.models.ContactFromPhone
+import com.serkantken.secuasist.models.PhoneOptionForContact
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
 import com.serkantken.secuasist.network.CargoCompanyDto
@@ -74,10 +80,11 @@ import com.serkantken.secuasist.views.fragments.CargoFragment
 import com.serkantken.secuasist.views.fragments.ContactsFragment
 import com.serkantken.secuasist.views.fragments.VillaFragment
 import com.skydoves.balloon.Balloon
+import com.skydoves.balloon.BalloonAlign
 import com.skydoves.balloon.BalloonAnimation
 import com.skydoves.balloon.BalloonSizeSpec
 import com.skydoves.balloon.createBalloon
-import com.skydoves.balloon.overlay.BalloonOverlayOval
+import com.skydoves.balloon.overlay.BalloonOverlayCircle
 import com.skydoves.balloon.overlay.BalloonOverlayRoundRect
 import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +93,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
@@ -105,7 +113,8 @@ class MainActivity : AppCompatActivity() {
     private var isBalloonShowing = false
     private lateinit var balloonSortVillas: Balloon
     private var isSearchModeActive = false
-
+    private val READ_CONTACTS_PERMISSION_CODE = 123
+    private var contactsToProcessAfterPermission: List<ContactFromPhone>? = null
     private var activityScopeJob: Job? = null
     private val activityScope: CoroutineScope
         get() = CoroutineScope(Dispatchers.Main + (activityScopeJob ?: Job()))
@@ -304,7 +313,7 @@ class MainActivity : AppCompatActivity() {
             when (fragmentPosition) {
                 0 -> {
                     binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_filter)
-                    binding.icFab.setOnClickListener { showBalloonSortVillas(it)  }
+                    binding.icFab.setOnClickListener { showBalloonSortVillas() }
                     binding.btnSearch.visibility = View.VISIBLE
                     binding.etSearch.hint = "Villa ara"
                 }
@@ -511,6 +520,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 1 -> {
                     val btnImport = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_import)
+                    val brnImportFromDevice = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_import_from_device)
                     val btnSettings = balloon.getContentView().findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_settings)
                     btnSettings.setOnClickListener {
                         val intent = Intent(this, SettingsActivity::class.java)
@@ -519,6 +529,10 @@ class MainActivity : AppCompatActivity() {
                     }
                     btnImport.setOnClickListener {
                         launchContactCsvFilePicker()
+                        balloon.dismiss()
+                    }
+                    brnImportFromDevice.setOnClickListener {
+                        initiateImportContactsFromPhone()
                         balloon.dismiss()
                     }
                 }
@@ -547,57 +561,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun showBalloonSortVillas(view: View) {
+    fun showBalloonSortVillas() {
         if (binding.viewPager.currentItem != 0) return
-        if (isBalloonShowing) {
-            balloonSortVillas.dismiss()
-            isBalloonShowing = false
-        } else {
-            balloonSortVillas = createBalloon(this) {
-                setLayout(com.serkantken.secuasist.R.layout.layout_balloon_sort_villas)
-                setArrowSize(0)
-                setWidth(BalloonSizeSpec.WRAP)
-                setHeight(BalloonSizeSpec.WRAP)
-                setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                setBalloonAnimation(BalloonAnimation.OVERSHOOT)
-                setDismissWhenTouchOutside(true)
-                setIsVisibleOverlay(true)
-                setOverlayShape(BalloonOverlayOval)
-                overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
-                setLifecycleOwner(this@MainActivity)
-                build()
-            }
 
-            val contentView = balloonSortVillas.getContentView()
-            val blurView = contentView.findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
-            Tools(this@MainActivity).blur(arrayOf(blurView), 10f, true)
-            binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_close)
-            isBalloonShowing = true
-            balloonSortVillas.showAlignTop(binding.blurFab, 0, Tools(this@MainActivity).convertDpToPixel(-10))
-            balloonSortVillas.setOnBalloonDismissListener {
-                binding.icFab.setImageResource(com.serkantken.secuasist.R.drawable.ic_filter)
-                isBalloonShowing = false
-            }
+        val fadeoutanimation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
+        fadeoutanimation.setAnimationListener(object : Animation.AnimationListener {
+            override fun onAnimationStart(animation: Animation?) {
+                balloonSortVillas = createBalloon(this@MainActivity) {
+                    setLayout(com.serkantken.secuasist.R.layout.layout_balloon_sort_villas)
+                    setArrowSize(0)
+                    setWidth(BalloonSizeSpec.WRAP)
+                    setHeight(BalloonSizeSpec.WRAP)
+                    setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
+                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    setDismissWhenTouchOutside(true)
+                    setIsVisibleOverlay(true)
+                    setOverlayShape(BalloonOverlayCircle(12f))
+                    overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
+                    setLifecycleOwner(this@MainActivity)
+                    build()
+                }
 
-            val villaFragment = supportFragmentManager.findFragmentByTag("f" + binding.viewPager.currentItem) as? VillaFragment
+                val contentView = balloonSortVillas.getContentView()
+                val blurView = contentView.findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
+                Tools(this@MainActivity).blur(arrayOf(blurView), 10f, true)
 
-            contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_filter_by_street).setOnClickListener {
-                // Bu fonksiyonu bir sonraki adımda oluşturacağız
-                showStreetFilterDialog()
-                balloonSortVillas.dismiss()
-            }
+                balloonSortVillas.setOnBalloonDismissListener {
+                    val fadeinanimation = AnimationUtils.loadAnimation(this@MainActivity, R.anim.fade_in)
+                    fadeinanimation.setAnimationListener(object : Animation.AnimationListener {
+                        override fun onAnimationEnd(animation: Animation?) {}
+                        override fun onAnimationRepeat(animation: Animation?) {}
+                        override fun onAnimationStart(animation: Animation?) {
+                            binding.bottomNavBar.visibility = View.VISIBLE
+                        }
+                    })
+                    fadeinanimation.duration = 500
+                    binding.bottomNavBar.startAnimation(fadeinanimation)
+                }
 
-            contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_filter_by_status).setOnClickListener {
-                showStatusFilterDialog()
-                balloonSortVillas.dismiss()
-            }
+                val villaFragment = supportFragmentManager.findFragmentByTag("f" + binding.viewPager.currentItem) as? VillaFragment
 
-            contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_clear_filter).setOnClickListener {
-                villaFragment?.clearFilters() // Bu fonksiyonu VillaFragment'a ekleyeceğiz
-                showToast("Tüm filtreler temizlendi.")
-                balloonSortVillas.dismiss()
+                contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_filter_by_street).setOnClickListener {
+                    showStreetFilterDialog()
+                    balloonSortVillas.dismiss()
+                }
+
+                contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_filter_by_status).setOnClickListener {
+                    showStatusFilterDialog()
+                    balloonSortVillas.dismiss()
+                }
+
+                contentView.findViewById<ConstraintLayout>(com.serkantken.secuasist.R.id.btn_clear_filter).setOnClickListener {
+                    villaFragment?.clearFilters() // Bu fonksiyonu VillaFragment'a ekleyeceğiz
+                    showToast("Tüm filtreler temizlendi.")
+                    balloonSortVillas.dismiss()
+                }
+                balloonSortVillas.showAlign(BalloonAlign.BOTTOM,binding.root, listOf(), 500, 0)
             }
-        }
+            override fun onAnimationEnd(animation: Animation?) {
+                binding.bottomNavBar.visibility = View.GONE
+            }
+            override fun onAnimationRepeat(animation: Animation?) {}
+        })
+        fadeoutanimation.duration = 250
+        binding.bottomNavBar.startAnimation(fadeoutanimation)
     }
 
     private fun showStreetFilterDialog() {
@@ -2031,6 +2058,215 @@ class MainActivity : AppCompatActivity() {
         val dto = CargoCompanyDto(companyId = companyId, companyName = null)
         val message = gson.toJson(WebSocketMessage(dto,"delete_cargo_company" ))
         webSocketClient.sendMessage(message)
+    }
+
+    private val requestContactsPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Log.d("MainActivityContacts", "READ_CONTACTS permission granted.")
+                // İzin verildi, asıl kişi çekme işlemini başlat (viewModel scope veya lifecycleScope içinde)
+                lifecycleScope.launch {
+                    showContactsImportProgress(true) // İlerleme göstergesini başlat
+                    val (imported, skipped, multiNumber) = importContactsFromPhone() // Asıl fonksiyon
+                    showContactsImportProgress(false) // İlerleme göstergesini bitir
+                    showImportSummary(imported, skipped, multiNumber) // Sonuçları göster
+                    if (multiNumber.isNotEmpty()) {
+                        // TODO: Çoklu numarası olan kişiler için seçim diyaloğunu göster
+                        Log.d("MainActivityContacts", "${multiNumber.size} contacts with multiple numbers need selection.")
+                        // showMultiNumberSelectionDialog(multiNumber)
+                    }
+                }
+            } else {
+                Log.d("MainActivityContacts", "READ_CONTACTS permission denied.")
+                Toast.makeText(this, "Rehber erişim izni verilmedi.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    fun initiateImportContactsFromPhone() { // Bu fonksiyonu menüdeki seçeneğe bağlayın
+        Log.d("MainActivityContacts", "initiateImportContactsFromPhone called.")
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            Log.d("MainActivityContacts", "READ_CONTACTS permission already granted. Starting import.")
+            // İzin zaten var, asıl kişi çekme işlemini başlat
+            lifecycleScope.launch {
+                showContactsImportProgress(true)
+                val (imported, skipped, multiNumber) = importContactsFromPhone()
+                showContactsImportProgress(false)
+                showImportSummary(imported, skipped, multiNumber)
+                if (multiNumber.isNotEmpty()) {
+                    // TODO: Çoklu numarası olan kişiler için seçim diyaloğunu göster
+                    Log.d("MainActivityContacts", "${multiNumber.size} contacts with multiple numbers need selection.")// showMultiNumberSelectionDialog(multiNumber)
+                }
+            }
+        } else {
+            Log.d("MainActivityContacts", "READ_CONTACTS permission not granted. Requesting permission.")
+            // İzin iste
+            requestContactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
+
+    @SuppressLint("Range") // Cursor.getColumnIndex kullanırken uyarıyı bastırmak için
+    private suspend fun importContactsFromPhone(): Triple<Int, Int, List<ContactFromPhone>> =
+        withContext(Dispatchers.IO) {
+        var successfullyImportedCount = 0
+        var skippedAsDuplicateCount = 0
+        val contactsWithMultipleNumbers = mutableListOf<ContactFromPhone>()
+        val contactsToInsertToDB = mutableListOf<Contact>() // Sizin DB Contact modeliniz
+
+        val contentResolver = this@MainActivity.contentResolver
+        val projection = arrayOf(
+            ContactsContract.Contacts._ID,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            // ContactsContract.Contacts.HAS_PHONE_NUMBER // Gerekirse
+        )
+
+        val cursor = contentResolver.query(
+            ContactsContract.Contacts.CONTENT_URI,
+            projection,
+            null, // ContactsContract.Contacts.HAS_PHONE_NUMBER + " > 0", // Sadece numarası olanları almak için
+            null,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC" // Ada göre sıralı alalım
+        )
+
+        cursor?.use { contactsCursor ->
+            Log.d("MainActivityContacts", "Total contacts in phonebook (approx): ${contactsCursor.count}")
+            if (contactsCursor.moveToFirst()) {
+                do {
+                    val phoneContactId = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts._ID))
+                    var displayName = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
+
+                    if (displayName.isNullOrBlank()) {
+                        Log.d("MainActivityContacts", "Skipping contact with null or blank name, ID: $phoneContactId")
+                        continue // İsmi olmayanları atla
+                    }
+
+                    val currentContactFromPhone = ContactFromPhone(phoneContactId, displayName)
+
+                    // Telefon numaralarını al
+                    val phoneProjection = arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.NUMBER,
+                        ContactsContract.CommonDataKinds.Phone.TYPE
+                    )
+                    val phoneCursor = contentResolver.query(
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        phoneProjection,
+                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
+                        arrayOf(phoneContactId),
+                        null
+                    )
+
+                    phoneCursor?.use { pCursor ->
+                        if (pCursor.moveToFirst()) {
+                            do {
+                                val phoneNumber = pCursor.getString(pCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
+                                val phoneType = pCursor.getInt(pCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE))
+                                if (!phoneNumber.isNullOrBlank()) {
+                                    val typeLabel = ContactsContract.CommonDataKinds.Phone.getTypeLabel(
+                                        this@MainActivity.resources,
+                                        phoneType,
+                                        "Diğer" // Varsayılan etiket
+                                    ).toString()
+                                    currentContactFromPhone.phoneOptions.add(
+                                        PhoneOptionForContact(
+                                            phoneNumber,
+                                            typeLabel
+                                        )
+                                    )
+                                }
+                            } while (pCursor.moveToNext())
+                        }
+                    }
+
+                    if (currentContactFromPhone.phoneOptions.isEmpty()) {
+                        Log.d("MainActivityContacts", "Skipping contact '${displayName}' as it has no phone numbers.")
+                        continue // Telefon numarası olmayanları atla
+                    }
+
+                    if (currentContactFromPhone.phoneOptions.size == 1) {
+                        val selectedPhoneNumber = currentContactFromPhone.phoneOptions.first().number
+
+                        // Villa No ve İsim Temizleme Mantığı
+                        var determinedVillaId: Int? = null
+                        var cleanedName = displayName
+                        val nameParts = displayName.trim().split(" ", limit = 2)
+                        if (nameParts.isNotEmpty()) {
+                            val potentialVillaNo = nameParts[0].toIntOrNull()
+                            if (potentialVillaNo != null) {
+                                try {
+                                    val foundVilla = appDatabase.villaDao().getVillaByNo(potentialVillaNo) // DB işlemini try-catch'e al
+                                    if (foundVilla != null) {
+                                        determinedVillaId = foundVilla.villaId
+                                        cleanedName = if (nameParts.size > 1) nameParts[1] else displayName // Eğer sadece no ise orj. kalsın
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("MainActivityContacts", "Error accessing DB for villaNo $potentialVillaNo: ${e.message}")
+                                    // DB hatası durumunda devam et, villa atanmamış olur
+                                }
+                            }
+                        }
+
+                        // Veritabanında bu telefon numarasıyla kayıt var mı kontrol et (AppDatabase'i MainActivity'de tanımlı varsayıyorum)
+                        val existingContact = appDatabase.contactDao().getContactByPhoneNumber(selectedPhoneNumber) // Dao'nuzda bu metod olmalı
+                        if (existingContact == null) {
+                            val newAppContact = com.serkantken.secuasist.models.Contact(
+                                contactName = cleanedName,
+                                contactPhone = selectedPhoneNumber.replace("\\s".toRegex(), ""), // Numaradaki boşlukları temizle
+                            )
+                            contactsToInsertToDB.add(newAppContact)
+                            successfullyImportedCount++
+                        } else {
+                            Log.d("MainActivityContacts", "Contact '${displayName}' with phone '$selectedPhoneNumber' already exists. Skipping.")
+                            skippedAsDuplicateCount++
+                        }
+                    } else { // Birden fazla numarası var
+                        contactsWithMultipleNumbers.add(currentContactFromPhone)
+                    }
+
+                } while (contactsCursor.moveToNext())
+            }
+        }
+
+        if (contactsToInsertToDB.isNotEmpty()) {
+            try {
+                appDatabase.contactDao().insertAll(contactsToInsertToDB) // Toplu ekleme için Dao metodu
+                Log.d("MainActivityContacts", "Inserted ${contactsToInsertToDB.size} new contacts to DB.")
+            } catch (e: Exception) {
+                Log.e("MainActivityContacts", "Error inserting contacts to DB: ${e.message}")
+                // Hata durumunda, başarılı sayısını ve listeyi düzeltmek gerekebilir.
+                // Şimdilik sadece logluyoruz.
+                successfullyImportedCount -= contactsToInsertToDB.size // Başarısız olanları geri al
+            }
+        }
+        Log.d("MainActivityContacts", "Import process finished. Imported: $successfullyImportedCount, Skipped: $skippedAsDuplicateCount, MultiNumber: ${contactsWithMultipleNumbers.size}")
+        return@withContext Triple(successfullyImportedCount, skippedAsDuplicateCount, contactsWithMultipleNumbers)
+    }
+
+    private var progressDialog: AlertDialog? = null
+
+    private fun showContactsImportProgress(show: Boolean) {
+        if (show) {
+            if (progressDialog == null) {
+                progressDialog = AlertDialog.Builder(this)
+                    .setTitle("Rehberden Kişiler Alınıyor")
+                    .setMessage("Lütfen bekleyin...")
+                    .setCancelable(false)
+                    .create()
+            }
+            progressDialog?.show()
+        } else {
+            progressDialog?.dismiss()
+            progressDialog = null // Referansı temizle
+        }
+    }
+
+    private fun showImportSummary(imported: Int, skipped: Int, multiNumber: List<ContactFromPhone>) {
+        val message = "İçe aktarma tamamlandı.\nBaşarıyla eklendi: $imported\nTekrar eden kayıt (atlandı): $skipped" +
+                if (multiNumber.isNotEmpty()) "\nNumara seçimi bekleyen: ${multiNumber.size}" else ""
+
+        AlertDialog.Builder(this)
+            .setTitle("İçe Aktarma Sonucu")
+            .setMessage(message)
+            .setPositiveButton("Tamam", null)
+            .show()
     }
 
     override fun onStart() {

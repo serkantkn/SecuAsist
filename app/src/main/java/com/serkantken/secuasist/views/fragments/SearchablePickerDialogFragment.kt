@@ -104,7 +104,7 @@ class SearchablePickerDialogFragment : DialogFragment() {
 
         binding.rvOptions.apply {
             layoutManager = when (itemLayoutType) {
-                SearchablePickerAdapter.ItemLayoutType.SELECTED_VILLA -> GridLayoutManager(context, 5)
+                SearchablePickerAdapter.ItemLayoutType.SELECTED_VILLA -> GridLayoutManager(context, 4)
                 SearchablePickerAdapter.ItemLayoutType.COMPANY -> LinearLayoutManager(context)
             }
             adapter = searchableAdapter

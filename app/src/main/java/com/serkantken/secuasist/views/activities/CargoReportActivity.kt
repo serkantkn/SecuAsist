@@ -33,14 +33,8 @@ class CargoReportActivity : AppCompatActivity(), SearchablePickerDialogFragment.
 
     // Filtreleme durumu için değişkenler
     private var currentFilterMode = CargoReportAdapter.ReportMode.BY_COMPANY
-    private var selectedCargoCompanyForFilter: CargoCompany? = null
-    private var selectedVillaForFilter: Villa? = null
     private var startDate: Calendar = Calendar.getInstance()
     private var endDate: Calendar = Calendar.getInstance()
-
-    // Adapter'ın hızlı erişimi için tüm villaları ve şirketleri map olarak tutacağız
-    private var villaMap: Map<Int, Villa> = emptyMap()
-    private var companyMap: Map<Int, CargoCompany> = emptyMap()
     private var selectedCargoCompany: CargoCompany? = null
     private var selectedVilla: Villa? = null
 
@@ -62,42 +56,39 @@ class CargoReportActivity : AppCompatActivity(), SearchablePickerDialogFragment.
         setupInitialDates()
         setupRecyclerView()
         setupListeners()
-        setupPickers()
     }
 
     private fun setupPickers() {
-        binding.tvSelectionPicker.setOnClickListener {
-            if (binding.chipFilterByCompany.isChecked) {
-                lifecycleScope.launch {
-                    val companies = db.cargoCompanyDao().getAllCompaniesAsList() // Bu metodun List<CargoCompany> döndürdüğünü varsayıyorum
-                    if (companies.isNotEmpty()) {
-                        val dialogFragment = SearchablePickerDialogFragment.newInstance(
-                            "Kargo Şirketi Seçin",
-                            companies, // Veritabanından gelen şirket listesi
-                            SearchablePickerAdapter.ItemLayoutType.COMPANY
-                        )
-                        dialogFragment.setOnItemSelectedListener(this@CargoReportActivity)
-                        dialogFragment.show(supportFragmentManager, "CargoCompanyPicker")
-                    } else {
-                        // Şirket bulunamadıysa kullanıcıya bilgi verilebilir
-                        // Örneğin: Toast.makeText(this@CargoReportActivity, "Kayıtlı şirket bulunamadı.", Toast.LENGTH_SHORT).show()
-                    }
+        if (binding.chipFilterByCompany.isChecked) {
+            lifecycleScope.launch {
+                val companies = db.cargoCompanyDao().getAllCompaniesAsList() // Bu metodun List<CargoCompany> döndürdüğünü varsayıyorum
+                if (companies.isNotEmpty()) {
+                    val dialogFragment = SearchablePickerDialogFragment.newInstance(
+                        "Kargo Şirketi Seçin",
+                        companies, // Veritabanından gelen şirket listesi
+                        SearchablePickerAdapter.ItemLayoutType.COMPANY
+                    )
+                    dialogFragment.setOnItemSelectedListener(this@CargoReportActivity)
+                    dialogFragment.show(supportFragmentManager, "CargoCompanyPicker")
+                } else {
+                    // Şirket bulunamadıysa kullanıcıya bilgi verilebilir
+                    // Örneğin: Toast.makeText(this@CargoReportActivity, "Kayıtlı şirket bulunamadı.", Toast.LENGTH_SHORT).show()
                 }
-            } else if (binding.chipFilterByVilla.isChecked) {
-                lifecycleScope.launch {
-                    val villas = db.villaDao().getAllVillasAsList() // Bu metodun List<Villa> döndürdüğünü varsayıyorum
-                    if (villas.isNotEmpty()) {
-                        val dialogFragment = SearchablePickerDialogFragment.newInstance(
-                            "Villa Seçin",
-                            villas, // Veritabanından gelen villa listesi
-                            SearchablePickerAdapter.ItemLayoutType.SELECTED_VILLA
-                        )
-                        dialogFragment.setOnItemSelectedListener(this@CargoReportActivity)
-                        dialogFragment.show(supportFragmentManager, "VillaPicker")
-                    } else {
-                        // Villa bulunamadıysa kullanıcıya bilgi verilebilir
-                        // Örneğin: Toast.makeText(this@CargoReportActivity, "Kayıtlı villa bulunamadı.", Toast.LENGTH_SHORT).show()
-                    }
+            }
+        } else if (binding.chipFilterByVilla.isChecked) {
+            lifecycleScope.launch {
+                val villas = db.villaDao().getAllVillasAsList() // Bu metodun List<Villa> döndürdüğünü varsayıyorum
+                if (villas.isNotEmpty()) {
+                    val dialogFragment = SearchablePickerDialogFragment.newInstance(
+                        "Villa Seçin",
+                        villas, // Veritabanından gelen villa listesi
+                        SearchablePickerAdapter.ItemLayoutType.SELECTED_VILLA
+                    )
+                    dialogFragment.setOnItemSelectedListener(this@CargoReportActivity)
+                    dialogFragment.show(supportFragmentManager, "VillaPicker")
+                } else {
+                    // Villa bulunamadıysa kullanıcıya bilgi verilebilir
+                    // Örneğin: Toast.makeText(this@CargoReportActivity, "Kayıtlı villa bulunamadı.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -137,20 +128,27 @@ class CargoReportActivity : AppCompatActivity(), SearchablePickerDialogFragment.
         binding.blurBack.setOnClickListener {
             finish()
         }
-        // Filtreleme tipi (ChipGroup) değiştiğinde
+
         binding.chipGroupMode.setOnCheckedStateChangeListener { group, checkedIds ->
             if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
 
             val selectedChipId = checkedIds.first()
-            currentFilterMode = if (selectedChipId == R.id.chip_filter_by_company) {
-                CargoReportAdapter.ReportMode.BY_COMPANY
+            if (selectedChipId == R.id.chip_filter_by_company) {
+                currentFilterMode = CargoReportAdapter.ReportMode.BY_COMPANY
+                reportAdapter.currentMode = CargoReportAdapter.ReportMode.BY_COMPANY
+                binding.tvSelectionPicker.text = "Şirket Seçin"
+                selectedVilla = null
             } else {
-                CargoReportAdapter.ReportMode.BY_VILLA
+                currentFilterMode = CargoReportAdapter.ReportMode.BY_VILLA
+                reportAdapter.currentMode = CargoReportAdapter.ReportMode.BY_VILLA
+                binding.tvSelectionPicker.text = "Villa Seçin"
+                selectedCargoCompany = null
             }
-            when (binding.chipGroupMode.checkedChipId) {
-                binding.chipFilterByCompany.id -> binding.tvSelectionPicker.text = "Şirket Seçin"
-                binding.chipFilterByVilla.id -> binding.tvSelectionPicker.text = "Villa Seçin"
-            }
+            fetchReportData()
+        }
+
+        binding.tvSelectionPicker.setOnClickListener {
+            setupPickers()
         }
 
         binding.layoutStartDate.setOnClickListener {
@@ -199,37 +197,33 @@ class CargoReportActivity : AppCompatActivity(), SearchablePickerDialogFragment.
         datePicker.show(supportFragmentManager, "CustomDatePicker")
     }
 
-    // Butonların üzerindeki tarih yazılarını günceller
     private fun updateDateButtonTexts() {
         val sdf = SimpleDateFormat("dd MMMM yyyy", Locale("tr"))
         binding.textPickedStartDate.text = sdf.format(startDate.time)
         binding.textPickedEndDate.text = sdf.format(endDate.time)
     }
 
-    // Verilen ISO 8601 formatındaki tarih string'ini döndürür
     private fun formatDateToISO(calendar: Calendar): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
         sdf.timeZone = TimeZone.getTimeZone("UTC")
         return sdf.format(calendar.time)
     }
 
-    // Filtrelere göre veritabanından sonuçları çeker ve listeyi günceller
     private fun fetchReportData() {
-        val companyIdFilter = selectedCargoCompanyForFilter?.companyId
-        val villaIdFilter = selectedVillaForFilter?.villaId
+        val companyIdFilter = selectedCargoCompany?.companyId
+        val villaIdFilter = selectedVilla?.villaId
 
         val startDateString = formatDateToISO(startDate)
         val endDateString = formatDateToISO(endDate)
 
         lifecycleScope.launch {
-            // DAO'dan CargoReport listesini çek
             db.cargoDao().getCargoReportDetailsFiltered(
                 startDate = startDateString,
                 endDate = endDateString,
                 companyIdFilter = companyIdFilter,
                 villaIdFilter = villaIdFilter
             ).collectLatest { reportList ->
-                reportAdapter.differ.submitList(reportList)
+                reportAdapter.differ.submitList(reportList.toList())
                 // İsteğe bağlı: Liste boşsa bir mesaj gösterilebilir
                 // binding.tvEmptyReport.visibility = if (reportList.isEmpty()) View.VISIBLE else View.GONE
             }

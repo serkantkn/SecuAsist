@@ -8,12 +8,16 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.serkantken.secuasist.models.Contact
+import com.serkantken.secuasist.models.Villa
 import kotlinx.coroutines.flow.Flow // Flow için import eklendi
 
 @Dao
 interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(contact: Contact): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(contacts: List<Contact>): List<Long>
 
     @Update
     suspend fun update(contact: Contact)
@@ -38,6 +42,9 @@ interface ContactDao {
 
     @Query("SELECT * FROM Contacts WHERE contactId = :contactId")
     suspend fun getContactById(contactId: Int): Contact?
+
+    @Query("SELECT * FROM Contacts WHERE contactPhone = :phoneNumber")
+    suspend fun getContactByPhoneNumber(phoneNumber: String): Contact?
 
     @Query("SELECT * FROM Contacts WHERE contactName = :name AND contactPhone = :phone LIMIT 1")
     suspend fun getContactByNameAndPhone(name: String, phone: String): Contact?
