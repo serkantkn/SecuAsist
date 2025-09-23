@@ -718,36 +718,6 @@ class MainActivity : AppCompatActivity() {
         alertDialog.show()
     }
 
-    fun launchCsvFilePickerWithPermissionCheck() { // Bu metodu public yapın ki menüden çağrılabilsin
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                // İzin zaten verilmiş
-                launchCsvFilePicker()
-            }
-            shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE) -> {
-                // Kullanıcı izni daha önce reddetti, nedenini açıklayan bir diyalog göster
-                AlertDialog.Builder(this)
-                    .setTitle("İzin Gerekli")
-                    .setMessage("CSV dosyasını içe aktarmak için dosyalarınıza erişim izni vermeniz gerekiyor.")
-                    .setPositiveButton("İzin Ver") { _, _ ->
-                        requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-                    }
-                    .setNegativeButton("İptal") { dialog, _ ->
-                        dialog.dismiss()
-                        Toast.makeText(this, "Dosya okuma izni reddedildi.", Toast.LENGTH_SHORT).show()
-                    }
-                    .show()
-            }
-            else -> {
-                // İzin henüz istenmemiş veya "bir daha sorma" seçilmiş, izni iste
-                requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
-    }
-
     private fun launchCsvFilePicker() {
         val mimeTypes = arrayOf(
             "text/csv",
@@ -1741,8 +1711,7 @@ class MainActivity : AppCompatActivity() {
                     allContacts
                 } else {
                     allContacts.filter {
-                        it.contactName?.lowercase()?.contains(query) == true ||
-                                it.contactPhone?.contains(query) == true
+                        it.contactName?.lowercase()?.contains(query) == true || it.contactPhone?.contains(query) == true
                     }
                 }
                 contactsAdapter.submitList(filteredList)
@@ -2104,49 +2073,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("Range") // Cursor.getColumnIndex kullanırken uyarıyı bastırmak için
-    private suspend fun importContactsFromPhone(): Triple<Int, Int, List<ContactFromPhone>> =
-        withContext(Dispatchers.IO) {
-        var successfullyImportedCount = 0
-        var skippedAsDuplicateCount = 0
-        val contactsWithMultipleNumbers = mutableListOf<ContactFromPhone>()
-        val contactsToInsertToDB = mutableListOf<Contact>() // Sizin DB Contact modeliniz
+    @SuppressLint("Range")
+    private suspend fun importContactsFromPhone(): Triple<Int, Int, List<ContactFromPhone>> = withContext(Dispatchers.IO) {
+        var successfullyInsertedNewContactCount = 0
+        var successfullyLinkedToVillaCount = 0
+        var skippedAsDuplicateInContactsTableCount = 0
+        val contactsWithMultipleNumbersToResolve = mutableListOf<ContactFromPhone>()
+
+        val contactsToInsertInDB = mutableListOf<com.serkantken.secuasist.models.Contact>()
+        // Geçici olarak telefon numarası ve ilişkilendirilecek villa ID'sini tutacak liste
+        val phoneToVillaLinkMap = mutableMapOf<String, Int>() // Key: phoneNumber, Value: villaId
 
         val contentResolver = this@MainActivity.contentResolver
         val projection = arrayOf(
             ContactsContract.Contacts._ID,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
-            // ContactsContract.Contacts.HAS_PHONE_NUMBER // Gerekirse
         )
 
         val cursor = contentResolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             projection,
-            null, // ContactsContract.Contacts.HAS_PHONE_NUMBER + " > 0", // Sadece numarası olanları almak için
             null,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC" // Ada göre sıralı alalım
+            null,
+            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC"
         )
 
         cursor?.use { contactsCursor ->
             Log.d("MainActivityContacts", "Total contacts in phonebook (approx): ${contactsCursor.count}")
             if (contactsCursor.moveToFirst()) {
+                var iteratedContacts = 0
                 do {
+                    iteratedContacts++
                     val phoneContactId = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts._ID))
                     var displayName = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
+                    Log.d("MainActivityContacts", "Processing contact $iteratedContacts: ID '$phoneContactId', Name '$displayName'")
 
                     if (displayName.isNullOrBlank()) {
-                        Log.d("MainActivityContacts", "Skipping contact with null or blank name, ID: $phoneContactId")
-                        continue // İsmi olmayanları atla
+                        Log.w("MainActivityContacts", "Skipping contact ID '$phoneContactId': Name is null or blank.")
+                        continue
                     }
 
-                    val currentContactFromPhone = ContactFromPhone(phoneContactId, displayName)
+                    val currentContactFromPhoneHelper = ContactFromPhone(phoneContactId, displayName)
 
-                    // Telefon numaralarını al
                     val phoneProjection = arrayOf(
                         ContactsContract.CommonDataKinds.Phone.NUMBER,
                         ContactsContract.CommonDataKinds.Phone.TYPE
                     )
-                    val phoneCursor = contentResolver.query(
+                    val phoneCursorInner = contentResolver.query(
                         ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                         phoneProjection,
                         ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
@@ -2154,90 +2127,135 @@ class MainActivity : AppCompatActivity() {
                         null
                     )
 
-                    phoneCursor?.use { pCursor ->
+                    phoneCursorInner?.use { pCursor ->
                         if (pCursor.moveToFirst()) {
                             do {
-                                val phoneNumber = pCursor.getString(pCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
+                                val phoneNumberRaw = pCursor.getString(pCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
                                 val phoneType = pCursor.getInt(pCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE))
-                                if (!phoneNumber.isNullOrBlank()) {
+                                if (!phoneNumberRaw.isNullOrBlank()) {
+                                    val cleanedPhoneNumber = phoneNumberRaw.replace("\\s".toRegex(), "") // Boşlukları temizle
                                     val typeLabel = ContactsContract.CommonDataKinds.Phone.getTypeLabel(
-                                        this@MainActivity.resources,
-                                        phoneType,
-                                        "Diğer" // Varsayılan etiket
+                                        this@MainActivity.resources, phoneType, "Diğer"
                                     ).toString()
-                                    currentContactFromPhone.phoneOptions.add(
-                                        PhoneOptionForContact(
-                                            phoneNumber,
-                                            typeLabel
-                                        )
-                                    )
+                                    currentContactFromPhoneHelper.phoneOptions.add(PhoneOptionForContact(cleanedPhoneNumber, typeLabel))
                                 }
                             } while (pCursor.moveToNext())
                         }
                     }
 
-                    if (currentContactFromPhone.phoneOptions.isEmpty()) {
-                        Log.d("MainActivityContacts", "Skipping contact '${displayName}' as it has no phone numbers.")
-                        continue // Telefon numarası olmayanları atla
+                    if (currentContactFromPhoneHelper.phoneOptions.isEmpty()) {
+                        Log.w("MainActivityContacts", "Skipping contact '${displayName}': No phone numbers.")
+                        continue
                     }
 
-                    if (currentContactFromPhone.phoneOptions.size == 1) {
-                        val selectedPhoneNumber = currentContactFromPhone.phoneOptions.first().number
+                    if (currentContactFromPhoneHelper.phoneOptions.size == 1) {
+                        val selectedPhoneNumber = currentContactFromPhoneHelper.phoneOptions.first().number
 
-                        // Villa No ve İsim Temizleme Mantığı
+                        // DB'de bu telefon numarasıyla kayıtlı bir Contact var mı kontrol et
+                        val existingContact = appDatabase.contactDao().getContactByPhoneNumber(selectedPhoneNumber)
+                        if (existingContact != null) {
+                            Log.d("MainActivityContacts", "Contact '${displayName}' with phone '$selectedPhoneNumber' already exists in Contacts table. Skipping insertion.")
+                            skippedAsDuplicateInContactsTableCount++
+                            // Var olan kişi için villa bağlantısı kontrolü/güncellemesi yapılabilir, şimdilik atlıyoruz.
+                            continue
+                        }
+
                         var determinedVillaId: Int? = null
-                        var cleanedName = displayName
+                        var finalContactName = displayName
+
                         val nameParts = displayName.trim().split(" ", limit = 2)
                         if (nameParts.isNotEmpty()) {
                             val potentialVillaNo = nameParts[0].toIntOrNull()
                             if (potentialVillaNo != null) {
                                 try {
-                                    val foundVilla = appDatabase.villaDao().getVillaByNo(potentialVillaNo) // DB işlemini try-catch'e al
+                                    val foundVilla = appDatabase.villaDao().getVillaByNo(potentialVillaNo)
                                     if (foundVilla != null) {
                                         determinedVillaId = foundVilla.villaId
-                                        cleanedName = if (nameParts.size > 1) nameParts[1] else displayName // Eğer sadece no ise orj. kalsın
+                                        finalContactName = if (nameParts.size > 1 && nameParts[1].isNotBlank()) nameParts[1] else displayName
+                                        Log.d("MainActivityContacts", "VillaNo '$potentialVillaNo' found for contact '${displayName}'. Will link to Villa ID: ${determinedVillaId}. Name to use: '${finalContactName}'")
+                                    } else {
+                                        Log.d("MainActivityContacts", "VillaNo '$potentialVillaNo' from contact '${displayName}' not found in DB.")
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("MainActivityContacts", "Error accessing DB for villaNo $potentialVillaNo: ${e.message}")
-                                    // DB hatası durumunda devam et, villa atanmamış olur
+                                    Log.e("MainActivityContacts", "Error accessing DB for villaNo $potentialVillaNo for contact '${displayName}': ${e.message}")
                                 }
                             }
                         }
 
-                        // Veritabanında bu telefon numarasıyla kayıt var mı kontrol et (AppDatabase'i MainActivity'de tanımlı varsayıyorum)
-                        val existingContact = appDatabase.contactDao().getContactByPhoneNumber(selectedPhoneNumber) // Dao'nuzda bu metod olmalı
-                        if (existingContact == null) {
-                            val newAppContact = com.serkantken.secuasist.models.Contact(
-                                contactName = cleanedName,
-                                contactPhone = selectedPhoneNumber.replace("\\s".toRegex(), ""), // Numaradaki boşlukları temizle
-                            )
-                            contactsToInsertToDB.add(newAppContact)
-                            successfullyImportedCount++
-                        } else {
-                            Log.d("MainActivityContacts", "Contact '${displayName}' with phone '$selectedPhoneNumber' already exists. Skipping.")
-                            skippedAsDuplicateCount++
+                        val newAppContact = com.serkantken.secuasist.models.Contact(
+                            // contactId otomatik üretilecek
+                            contactName = finalContactName,
+                            contactPhone = selectedPhoneNumber,
+                            lastCallTimestamp = null // Yeni kişiler için varsayılan
+                        )
+                        contactsToInsertInDB.add(newAppContact)
+
+                        if (determinedVillaId != null) {
+                            phoneToVillaLinkMap[selectedPhoneNumber] = determinedVillaId
                         }
+
                     } else { // Birden fazla numarası var
-                        contactsWithMultipleNumbers.add(currentContactFromPhone)
+                        var anyNumberExistsInDB = false
+                        for(phoneOption in currentContactFromPhoneHelper.phoneOptions) {
+                            if (appDatabase.contactDao().getContactByPhoneNumber(phoneOption.number) != null) {
+                                anyNumberExistsInDB = true
+                                Log.d("MainActivityContacts", "Contact '${displayName}' (multi-num) has phone '${phoneOption.number}' which already exists. Skipping multi-select consideration for now.")
+                                break
+                            }
+                        }
+                        if (!anyNumberExistsInDB) {
+                            contactsWithMultipleNumbersToResolve.add(currentContactFromPhoneHelper)
+                        } else {
+                            skippedAsDuplicateInContactsTableCount++
+                        }
                     }
-
                 } while (contactsCursor.moveToNext())
+                Log.d("MainActivityContacts", "Finished iterating phonebook contacts. Total iterated: $iteratedContacts")
+            } else {
+                Log.d("MainActivityContacts", "Contacts cursor is empty or moveToFirst() failed.")
+            }
+        } // cursor.use
+
+        // 1. Aşama: Tüm yeni ve benzersiz Contact nesnelerini veritabanına ekle
+        if (contactsToInsertInDB.isNotEmpty()) {
+            try {
+                appDatabase.contactDao().insertAll(contactsToInsertInDB)
+                successfullyInsertedNewContactCount = contactsToInsertInDB.size
+                Log.d("MainActivityContacts", "Successfully inserted $successfullyInsertedNewContactCount new contacts into Contacts table.")
+            } catch (e: Exception) {
+                Log.e("MainActivityContacts", "Error inserting contacts to DB: ${e.message}", e)
+                successfullyInsertedNewContactCount = 0 // Hata durumunda sıfırla
             }
         }
 
-        if (contactsToInsertToDB.isNotEmpty()) {
-            try {
-                appDatabase.contactDao().insertAll(contactsToInsertToDB) // Toplu ekleme için Dao metodu
-                Log.d("MainActivityContacts", "Inserted ${contactsToInsertToDB.size} new contacts to DB.")
-            } catch (e: Exception) {
-                Log.e("MainActivityContacts", "Error inserting contacts to DB: ${e.message}")
-                // Hata durumunda, başarılı sayısını ve listeyi düzeltmek gerekebilir.
-                // Şimdilik sadece logluyoruz.
-                successfullyImportedCount -= contactsToInsertToDB.size // Başarısız olanları geri al
+        // 2. Aşama: Başarıyla eklenen kişileri villalarla ilişkilendir
+        if (successfullyInsertedNewContactCount > 0 && phoneToVillaLinkMap.isNotEmpty()) {
+            Log.d("MainActivityContacts", "Attempting to link ${phoneToVillaLinkMap.size} contacts to villas.")
+            for ((phoneNumber, villaIdToLink) in phoneToVillaLinkMap) {
+                // Veritabanından az önce eklenen Contact nesnesini (artık contactId'si var) telefon numarasıyla çek
+                val contactFromDb = appDatabase.contactDao().getContactByPhoneNumber(phoneNumber)
+                if (contactFromDb != null) {
+                    try {
+                        // MainActivity içinde tanımlı olan linkContactToVilla fonksiyonunu çağır
+                        linkContactToVilla(contactFromDb, villaIdToLink) {
+                            // Bu lambda, linkleme işlemi (asenkron olabilir) bittiğinde çağrılır.
+                            // Başarılı linkleme sayısını burada artırabiliriz veya linkContactToVilla içinde yapılabilir.
+                            // Şimdilik sadece logluyoruz.
+                            Log.d("MainActivityContacts", "Villa linking process callback for contact ${contactFromDb.contactId} to villa $villaIdToLink.")
+                        }
+                        successfullyLinkedToVillaCount++ // Çağrıyı başarılı sayıyoruz, detaylı sonuç linkContactToVilla'dan gelebilir.
+                    } catch (e: Exception) {
+                        Log.e("MainActivityContacts", "Error initiating link for contact ${contactFromDb.contactId} to villa $villaIdToLink: ${e.message}", e)
+                    }
+                } else {
+                    Log.w("MainActivityContacts", "Could not re-fetch contact with phone $phoneNumber for villa linking. This contact might not have been inserted correctly.")
+                }
             }
+            Log.d("MainActivityContacts", "Finished attempting to link contacts. Successfully initiated links for: $successfullyLinkedToVillaCount contacts.")
         }
-        Log.d("MainActivityContacts", "Import process finished. Imported: $successfullyImportedCount, Skipped: $skippedAsDuplicateCount, MultiNumber: ${contactsWithMultipleNumbers.size}")
-        return@withContext Triple(successfullyImportedCount, skippedAsDuplicateCount, contactsWithMultipleNumbers)
+
+        Log.d("MainActivityContacts", "Import process finished. New Contacts Inserted: $successfullyInsertedNewContactCount, Linked to Villa: $successfullyLinkedToVillaCount, Skipped Duplicates: $skippedAsDuplicateInContactsTableCount, Multi-Number Pending: ${contactsWithMultipleNumbersToResolve.size}")
+        return@withContext Triple(successfullyInsertedNewContactCount, skippedAsDuplicateInContactsTableCount, contactsWithMultipleNumbersToResolve)
     }
 
     private var progressDialog: AlertDialog? = null

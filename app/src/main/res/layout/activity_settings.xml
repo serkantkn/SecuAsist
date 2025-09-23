@@ -196,7 +196,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/label_app_version"
-                android:text="SecuAsist\nversiyon 0.16.0-beta2\n\nDerleme tarihi: 20 Eylül 2025"
+                android:text="SecuAsist\nversiyon 0.16.1-beta2\n\nDerleme tarihi: 23 Eylül 2025"
                 android:gravity="center"
                 android:textSize="11sp"
                 android:textColor="@color/textColorSecondary"
