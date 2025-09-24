@@ -78,6 +78,7 @@ import com.serkantken.secuasist.network.toVillaContact
 import com.serkantken.secuasist.utils.Tools
 import com.serkantken.secuasist.views.fragments.CargoFragment
 import com.serkantken.secuasist.views.fragments.ContactsFragment
+import com.serkantken.secuasist.views.fragments.MultiNumberSelectionDialogFragment
 import com.serkantken.secuasist.views.fragments.VillaFragment
 import com.skydoves.balloon.Balloon
 import com.skydoves.balloon.BalloonAlign
@@ -98,7 +99,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnMultiNumberSelectionListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var webSocketClient: WebSocketClient
@@ -445,6 +446,7 @@ class MainActivity : AppCompatActivity() {
                 if (!isSearchModeActive) return
 
                 val query = s.toString()
+                if (query.isEmpty()) binding.btnClearBox.visibility = View.GONE else binding.btnClearBox.visibility = View.VISIBLE
                 val currentItem = binding.viewPager.currentItem
 
                 // Aktif olan fragment'a göre sorguyu yönlendir
@@ -465,6 +467,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+
+        binding.btnClearBox.setOnClickListener {
+            binding.etSearch.text?.clear()
+        }
 
         binding.btnCancel.setOnClickListener {
             toggleSearchMode(false)
@@ -1509,7 +1515,7 @@ class MainActivity : AppCompatActivity() {
             }
             balloon.showAlignTop(it, 50, it.height+10)
             val blur: BlurView = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.layout_menu_balloon)
-            //Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
+            Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
             balloon.setOnBalloonDismissListener { it.visibility = View.VISIBLE }
             val newContact: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_new_person)
             val existingContacts: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_existing_person)
@@ -2040,7 +2046,7 @@ class MainActivity : AppCompatActivity() {
                     showContactsImportProgress(false) // İlerleme göstergesini bitir
                     showImportSummary(imported, skipped, multiNumber) // Sonuçları göster
                     if (multiNumber.isNotEmpty()) {
-                        // TODO: Çoklu numarası olan kişiler için seçim diyaloğunu göster
+                        showMultiNumberSelectionDialogIfNeeded(multiNumber)
                         Log.d("MainActivityContacts", "${multiNumber.size} contacts with multiple numbers need selection.")
                         // showMultiNumberSelectionDialog(multiNumber)
                     }
@@ -2062,7 +2068,7 @@ class MainActivity : AppCompatActivity() {
                 showContactsImportProgress(false)
                 showImportSummary(imported, skipped, multiNumber)
                 if (multiNumber.isNotEmpty()) {
-                    // TODO: Çoklu numarası olan kişiler için seçim diyaloğunu göster
+                    showMultiNumberSelectionDialogIfNeeded(multiNumber)
                     Log.d("MainActivityContacts", "${multiNumber.size} contacts with multiple numbers need selection.")// showMultiNumberSelectionDialog(multiNumber)
                 }
             }
@@ -2076,19 +2082,22 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("Range")
     private suspend fun importContactsFromPhone(): Triple<Int, Int, List<ContactFromPhone>> = withContext(Dispatchers.IO) {
         var successfullyInsertedNewContactCount = 0
-        var successfullyLinkedToVillaCount = 0
+        var successfullyLinkedToVillaAttemptCount = 0 // Yapılan linkleme denemesi sayısı
         var skippedAsDuplicateInContactsTableCount = 0
         val contactsWithMultipleNumbersToResolve = mutableListOf<ContactFromPhone>()
 
-        val contactsToInsertInDB = mutableListOf<com.serkantken.secuasist.models.Contact>()
-        // Geçici olarak telefon numarası ve ilişkilendirilecek villa ID'sini tutacak liste
-        val phoneToVillaLinkMap = mutableMapOf<String, Int>() // Key: phoneNumber, Value: villaId
+        // Bu liste, DB'ye eklenecek Contact nesnesini ve ilişkilendirileceği Villa ID'lerinin listesini tutacak.
+        val processedContactsForDb = mutableListOf<Pair<com.serkantken.secuasist.models.Contact, List<Int>>>()
 
         val contentResolver = this@MainActivity.contentResolver
         val projection = arrayOf(
             ContactsContract.Contacts._ID,
             ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
         )
+
+        // Regex: Satır başında "100" veya "100 - 200" veya "100 - 200 - 300" gibi kalıpları arar
+        // ve geri kalan ismi yakalar.
+        val potentialVillaPartRegex = "^([0-9]+(?:\\s*-\\s*[0-9]+)*)\\s*(.*)$".toRegex()
 
         val cursor = contentResolver.query(
             ContactsContract.Contacts.CONTENT_URI,
@@ -2106,7 +2115,7 @@ class MainActivity : AppCompatActivity() {
                     iteratedContacts++
                     val phoneContactId = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts._ID))
                     var displayName = contactsCursor.getString(contactsCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY))
-                    Log.d("MainActivityContacts", "Processing contact $iteratedContacts: ID '$phoneContactId', Name '$displayName'")
+                    Log.d("MainActivityContacts", "Processing contact $iteratedContacts: ID '$phoneContactId', Original Name '$displayName'")
 
                     if (displayName.isNullOrBlank()) {
                         Log.w("MainActivityContacts", "Skipping contact ID '$phoneContactId': Name is null or blank.")
@@ -2115,6 +2124,7 @@ class MainActivity : AppCompatActivity() {
 
                     val currentContactFromPhoneHelper = ContactFromPhone(phoneContactId, displayName)
 
+                    // Telefon numaralarını al
                     val phoneProjection = arrayOf(
                         ContactsContract.CommonDataKinds.Phone.NUMBER,
                         ContactsContract.CommonDataKinds.Phone.TYPE
@@ -2149,50 +2159,66 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     if (currentContactFromPhoneHelper.phoneOptions.size == 1) {
-                        val selectedPhoneNumber = currentContactFromPhoneHelper.phoneOptions.first().number
+                        val selectedPhoneNumber = currentContactFromPhoneHelper.phoneOptions.first().number // Zaten temizlenmiş olmalı
 
-                        // DB'de bu telefon numarasıyla kayıtlı bir Contact var mı kontrol et
                         val existingContact = appDatabase.contactDao().getContactByPhoneNumber(selectedPhoneNumber)
                         if (existingContact != null) {
                             Log.d("MainActivityContacts", "Contact '${displayName}' with phone '$selectedPhoneNumber' already exists in Contacts table. Skipping insertion.")
                             skippedAsDuplicateInContactsTableCount++
-                            // Var olan kişi için villa bağlantısı kontrolü/güncellemesi yapılabilir, şimdilik atlıyoruz.
                             continue
                         }
 
-                        var determinedVillaId: Int? = null
-                        var finalContactName = displayName
+                        val detectedVillaIdsForCurrentContact = mutableListOf<Int>()
+                        var nameToUseInContactObject = displayName // Başlangıçta orijinal ismi kullan
 
-                        val nameParts = displayName.trim().split(" ", limit = 2)
-                        if (nameParts.isNotEmpty()) {
-                            val potentialVillaNo = nameParts[0].toIntOrNull()
-                            if (potentialVillaNo != null) {
-                                try {
-                                    val foundVilla = appDatabase.villaDao().getVillaByNo(potentialVillaNo)
-                                    if (foundVilla != null) {
-                                        determinedVillaId = foundVilla.villaId
-                                        finalContactName = if (nameParts.size > 1 && nameParts[1].isNotBlank()) nameParts[1] else displayName
-                                        Log.d("MainActivityContacts", "VillaNo '$potentialVillaNo' found for contact '${displayName}'. Will link to Villa ID: ${determinedVillaId}. Name to use: '${finalContactName}'")
-                                    } else {
-                                        Log.d("MainActivityContacts", "VillaNo '$potentialVillaNo' from contact '${displayName}' not found in DB.")
+                        val matchResult = potentialVillaPartRegex.find(displayName.trim())
+                        if (matchResult != null) {
+                            val villaNumbersPartString = matchResult.groups[1]?.value ?: "" // "100 - 205" veya "300"
+                            val restOfNameFromString = matchResult.groups[2]?.value?.trim() ?: "" // "Ali Veli" veya ""
+
+                            val individualVillaNumbersFromString = villaNumbersPartString.split("-")
+                                .mapNotNull { it.trim().toIntOrNull() }
+
+                            if (individualVillaNumbersFromString.isNotEmpty()) {
+                                var allVillasInNameExistInDB = true
+                                val tempVillaIdsFromName = mutableListOf<Int>()
+                                for (villaNo in individualVillaNumbersFromString) {
+                                    try {
+                                        val foundVilla = appDatabase.villaDao().getVillaByNo(villaNo)
+                                        if (foundVilla != null) {
+                                            tempVillaIdsFromName.add(foundVilla.villaId)
+                                        } else {
+                                            allVillasInNameExistInDB = false
+                                            Log.d("MainActivityContacts", "VillaNo '$villaNo' from name '${displayName}' not found in DB.")
+                                            break
+                                        }
+                                    } catch (e: Exception) {
+                                        allVillasInNameExistInDB = false
+                                        Log.e("MainActivityContacts", "DB Error for villaNo $villaNo from name '${displayName}': ${e.message}")
+                                        break
                                     }
-                                } catch (e: Exception) {
-                                    Log.e("MainActivityContacts", "Error accessing DB for villaNo $potentialVillaNo for contact '${displayName}': ${e.message}")
+                                }
+
+                                if (allVillasInNameExistInDB && tempVillaIdsFromName.isNotEmpty()) {
+                                    detectedVillaIdsForCurrentContact.addAll(tempVillaIdsFromName)
+                                    nameToUseInContactObject = if (restOfNameFromString.isNotBlank()) restOfNameFromString else displayName
+                                    Log.d("MainActivityContacts", "For '${displayName}', detected Villa IDs: $detectedVillaIdsForCurrentContact. Name to use: '$nameToUseInContactObject'")
+                                } else {
+                                    // Eğer villa numaralarından herhangi biri bulunamazsa veya bir hata oluşursa,
+                                    // villa ataması yapma ve ismi orijinal bırak.
+                                    Log.d("MainActivityContacts", "Not all villa numbers found or error for '${displayName}'. Using original name. Villa IDs cleared for auto-assign.")
+                                    // detectedVillaIdsForCurrentContact boş kalacak, nameToUseInContactObject orijinal displayName olacak
                                 }
                             }
                         }
+                        // else: İsim, villa numarası kalıbıyla başlamıyorsa, detectedVillaIdsForCurrentContact boş kalacak.
 
                         val newAppContact = com.serkantken.secuasist.models.Contact(
-                            // contactId otomatik üretilecek
-                            contactName = finalContactName,
+                            contactName = nameToUseInContactObject,
                             contactPhone = selectedPhoneNumber,
-                            lastCallTimestamp = null // Yeni kişiler için varsayılan
+                            lastCallTimestamp = null
                         )
-                        contactsToInsertInDB.add(newAppContact)
-
-                        if (determinedVillaId != null) {
-                            phoneToVillaLinkMap[selectedPhoneNumber] = determinedVillaId
-                        }
+                        processedContactsForDb.add(Pair(newAppContact, detectedVillaIdsForCurrentContact.toList()))
 
                     } else { // Birden fazla numarası var
                         var anyNumberExistsInDB = false
@@ -2216,45 +2242,48 @@ class MainActivity : AppCompatActivity() {
             }
         } // cursor.use
 
-        // 1. Aşama: Tüm yeni ve benzersiz Contact nesnelerini veritabanına ekle
-        if (contactsToInsertInDB.isNotEmpty()) {
+        // 1. Aşama: Tüm yeni (yinelenen olmayan) Contact nesnelerini veritabanına ekle
+        if (processedContactsForDb.isNotEmpty()) {
+            val contactsOnlyToInsert = processedContactsForDb.map { it.first }
             try {
-                appDatabase.contactDao().insertAll(contactsToInsertInDB)
-                successfullyInsertedNewContactCount = contactsToInsertInDB.size
+                appDatabase.contactDao().insertAll(contactsOnlyToInsert)
+                successfullyInsertedNewContactCount = contactsOnlyToInsert.size
                 Log.d("MainActivityContacts", "Successfully inserted $successfullyInsertedNewContactCount new contacts into Contacts table.")
             } catch (e: Exception) {
                 Log.e("MainActivityContacts", "Error inserting contacts to DB: ${e.message}", e)
-                successfullyInsertedNewContactCount = 0 // Hata durumunda sıfırla
+                // Hata durumunda, başarılı sayısını ve sonraki adımları gözden geçirmek gerekebilir.
+                // Şimdilik, successfullyInsertedNewContactCount'u 0'a çekelim ki linkleme yapılmasın.
+                successfullyInsertedNewContactCount = 0
             }
         }
 
-        // 2. Aşama: Başarıyla eklenen kişileri villalarla ilişkilendir
-        if (successfullyInsertedNewContactCount > 0 && phoneToVillaLinkMap.isNotEmpty()) {
-            Log.d("MainActivityContacts", "Attempting to link ${phoneToVillaLinkMap.size} contacts to villas.")
-            for ((phoneNumber, villaIdToLink) in phoneToVillaLinkMap) {
-                // Veritabanından az önce eklenen Contact nesnesini (artık contactId'si var) telefon numarasıyla çek
-                val contactFromDb = appDatabase.contactDao().getContactByPhoneNumber(phoneNumber)
-                if (contactFromDb != null) {
-                    try {
-                        // MainActivity içinde tanımlı olan linkContactToVilla fonksiyonunu çağır
-                        linkContactToVilla(contactFromDb, villaIdToLink) {
-                            // Bu lambda, linkleme işlemi (asenkron olabilir) bittiğinde çağrılır.
-                            // Başarılı linkleme sayısını burada artırabiliriz veya linkContactToVilla içinde yapılabilir.
-                            // Şimdilik sadece logluyoruz.
-                            Log.d("MainActivityContacts", "Villa linking process callback for contact ${contactFromDb.contactId} to villa $villaIdToLink.")
+        // 2. Aşama: Başarıyla eklenen kişileri, tespit edilen villalarla ilişkilendir
+        if (successfullyInsertedNewContactCount > 0) {
+            Log.d("MainActivityContacts", "Attempting to link ${processedContactsForDb.size} processed contacts to their respective villas.")
+            for ((contactDataFromPair, villaIdListFromPair) in processedContactsForDb) {
+                if (villaIdListFromPair.isNotEmpty()) {
+                    // DB'ye yeni eklenen Contact nesnesini (artık contactId'si var) telefon numarasıyla çek
+                    val contactFromDb = appDatabase.contactDao().getContactByPhoneNumber(contactDataFromPair.contactPhone!!)
+                    if (contactFromDb != null) {
+                        for (villaIdToLink in villaIdListFromPair) {
+                            try {
+                                linkContactToVilla(contactFromDb, villaIdToLink) {
+                                    Log.d("MainActivityContacts", "Villa linking process callback for contact ${contactFromDb.contactId} to villa $villaIdToLink.")
+                                }
+                                successfullyLinkedToVillaAttemptCount++ // Her başarılı linkleme çağrısını say
+                            } catch (e: Exception) {
+                                Log.e("MainActivityContacts", "Error initiating link for contact ${contactFromDb.contactId} to villa $villaIdToLink: ${e.message}", e)
+                            }
                         }
-                        successfullyLinkedToVillaCount++ // Çağrıyı başarılı sayıyoruz, detaylı sonuç linkContactToVilla'dan gelebilir.
-                    } catch (e: Exception) {
-                        Log.e("MainActivityContacts", "Error initiating link for contact ${contactFromDb.contactId} to villa $villaIdToLink: ${e.message}", e)
+                    } else {
+                        Log.w("MainActivityContacts", "Could not re-fetch contact with phone ${contactDataFromPair.contactPhone} for villa linking. This contact might not have been inserted correctly or was part of a failed batch insert.")
                     }
-                } else {
-                    Log.w("MainActivityContacts", "Could not re-fetch contact with phone $phoneNumber for villa linking. This contact might not have been inserted correctly.")
                 }
             }
-            Log.d("MainActivityContacts", "Finished attempting to link contacts. Successfully initiated links for: $successfullyLinkedToVillaCount contacts.")
+            Log.d("MainActivityContacts", "Finished attempting to link contacts. Successfully initiated links for: $successfullyLinkedToVillaAttemptCount potential relations.")
         }
 
-        Log.d("MainActivityContacts", "Import process finished. New Contacts Inserted: $successfullyInsertedNewContactCount, Linked to Villa: $successfullyLinkedToVillaCount, Skipped Duplicates: $skippedAsDuplicateInContactsTableCount, Multi-Number Pending: ${contactsWithMultipleNumbersToResolve.size}")
+        Log.d("MainActivityContacts", "Import process finished. New Contacts Inserted: $successfullyInsertedNewContactCount, Link Attempts to Villa: $successfullyLinkedToVillaAttemptCount, Skipped Duplicates: $skippedAsDuplicateInContactsTableCount, Multi-Number Pending: ${contactsWithMultipleNumbersToResolve.size}")
         return@withContext Triple(successfullyInsertedNewContactCount, skippedAsDuplicateInContactsTableCount, contactsWithMultipleNumbersToResolve)
     }
 
@@ -2285,6 +2314,110 @@ class MainActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("Tamam", null)
             .show()
+    }
+
+    private fun showMultiNumberSelectionDialogIfNeeded(contactsForSelection: List<ContactFromPhone>) {
+        if (contactsForSelection.isNotEmpty()) {
+            val dialogFragment = MultiNumberSelectionDialogFragment.newInstance(contactsForSelection)
+            dialogFragment.setOnMultiNumberSelectionListener(this) // Listener'ı set et
+            dialogFragment.show(supportFragmentManager, "MultiNumberSelectionDialog")
+        }
+    }
+
+    // OnMultiNumberSelectionListener metodlarını override et
+    override fun onSelectionsCompleted(selectedContactsMap: Map<String, String>) {
+        Log.d("MainActivityContacts", "Multi-number selections completed. Map size: ${selectedContactsMap.size}")
+        if (selectedContactsMap.isEmpty()) return
+
+        // TODO: Bu seçilen numaralara göre yeni Contact nesneleri oluştur,
+        //       villa atama mantığını uygula, DB'ye ekle ve villaya linkle.
+        // Bu işlem de bir coroutine içinde yapılmalı.
+        lifecycleScope.launch {
+            processSelectedMultiNumberContacts(selectedContactsMap)
+        }
+    }
+
+    override fun onSelectionCancelled() {
+        Log.d("MainActivityContacts", "Multi-number selection was cancelled.")
+        Toast.makeText(this, "Numara seçimi iptal edildi.", Toast.LENGTH_SHORT).show()
+    }
+
+    private suspend fun processSelectedMultiNumberContacts(selectedMap: Map<String, String>) = withContext(Dispatchers.IO) {
+        var newContactsAdded = 0
+        var newLinksToVilla = 0
+        val originalMultiNumberContacts = contactsToProcessAfterPermission ?: emptyList() // İzin sonrası saklanan liste
+
+        Log.d("MainActivityContacts", "Processing ${selectedMap.size} selections from multi-number dialog.")
+
+        for ((phoneContactId, selectedPhoneNumber) in selectedMap) {
+            val originalContactInfo = originalMultiNumberContacts.find { it.phoneContactId == phoneContactId }
+            if (originalContactInfo == null) {
+                Log.w("MainActivityContacts", "Original contact info not found for phoneContactId: $phoneContactId. Skipping.")
+                continue
+            }
+
+            val displayName = originalContactInfo.displayName
+
+            // Yinelenen kontrolü (Contacts tablosunda bu seçilen numara var mı?)
+            val existingContact = appDatabase.contactDao().getContactByPhoneNumber(selectedPhoneNumber.replace("\\s".toRegex(), ""))
+            if (existingContact != null) {
+                Log.d("MainActivityContacts", "Selected number '$selectedPhoneNumber' for '${displayName}' already exists. Skipping.")
+                continue
+            }
+
+            var determinedVillaId: Int? = null
+            var finalContactName = displayName
+            val nameParts = displayName.trim().split(" ", limit = 2)
+            if (nameParts.isNotEmpty()) {
+                val potentialVillaNo = nameParts[0].toIntOrNull()
+                if (potentialVillaNo != null) {
+                    try {
+                        val foundVilla = appDatabase.villaDao().getVillaByNo(potentialVillaNo)
+                        if (foundVilla != null) {
+                            determinedVillaId = foundVilla.villaId
+                            finalContactName = if (nameParts.size > 1 && nameParts[1].isNotBlank()) nameParts[1] else displayName
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivityContacts", "DB Error for villaNo $potentialVillaNo for '${displayName}': ${e.message}")
+                    }
+                }
+            }
+
+            val newAppContact = com.serkantken.secuasist.models.Contact(
+                contactName = finalContactName,
+                contactPhone = selectedPhoneNumber.replace("\\s".toRegex(), ""),
+                lastCallTimestamp = null
+            )
+
+            try {
+                val insertedContactId = appDatabase.contactDao().insert(newAppContact) // Tek bir contact ekleme metodu
+                if (insertedContactId > 0) {
+                    newContactsAdded++
+                    if (determinedVillaId != null) {
+                        // Yeni contactId'yi kullanarak linkleme yap.
+                        // insertContact'ın yeni ID'yi döndürdüğünü veya
+                        // yeni kişiyi telefonla tekrar çekmemiz gerektiğini varsayıyoruz.
+                        // En iyisi, insertContact'ın eklenen Contact nesnesini veya ID'sini döndürmesidir.
+                        // Şimdilik, telefonla tekrar çekelim:
+                        val contactJustAdded = appDatabase.contactDao().getContactByPhoneNumber(newAppContact.contactPhone!!)
+                        if (contactJustAdded != null) {
+                            linkContactToVilla(contactJustAdded, determinedVillaId) {
+                                Log.d("MainActivityContacts", "Async link complete for multi-select contact.")
+                            }
+                            newLinksToVilla++
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivityContacts", "Error inserting multi-select contact '${displayName}': ${e.message}")
+            }
+        }
+
+        Log.d("MainActivityContacts", "Finished processing multi-number selections. New contacts: $newContactsAdded, New links: $newLinksToVilla")
+        // Kullanıcıya özet göster
+        runOnUiThread { // UI thread'e geç
+            Toast.makeText(this@MainActivity, "$newContactsAdded kişi daha eklendi (numara seçiminden).", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onStart() {

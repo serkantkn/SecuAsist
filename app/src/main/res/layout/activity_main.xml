@@ -96,7 +96,8 @@
             android:layout_marginStart="16dp"
             android:layout_marginEnd="10dp"
             android:background="@drawable/background_edittext"
-            android:visibility="gone">
+            android:visibility="gone"
+            tools:visibility="visible">
 
             <EditText
                 android:layout_width="match_parent"
@@ -109,7 +110,16 @@
                 android:textColorHint="@color/white"
                 android:drawableStart="@drawable/ic_search"
                 android:paddingStart="10dp"
-                android:paddingEnd="10dp"/>
+                android:paddingEnd="52dp"/>
+
+            <ImageView
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:id="@+id/btnClearBox"
+                android:src="@drawable/ic_close"
+                android:padding="10dp"
+                android:layout_gravity="center_vertical|end"
+                android:visibility="gone"/>
 
         </eightbitlab.com.blurview.BlurView>
 
