@@ -33,7 +33,7 @@
                     android:id="@+id/title_server_address"
                     android:text="Sunucu Ayarları"
                     android:textSize="21sp"
-                    android:textColor="@color/white"
+                    android:textColor="@color/colorAccent"
                     android:textStyle="bold"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"/>
@@ -126,7 +126,8 @@
                 android:padding="16dp"
                 app:layout_constraintTop_toBottomOf="@id/layout_server_settings"
                 android:layout_marginTop="10dp"
-                android:visibility="gone">
+                android:visibility="gone"
+                tools:visibility="visible">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -134,7 +135,7 @@
                     android:id="@+id/title_device_settings"
                     android:text="Cihaz Ayarları"
                     android:textSize="21sp"
-                    android:textColor="@color/white"
+                    android:textColor="@color/colorAccent"
                     android:textStyle="bold"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"/>
@@ -187,8 +188,55 @@
                     android:textSize="17sp"
                     android:textColor="@color/white"
                     app:layout_constraintTop_toBottomOf="@id/switch_set_launcher"
+                    android:layout_marginTop="10dp"
                     android:layout_marginStart="9dp"
                     android:layout_marginEnd="9dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/label_device_location"
+                    android:text="Cihazın bulunduğu konum"
+                    android:textSize="17sp"
+                    android:textColor="@color/colorAccent"
+                    app:layout_constraintTop_toBottomOf="@id/switch_phone_call"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="10dp"/>
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_navigation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="true"
+                    app:singleSelection="true"
+                    app:checkedChip="@id/chip_gate_a"
+                    app:layout_constraintTop_toBottomOf="@id/label_device_location"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="3dp">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_gate_a"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="A Kapısı"
+                        app:chipBackgroundColor="#33545454"
+                        app:chipStrokeColor="#40898989"
+                        app:chipStrokeWidth="1dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_gate_b"
+                        style="@style/Widget.App.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="B Kapısı"
+                        app:chipBackgroundColor="#33545454"
+                        app:chipStrokeColor="#40898989"
+                        app:chipStrokeWidth="1dp" />
+
+                </com.google.android.material.chip.ChipGroup>
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -196,7 +244,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/label_app_version"
-                android:text="SecuAsist\nversiyon 0.16.1-beta2\n\nDerleme tarihi: 23 Eylül 2025"
+                android:text="SecuAsist\nversiyon 0.16.2-beta2\n\nDerleme tarihi: 23 Eylül 2025"
                 android:gravity="center"
                 android:textSize="11sp"
                 android:textColor="@color/textColorSecondary"

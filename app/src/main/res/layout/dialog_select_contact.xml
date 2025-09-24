@@ -12,6 +12,21 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvContacts"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintHeight_min="500dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="15dp"
+            app:layout_constraintTop_toBottomOf="@+id/tvDialogTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/btnClose"
+            tools:listitem="@layout/item_contact"
+            android:paddingTop="55dp"
+            android:clipToPadding="false"/>
+
         <TextView
             android:id="@+id/tvDialogTitle"
             android:layout_width="0dp"
@@ -79,21 +94,6 @@
                 android:layout_marginEnd="10dp"/>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvContacts"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            app:layout_constraintHeight_min="500dp"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="15dp"
-            app:layout_constraintTop_toBottomOf="@+id/tvDialogTitle"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/btnClose"
-            tools:listitem="@layout/item_contact"
-            android:paddingTop="55dp"
-            android:clipToPadding="false"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
