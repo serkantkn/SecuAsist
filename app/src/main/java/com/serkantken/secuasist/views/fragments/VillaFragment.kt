@@ -57,6 +57,7 @@ class VillaFragment : Fragment() {
         setupRecyclerView()
         setupSwipeToRefresh()
         binding.swipeRefreshLayout.isRefreshing = true
+        binding.layoutLoading.visibility = View.VISIBLE
         observeVillas()
     }
 
@@ -136,7 +137,7 @@ class VillaFragment : Fragment() {
                                     StatusFilter.UNDER_CONSTRUCTION -> villa.isVillaUnderConstruction == 1
                                     StatusFilter.IS_SPECIAL -> villa.isVillaSpecial == 1
                                     StatusFilter.IS_RENTAL -> villa.isVillaRental == 1
-                                    StatusFilter.NO_CARGO_CALLS -> villa.isVillaCallForCargo == 0
+                                    StatusFilter.NO_CARGO_CALLS -> villa.isVillaCallForCargo == 1
                                 }
                             }
                         }
@@ -164,6 +165,7 @@ class VillaFragment : Fragment() {
                     villaAdapter.submitList(villas) {
                         if (binding.swipeRefreshLayout.isRefreshing) {
                             binding.swipeRefreshLayout.isRefreshing = false
+                            binding.layoutLoading.visibility = View.GONE
                         }
                         if (villas.isNotEmpty()) {
                             binding.recyclerView.smoothScrollToPosition(0)

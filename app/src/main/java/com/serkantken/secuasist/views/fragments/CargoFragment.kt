@@ -266,7 +266,7 @@ class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListen
             }
         }
 
-        availableVillasAdapter = AvailableVillasAdapter { selectableVilla ->
+        availableVillasAdapter = AvailableVillasAdapter(requireActivity()) { selectableVilla ->
             moveVilla(selectableVilla, from = allVillas, to = selectedVillas)
         }
         dialogBinding.rvAvailableVillas.adapter = availableVillasAdapter

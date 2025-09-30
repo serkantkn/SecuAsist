@@ -280,7 +280,7 @@ class CallingActivity : AppCompatActivity() {
                 Toast.makeText(this, "Lütfen önce bir villa seçin.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa evden arandı olarak işaretlendi.", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa evden arandı olarak işaretlendi.", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
                 logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = true)
             }
@@ -294,7 +294,7 @@ class CallingActivity : AppCompatActivity() {
                 Toast.makeText(this, "Atlanacak bir villa seçili değil.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa atlandı.", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "${currentSelectedVilla?.villa?.villaNo} nolu villa atlandı.", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
                 logCargoInteraction(currentSelectedVilla?.cargoId, outcomeSuccessful = false, wasSkipped = true)
             }

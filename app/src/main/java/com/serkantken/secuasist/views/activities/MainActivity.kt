@@ -58,6 +58,7 @@ import com.serkantken.secuasist.databinding.DialogManageCompanyDeliverersBinding
 import com.serkantken.secuasist.databinding.DialogManageVillaContactsBinding
 import com.serkantken.secuasist.databinding.DialogSelectContactBinding
 import com.serkantken.secuasist.databinding.LayoutBalloonVillaInfoBinding
+import com.serkantken.secuasist.databinding.LayoutDialogLoadingBinding
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.ContactFromPhone
@@ -189,7 +190,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         setupMainTabsRecyclerView()
         observeCargoNotificationStatus()
         setupListeners()
-        observeWebSocketMessages()
 
     }
 
@@ -1133,102 +1133,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         }
     }
 
-    private fun observeWebSocketMessages() {
-        activityScope.launch {
-            webSocketClient.incomingMessages.collect { jsonMessage ->
-                // Gelen mesajın durum mesajı olup olmadığını kontrol et
-                if (jsonMessage.startsWith("STATUS:")) {
-                    when (jsonMessage) {
-                        "STATUS:CONNECTED" -> showToast("WebSocket Bağlandı.")
-                        "STATUS:DISCONNECTED" -> showToast("WebSocket Bağlantısı Kesildi. Yeniden bağlanıyor...")
-                        // ... diğer durumlar ...
-                    }
-                    return@collect // Durum mesajıysa, işlemi burada bitir.
-                }
-
-                // Gelen JSON'ı işlemeyi dene
-                try {
-                    // 1. Genel mesaj yapısını (type, data) parse et
-                    val webSocketMessage = gson.fromJson(jsonMessage, WebSocketMessage::class.java)
-
-                    // 2. Mesajın tipine göre ilgili veritabanı işlemini yap
-                    //    Tüm veritabanı işlemleri için IO thread'ine geç.
-                    launch(Dispatchers.IO) {
-                        when (webSocketMessage.type) {
-                            // --- VİLLA İŞLEMLERİ ---
-                            "add_villa", "update_villa" -> {
-                                val villaDto = gson.fromJson(webSocketMessage.data.toString(), VillaDto::class.java)
-                                // DTO'yu veritabanı entity'sine çevir (bunu yapmak için bir extension function yazılabilir)
-                                val villa = villaDto.toVilla() // Bu fonksiyonu birazdan ekleyeceğiz
-                                appDatabase.villaDao().insert(villa) // insert hem ekler hem günceller (OnConflictStrategy.REPLACE)
-                                launch(Dispatchers.Main) { showToast("Villa ${villa.villaNo} uzaktan güncellendi.") }
-                            }
-                            "delete_villa" -> {
-                                val deleteDto = gson.fromJson(webSocketMessage.data.toString(), VillaDto::class.java)
-                                deleteDto.villaId?.let {
-                                    appDatabase.villaDao().deleteById(it)
-                                    launch(Dispatchers.Main) { showToast("Bir villa uzaktan silindi.") }
-                                }
-                            }
-
-                            // --- KİŞİ İŞLEMLERİ ---
-                            "add_contact", "update_contact" -> {
-                                val contactDto = gson.fromJson(webSocketMessage.data.toString(), ContactDto::class.java)
-                                val contact = contactDto.toContact()
-                                appDatabase.contactDao().insert(contact)
-                                launch(Dispatchers.Main) { showToast("${contact.contactName} uzaktan güncellendi.") }
-                            }
-                            "delete_contact" -> {
-                                val deleteDto = gson.fromJson(webSocketMessage.data.toString(), ContactDto::class.java)
-                                deleteDto.contactId?.let {
-                                    appDatabase.contactDao().deleteById(it)
-                                    launch(Dispatchers.Main) { showToast("Bir kişi uzaktan silindi.") }
-                                }
-                            }
-
-                            // --- VİLLA-KİŞİ İLİŞKİSİ İŞLEMLERİ ---
-                            "add_villacontact" -> {
-                                val vcDto = gson.fromJson(webSocketMessage.data.toString(), VillaContactDto::class.java)
-                                val villaContact = vcDto.toVillaContact()
-                                appDatabase.villaContactDao().insert(villaContact)
-                            }
-                            "delete_villacontact" -> {
-                                val deleteDto = gson.fromJson(webSocketMessage.data.toString(), VillaContactDeleteDto::class.java)
-                                appDatabase.villaContactDao().deleteByVillaIdAndContactId(deleteDto.villaId, deleteDto.contactId)
-                            }
-
-                            // --- KARGO ŞİRKETİ İŞLEMLERİ (Örnek) ---
-                            "add_cargo_company", "update_cargo_company" -> {
-                                val companyDto = gson.fromJson(webSocketMessage.data.toString(), CargoCompanyDto::class.java)
-                                val company = companyDto.toCargoCompany()
-                                appDatabase.cargoCompanyDao().insert(company)
-                                launch(Dispatchers.Main) { showToast("${company.companyName} uzaktan güncellendi.") }
-                            }
-                            "delete_cargo_company" -> {
-                                val deleteDto = gson.fromJson(webSocketMessage.data.toString(), CargoCompanyDto::class.java)
-                                deleteDto.companyId?.let {
-                                    appDatabase.cargoCompanyDao().deleteById(it)
-                                    launch(Dispatchers.Main) { showToast("Bir kargo şirketi uzaktan silindi.") }
-                                }
-                            }
-
-                            else -> {
-                                // Bilinmeyen bir mesaj tipi gelirse
-                                launch(Dispatchers.Main) { showToast("Bilinmeyen mesaj tipi: ${webSocketMessage.type}") }
-                            }
-                        }
-                    }
-
-                } catch (e: Exception) {
-                    // JSON parse hatası veya başka bir hata olursa
-                    launch(Dispatchers.Main) {
-                        showToast("Sunucudan gelen mesaj işlenemedi: ${e.message}")
-                    }
-                }
-            }
-        }
-    }
-
     fun showAddEditVillaDialog(villaToEdit: Villa?) {
         val dialogBinding = DialogAddEditVillaBinding.inflate(layoutInflater)
         val isEditMode = villaToEdit != null
@@ -1912,7 +1816,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             activityScope.launch {
                 try {
                     if (isEditMode) {
-                        val updatedCompany = companyToEdit!!.copy(companyName = companyName)
+                        val updatedCompany = companyToEdit.copy(companyName = companyName)
                         appDatabase.cargoCompanyDao().update(updatedCompany) // cargoDao'da update fonksiyonunuz olmalı
                         showToast("${updatedCompany.companyName} güncellendi.")
                         sendCargoCompanyAddOrUpdateToWebSocket(updatedCompany)
@@ -2169,7 +2073,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         }
 
                         val detectedVillaIdsForCurrentContact = mutableListOf<Int>()
-                        var nameToUseInContactObject = displayName // Başlangıçta orijinal ismi kullan
 
                         val matchResult = potentialVillaPartRegex.find(displayName.trim())
                         if (matchResult != null) {
@@ -2201,8 +2104,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
 
                                 if (allVillasInNameExistInDB && tempVillaIdsFromName.isNotEmpty()) {
                                     detectedVillaIdsForCurrentContact.addAll(tempVillaIdsFromName)
-                                    nameToUseInContactObject = if (restOfNameFromString.isNotBlank()) restOfNameFromString else displayName
-                                    Log.d("MainActivityContacts", "For '${displayName}', detected Villa IDs: $detectedVillaIdsForCurrentContact. Name to use: '$nameToUseInContactObject'")
                                 } else {
                                     // Eğer villa numaralarından herhangi biri bulunamazsa veya bir hata oluşursa,
                                     // villa ataması yapma ve ismi orijinal bırak.
@@ -2214,7 +2115,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         // else: İsim, villa numarası kalıbıyla başlamıyorsa, detectedVillaIdsForCurrentContact boş kalacak.
 
                         val newAppContact = com.serkantken.secuasist.models.Contact(
-                            contactName = nameToUseInContactObject,
+                            contactName = displayName,
                             contactPhone = selectedPhoneNumber,
                             lastCallTimestamp = null
                         )
@@ -2288,20 +2189,27 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     private var progressDialog: AlertDialog? = null
+    private lateinit var layoutDialogLoadingBinding: LayoutDialogLoadingBinding
 
     private fun showContactsImportProgress(show: Boolean) {
         if (show) {
             if (progressDialog == null) {
+                layoutDialogLoadingBinding = LayoutDialogLoadingBinding.inflate(layoutInflater)
                 progressDialog = AlertDialog.Builder(this)
-                    .setTitle("Rehberden Kişiler Alınıyor")
-                    .setMessage("Lütfen bekleyin...")
+                    .setView(layoutDialogLoadingBinding.root)
                     .setCancelable(false)
                     .create()
             }
+            Tools(this@MainActivity).blur(arrayOf(layoutDialogLoadingBinding.blurPopup), 10f, true)
+            layoutDialogLoadingBinding.titleLoading.text = "Lütfen Bekleyin"
+            layoutDialogLoadingBinding.labelLoading.text = "Rehber okunuyor..."
+            progressDialog?.window?.setBackgroundDrawableResource(R.color.transparent)
             progressDialog?.show()
         } else {
             progressDialog?.dismiss()
-            progressDialog = null // Referansı temizle
+            progressDialog = null
+            layoutDialogLoadingBinding.titleLoading.text = ""
+            layoutDialogLoadingBinding.labelLoading.text = ""
         }
     }
 
@@ -2325,15 +2233,12 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     // OnMultiNumberSelectionListener metodlarını override et
-    override fun onSelectionsCompleted(selectedContactsMap: Map<String, String>) {
-        Log.d("MainActivityContacts", "Multi-number selections completed. Map size: ${selectedContactsMap.size}")
-        if (selectedContactsMap.isEmpty()) return
+    override fun onSelectionsCompleted(selectedContacts: Map<String, String>) {
+        Log.d("MainActivityContacts", "Multi-number selections completed. Map size: ${selectedContacts.size}")
+        if (selectedContacts.isEmpty()) return
 
-        // TODO: Bu seçilen numaralara göre yeni Contact nesneleri oluştur,
-        //       villa atama mantığını uygula, DB'ye ekle ve villaya linkle.
-        // Bu işlem de bir coroutine içinde yapılmalı.
         lifecycleScope.launch {
-            processSelectedMultiNumberContacts(selectedContactsMap)
+            processSelectedMultiNumberContacts(selectedContacts)
         }
     }
 
@@ -2425,12 +2330,16 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         activityScopeJob = activityScope.launch {
             webSocketClient.incomingMessages.collect { message ->
                 if (message.startsWith("STATUS:")) {
-                    when (message) {
-                        "STATUS:CONNECTED" -> showToast("WebSocket Bağlandı.")
-                        "STATUS:DISCONNECTED" -> showToast("WebSocket Bağlantısı Kesildi. Yeniden bağlanıyor...")
-                        "STATUS:DISCONNECTING" -> showToast("WebSocket Bağlantısı Kapanıyor...")
-                        "STATUS:ERROR" -> showToast("WebSocket Hatası Oluştu. Yeniden bağlanıyor...")
-                        else -> showToast("WebSocket Durum: ${message.substringAfter("STATUS:")}")
+                    if (message.startsWith("STATUS:CONNECTED:")) {
+                        showToast("Sunucuya bağlandı.")
+                    } else if (message.startsWith("STATUS:DISCONNECTED:")) {
+                        showToast("Sunucu bağlantısı kesildi. Yeniden bağlanıyor...")
+                    } else if (message.startsWith("STATUS:DISCONNECTING:")) {
+                        showToast("Sunucu bağlantısı kapanıyor...")
+                    } else if (message.startsWith("STATUS:ERROR:")) {
+                        showToast("Sunucuya bağlantı hatası oluştu. Yeniden bağlanıyor...")
+                    } else {
+                        showToast("Sunucu Durum: $message")
                     }
                 } else {
                     showToast("Sunucudan gelen mesaj: $message")
