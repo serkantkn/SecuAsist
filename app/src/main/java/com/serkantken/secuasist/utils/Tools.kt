@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
 import android.view.ViewOutlineProvider
+import com.orhanobut.hawk.Hawk
 import eightbitlab.com.blurview.BlurView
 import eightbitlab.com.blurview.RenderScriptBlur
 
@@ -25,6 +26,11 @@ class Tools(private val activity: Activity) {
                 .setFrameClearDrawable(windowBackground)
                 .setBlurRadius(radius)
                 .setBlurAutoUpdate(true)
+            if (Hawk.contains("less_blur") && Hawk.get<Boolean>("less_blur") == false) {
+                view.setBlurEnabled(true)
+            } else {
+                view.setBlurEnabled(false)
+            }
             if (isRounded) {
                 view.outlineProvider = ViewOutlineProvider.BACKGROUND
                 view.clipToOutline = true

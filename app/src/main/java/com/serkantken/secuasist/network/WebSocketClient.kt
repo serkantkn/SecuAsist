@@ -15,8 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.* // Coroutine ile ilgili import'ları ekle
 
 class WebSocketClient(
-    private var serverIp: String, // Changed to var
-    private val serverPort: Int
+    private var serverIp: String,
+    private val serverPort: Int,
+    private val onMessageReceived: (text: String) -> Unit
 ) {
 
     private val TAG = "WebSocketClient"
@@ -86,6 +87,7 @@ class WebSocketClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d(TAG, "Gelen mesaj (text): $text")
                 _incomingMessages.trySend(text)
+                onMessageReceived(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {

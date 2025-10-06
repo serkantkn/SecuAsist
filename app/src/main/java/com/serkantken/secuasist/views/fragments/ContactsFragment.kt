@@ -33,7 +33,10 @@ import kotlinx.coroutines.launch
 import kotlin.text.contains
 import kotlin.text.filter
 import androidx.core.net.toUri
+import com.google.android.material.badge.ExperimentalBadgeUtils
+import com.serkantken.secuasist.SecuAsistApplication
 
+@ExperimentalBadgeUtils
 class ContactsFragment : Fragment() {
 
     private var _binding: FragmentContactsBinding? = null
@@ -118,7 +121,7 @@ class ContactsFragment : Fragment() {
                 lifecycleScope.launch {
                     try {
                         appDatabase.contactDao().delete(contact)
-                        (activity as? MainActivity)?.sendContactDeleteToWebSocket(contact.contactId)
+                        (activity?.application as SecuAsistApplication).sendDelete("CONTACT", contact.contactId)
                         (activity as? MainActivity)?.showToast("${contact.contactName} silindi.")
                     } catch (e: Exception) {
                         (activity as? MainActivity)?.showToast("Silinirken hata oluştu: ${e.localizedMessage}")

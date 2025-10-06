@@ -15,11 +15,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.orhanobut.hawk.Hawk
+import com.serkantken.secuasist.SecuAsistApplication
 import com.serkantken.secuasist.adapters.CallingContactAdapter
 import com.serkantken.secuasist.adapters.CallingVillaAdapter
 import com.serkantken.secuasist.database.AppDatabase
@@ -27,12 +29,16 @@ import com.serkantken.secuasist.databinding.ActivityCallingBinding
 import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.DisplayableVilla
+import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaCallingState
 import com.serkantken.secuasist.utils.Tools
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,23 +46,17 @@ import java.util.TimeZone
 import kotlin.text.format
 
 class CallingActivity : AppCompatActivity() {
-    private companion object {
-        const val TAG = "CallingActivity"
-    }
-
     private lateinit var binding: ActivityCallingBinding
     private lateinit var db: AppDatabase
     private lateinit var callingVillaAdapter: CallingVillaAdapter
     private lateinit var callingContactAdapter: CallingContactAdapter
 
     private var displayableVillas = mutableListOf<DisplayableVilla>()
-    // private var allContacts = mutableListOf<Contact>() // Bu artık kullanılmayacak
     private var contactsForSelectedVillaMap = mutableMapOf<Int, List<Contact>>()
 
     private var currentSelectedVilla: DisplayableVilla? = null
     private var currentlySelectedContactFromAdapter: Contact? = null
-
-    // private val gson = Gson() // Gerekmiyorsa kaldırılabilir
+    private var villasMap = mapOf<Int, Villa>()
     private val CALL_PERMISSION_REQUEST_CODE = 101
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +64,8 @@ class CallingActivity : AppCompatActivity() {
         binding = ActivityCallingBinding.inflate(layoutInflater)
         setContentView(binding.root)
         enableEdgeToEdge()
+
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         window.isNavigationBarContrastEnforced = false
         window.navigationBarColor = ContextCompat.getColor(this, android.R.color.transparent)
         ViewCompat.setOnApplyWindowInsetsListener(binding.toolbarLayout) { v, insets ->
@@ -92,15 +94,11 @@ class CallingActivity : AppCompatActivity() {
         setupActionButtons()
         requestPhonePermissionIfNeeded()
 
-        // Intent'ten kargo listesini al
         val cargoList = intent.getSerializableExtra("CARGO_LIST") as? ArrayList<Cargo>
-
-        if (cargoList != null && cargoList.isNotEmpty()) {
-            val targetVillaIds = cargoList.map { it.villaId }.distinct()
-            loadInitialData(targetVillaIds, cargoList)
-        } else {
+        if (cargoList != null && cargoList.isNotEmpty())
+            loadInitialData(cargoList)
+        else
             finishActivityWithMessage("Gerekli kargo bilgileri eksik veya geçersiz.")
-        }
     }
 
     private fun requestPhonePermissionIfNeeded() {
@@ -118,95 +116,69 @@ class CallingActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadInitialData(targetVillaIds: List<Int>, cargoList: ArrayList<Cargo>?) {
+    private fun loadInitialData(initialCargoList: List<Cargo>) {
+        val cargoIds = initialCargoList.map { it.cargoId }
+        val villaIds = initialCargoList.map { it.villaId }.distinct()
+
         lifecycleScope.launch {
-            try {
-                val allVillasFromDb = db.villaDao().getAllVillasAsList()
+            // Sadece kargo listesini dinle. Bu bizim tek "doğruluk kaynağımız" olacak.
+            db.cargoDao().getCargosByIdsAsFlow(cargoIds).collectLatest { updatedCargos ->
 
-                val filteredVillas = allVillasFromDb.filter { it.villaId in targetVillaIds }
+                // Değişiklik geldiğinde, ilişkili diğer verileri (değişmeyen) tek seferde çekelim.
+                villasMap = db.villaDao().getVillasByIds(villaIds).associateBy { it.villaId }
 
-                if (filteredVillas.isEmpty()) {
-                    finishActivityWithMessage("Kargolara ait gösterilecek villa bulunamadı.")
-                    return@launch
+                contactsForSelectedVillaMap.clear()
+                villasMap.values.forEach { villa ->
+                    val owners = db.villaContactDao().getRealOwnersForVillaNonFlow(villa.villaId)
+                    val contacts = if (owners.isNotEmpty()) owners else db.villaContactDao().getContactsForVillaNonFlow(villa.villaId)
+                    contactsForSelectedVillaMap[villa.villaId] = contacts
                 }
 
-                if (cargoList == null) { // Ekstra güvenlik kontrolü
-                    finishActivityWithMessage("Kargo listesi yüklenemedi.")
-                    return@launch
-                }
+                val oldInProgressCargoId = displayableVillas.find { it.state == VillaCallingState.IN_PROGRESS }?.villa?.villaId
+
+                val newDisplayableVillas = updatedCargos.mapNotNull { cargo ->
+                    val villaForThisCargo = villasMap[cargo.villaId]
+                    if (villaForThisCargo == null) {
+                        return@mapNotNull null // Eğer kargonun villası bulunamazsa listeye ekleme
+                    }
+
+                    // Arayüzdeki satırın durumunu SADECE bu kargonun durumuna göre belirle
+                    val state: VillaCallingState = if (cargo.isCalled == 1) {
+                        if (cargo.isMissed == 1) VillaCallingState.CALLED_FAILED else VillaCallingState.CALLED_SUCCESS
+                    } else {
+                        // Eğer bu kargo, daha önceki 'IN_PROGRESS' kargo ise, durumunu koru
+                        if (cargo.cargoId == oldInProgressCargoId) VillaCallingState.IN_PROGRESS else VillaCallingState.PENDING
+                    }
+
+                    val ownerName = contactsForSelectedVillaMap[villaForThisCargo.villaId]?.firstOrNull()?.contactName ?: villaForThisCargo.villaNotes ?: "Sahibi Bilinmiyor"
+
+                    DisplayableVilla(
+                        cargoId = cargo.cargoId,
+                        villa = villaForThisCargo,
+                        ownerName = ownerName,
+                        state = state
+                    )
+                }.sortedBy { it.villa.villaNo } // Villa numarasına göre sırala
 
                 displayableVillas.clear()
-                contactsForSelectedVillaMap.clear()
+                displayableVillas.addAll(newDisplayableVillas)
 
-                // Villaların kişilerini ve DisplayableVilla nesnelerini oluştur
-                val deferreds = filteredVillas.map { villa ->
-                    async { // Her villa için asenkron işlem
-                        var contactsForVilla =
-                            db.villaContactDao().getRealOwnersForVillaNonFlow(villa.villaId)
-                        if (contactsForVilla.isEmpty()) {
-                            contactsForVilla =
-                                db.villaContactDao().getContactsForVillaNonFlow(villa.villaId)
-                        }
-                        contactsForSelectedVillaMap[villa.villaId] = contactsForVilla
-
-                        val ownerName =
-                            contactsForVilla.firstOrNull()?.contactName ?: villa.villaNotes
-                            ?: "Sahibi Bilinmiyor"
-
-                        // Villa ile ilişkili kargoyu bul ve cargoId'yi al
-                        // filteredVillas, cargoList'teki villaId'lere göre oluşturulduğu için
-                        // her zaman bir eşleşme olmalı.
-                        val associatedCargo = cargoList.find { it.villaId == villa.villaId }
-                        if (associatedCargo == null) {
-                            null
-                        } else {
-                            val cargoId = associatedCargo.cargoId
-                            // Tüm villaları önce PENDING olarak oluştur
-                            DisplayableVilla(cargoId, villa, ownerName, VillaCallingState.PENDING)
-                        }
-                    }
-                }
-                // Tüm asenkron işlemleri bekle, null olmayan sonuçları al ve villaNo'ya göre sırala
-                val tempDisplayableVillas =
-                    deferreds.awaitAll().filterNotNull().sortedBy { it.villa.villaNo }
-
-                displayableVillas.addAll(tempDisplayableVillas)
-
-                // Sıralanmış listenin ilk elemanını IN_PROGRESS yap (eğer liste boş değilse)
-                if (displayableVillas.isNotEmpty()) {
-                    displayableVillas.first().state = VillaCallingState.IN_PROGRESS
+                // Eğer listede hiç 'IN_PROGRESS' durumunda olan kalmadıysa (örn: ilk açılışta veya aktif olan silindiğinde),
+                // 'PENDING' durumundaki ilk villayı 'IN_PROGRESS' yap.
+                if (displayableVillas.isNotEmpty() && displayableVillas.none { it.state == VillaCallingState.IN_PROGRESS }) {
+                    displayableVillas.firstOrNull { it.state == VillaCallingState.PENDING }?.state = VillaCallingState.IN_PROGRESS
                 }
 
-                // Villa adapter'ını güncelle
+                // RecyclerView'ı yeni listeyle güncelle
                 callingVillaAdapter.submitList(displayableVillas.toList())
 
-                // Başlangıçta seçili olan (IN_PROGRESS) villayı bul
-                currentSelectedVilla =
-                    displayableVillas.firstOrNull() // firstOrNull() zaten IN_PROGRESS olanı (ilkini) verecektir.
+                // Aktif olan 'currentSelectedVilla'yı yeniden ayarla
+                currentSelectedVilla = displayableVillas.firstOrNull { it.state == VillaCallingState.IN_PROGRESS }
 
-                if (currentSelectedVilla != null) {
-                    val initialContacts =
-                        contactsForSelectedVillaMap[currentSelectedVilla!!.villa.villaId] ?: emptyList()
-                    callingContactAdapter.differ.submitList(initialContacts)
-                    if (initialContacts.isNotEmpty()) {
-                        currentlySelectedContactFromAdapter = initialContacts.first()
-                        callingContactAdapter.selectedPosition = 0
-                        callingContactAdapter.notifyItemChanged(0)
-                        scrollToCenter(0, binding.rvContacts)
-                    } else {
-                        currentlySelectedContactFromAdapter = null
-                        callingContactAdapter.selectedPosition = -1 // Seçim olmadığını belirt
-                    }
-                } else {
-                    callingContactAdapter.differ.submitList(emptyList()) // Kişi listesini temizle
+                // Seçili villaya göre kişi listesini ana thread'de güncelle
+                withContext(Dispatchers.Main) {
+                    updateContactsForSelectedVilla()
                 }
-
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@CallingActivity,
-                    "Veri yüklenirken bir hata oluştu: ${e.localizedMessage}",
-                    Toast.LENGTH_LONG
-                ).show()
             }
         }
     }
@@ -409,6 +381,7 @@ class CallingActivity : AppCompatActivity() {
             currentlySelectedContactFromAdapter = null
             callingContactAdapter.selectedPosition = -1
         }
+        updateContactsForSelectedVilla()
     }
 
     private fun handleContactSelected(selectedContact: Contact) {
@@ -419,6 +392,32 @@ class CallingActivity : AppCompatActivity() {
         if (position != -1) {
             scrollToCenter(position, binding.rvContacts)
         }
+    }
+
+    private fun updateContactsForSelectedVilla() {
+        val contacts = currentSelectedVilla?.let {
+            contactsForSelectedVillaMap[it.villa.villaId]
+        } ?: emptyList()
+
+        callingContactAdapter.differ.submitList(contacts)
+
+        if (contacts.isNotEmpty()) {
+            val oldSelection = currentlySelectedContactFromAdapter
+            // Eğer eski seçili kişi yeni listede varsa onu seç, yoksa ilkini seç.
+            val newSelectionPosition = if (oldSelection != null && contacts.contains(oldSelection)) {
+                contacts.indexOf(oldSelection)
+            } else {
+                0
+            }
+
+            currentlySelectedContactFromAdapter = contacts[newSelectionPosition]
+            callingContactAdapter.selectedPosition = newSelectionPosition
+            scrollToCenter(newSelectionPosition, binding.rvContacts)
+        } else {
+            currentlySelectedContactFromAdapter = null
+            callingContactAdapter.selectedPosition = -1
+        }
+        callingContactAdapter.notifyDataSetChanged() // Seçim değişikliğini yansıtmak için
     }
 
     private fun updateVillaState(villaToUpdate: DisplayableVilla?, newState: VillaCallingState) {
@@ -432,15 +431,16 @@ class CallingActivity : AppCompatActivity() {
             // Örneğin, bu villaya ait ve henüz aranmamış kargoların `isCalled`, `isMissed`, `callDate` alanları.
             // Bu, projenizin kargo takip mantığına göre detaylandırılmalıdır.
             // Örnek:
-            // lifecycleScope.launch {
-            //     val cargosToUpdate = db.cargoDao().getUncalledCargosForVilla(it.villa.villaId)
-            //     cargosToUpdate.forEach { cargo ->
-            //         cargo.isCalled = if (newState == VillaCallingState.CALLED_SUCCESS || newState == VillaCallingState.CALLED) 1 else 0
-            //         cargo.isMissed = if (newState == VillaCallingState.CALLED_FAILED) 1 else 0
-            //         cargo.callDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date()) // Örnek tarih formatı
-            //         db.cargoDao().update(cargo)
-            //     }
-            // }
+            lifecycleScope.launch {
+                val cargosToUpdate = db.cargoDao().getUncalledCargosForVillaAsList(it.villa.villaId)
+                cargosToUpdate.forEach { cargo ->
+                    cargo.isCalled = if (newState == VillaCallingState.CALLED_SUCCESS || newState == VillaCallingState.CALLED) 1 else 0
+                    cargo.isMissed = if (newState == VillaCallingState.CALLED_FAILED) 1 else 0
+                    cargo.callDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).format(Date()) // Örnek tarih formatı
+                    db.cargoDao().update(cargo)
+                    (application as SecuAsistApplication).sendUpsert(cargo)
+                }
+            }
         }
     }
 
@@ -479,52 +479,63 @@ class CallingActivity : AppCompatActivity() {
         outcomeSuccessful: Boolean,
         wasSkipped: Boolean = false
     ) {
+        val TAG_SYNC = "CargoSync" // Logları kolayca filtrelemek için özel bir tag
+
         if (cargoIdToLog == null) {
-            Log.e(TAG, "Cannot log cargo interaction: cargoId is null.")
+            Log.e(TAG_SYNC, "Adım 1 BAŞARISIZ: cargoId null olduğu için işlem iptal edildi.")
             return
         }
 
-        val cargo = db.cargoDao().getCargoById(cargoIdToLog)
-        if (cargo == null) {
-            Log.e(TAG, "Cannot log cargo interaction: Cargo with id $cargoIdToLog not found in DB.")
-            return
+        Log.d(TAG_SYNC, "Adım 1: logCargoInteraction başladı. Cargo ID: $cargoIdToLog")
+
+        try {
+            val cargo = db.cargoDao().getCargoById(cargoIdToLog)
+            if (cargo == null) {
+                Log.e(TAG_SYNC, "Adım 2 BAŞARISIZ: Kargo (ID: $cargoIdToLog) yerel veritabanında bulunamadı.")
+                return
+            }
+            Log.d(TAG_SYNC, "Adım 2: Kargo yerel veritabanında bulundu: ${cargo.cargoId}")
+
+            // ... (Mevcut kargo güncelleme mantığınız aynı kalıyor)
+            val newAttemptCount = if (wasSkipped) cargo.callAttemptCount else cargo.callAttemptCount + 1
+            val callDateString = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(Date())
+            val contactCalledId = currentlySelectedContactFromAdapter?.contactId
+            val deviceName = Hawk.get("device_name", "Bilinmiyor")
+            val finalIsCalled: Int
+            val finalIsMissed: Int
+            if (wasSkipped) {
+                finalIsCalled = 0
+                finalIsMissed = 1
+            } else if (outcomeSuccessful) {
+                finalIsCalled = 1
+                finalIsMissed = 0
+            } else {
+                finalIsCalled = 1
+                finalIsMissed = 1
+            }
+            val updatedCargo = cargo.copy(
+                isCalled = finalIsCalled,
+                isMissed = finalIsMissed,
+                callDate = callDateString,
+                callAttemptCount = newAttemptCount,
+                whoCalled = contactCalledId,
+                callingDeviceName = deviceName
+            )
+
+            // Adım 3: Yerel veritabanını güncelle
+            db.cargoDao().update(updatedCargo)
+            Log.d(TAG_SYNC, "Adım 3: Kargo (ID: ${updatedCargo.cargoId}) yerel veritabanında güncellendi.")
+
+            // Adım 4: Sunucuya gönderme işlemini başlat
+            Log.d(TAG_SYNC, "Adım 4: Senkronizasyon için SecuAsistApplication'a gönderiliyor...")
+            (application as SecuAsistApplication).sendUpsert(updatedCargo)
+            Log.i(TAG_SYNC, "Adım 5: sendUpsert fonksiyonu başarıyla çağrıldı. Kargo ID: ${updatedCargo.cargoId}")
+
+        } catch (e: Exception) {
+            Log.e(TAG_SYNC, "logCargoInteraction içinde BEKLENMEDİK HATA: ${e.message}", e)
         }
-
-        val newAttemptCount = if (wasSkipped) cargo.callAttemptCount else cargo.callAttemptCount + 1 // Atlanırsa deneme sayısı artmasın
-        val callDateString = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone("UTC") // Standart UTC kullanalım
-        }.format(Date())
-
-        // "Atla" durumunda arayan kişi null olabilir veya farklı bir mantık gerekebilir.
-        // Şimdilik, eğer bir kişi seçiliyse onu kullanalım.
-        val contactCalledId = currentlySelectedContactFromAdapter?.contactId
-        val deviceName = Hawk.get("device_name", "Bilinmiyor")
-
-        val finalIsCalled: Int
-        val finalIsMissed: Int
-
-        if (wasSkipped) {
-            finalIsCalled = 0 // Arama yapılmadı
-            finalIsMissed = 1 // Teslimat atlandı/başarısız
-        } else if (outcomeSuccessful) {
-            finalIsCalled = 1 // Arama yapıldı/işlem başarılı
-            finalIsMissed = 0
-        } else { // Başarısız arama/işlem
-            finalIsCalled = 1
-            finalIsMissed = 1
-        }
-
-        val updatedCargo = cargo.copy(
-            isCalled = finalIsCalled,
-            isMissed = finalIsMissed,
-            callDate = callDateString, // Her etkileşimde callDate güncellenir
-            callAttemptCount = newAttemptCount,
-            whoCalled = contactCalledId, // Atla durumunda bu null olabilir, DB'de nullable olmalı
-            callingDeviceName = deviceName
-        )
-
-        db.cargoDao().update(updatedCargo)
-        Log.d(TAG, "Cargo record updated for cargoId: $cargoIdToLog. OutcomeSuccessful: $outcomeSuccessful, Skipped: $wasSkipped, NewAttemptCount: $newAttemptCount")
     }
 
     private fun scrollToCenter(position: Int, recyclerView: RecyclerView) {

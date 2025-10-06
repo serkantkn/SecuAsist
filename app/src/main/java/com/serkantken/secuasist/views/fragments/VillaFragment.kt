@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.badge.ExperimentalBadgeUtils
+import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.adapters.VillaAdapter
 import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.databinding.FragmentVillaBinding
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
+@ExperimentalBadgeUtils
 class VillaFragment : Fragment() {
     private var _binding: FragmentVillaBinding? = null
     private val binding get() = _binding!!
@@ -74,6 +77,7 @@ class VillaFragment : Fragment() {
         binding.recyclerView.apply {
             adapter = villaAdapter
             clipToPadding = false
+            setHasFixedSize(true)
         }
     }
 
@@ -89,7 +93,7 @@ class VillaFragment : Fragment() {
         val selectedStreet: String? = null,
         val activeStatusFilters: Set<StatusFilter> = emptySet(),
         val sortBy: VillaSortType = VillaSortType.VILLA_NO_ASC,
-        val searchQuery: String? = null // YENİ ALAN
+        val searchQuery: String? = null
     )
 
     fun setSearchQuery(query: String) {
@@ -168,7 +172,11 @@ class VillaFragment : Fragment() {
                             binding.layoutLoading.visibility = View.GONE
                         }
                         if (villas.isNotEmpty()) {
-                            binding.recyclerView.smoothScrollToPosition(0)
+                            if (Hawk.contains("less_animations") && Hawk.get("less_animations")) {
+                                binding.recyclerView.scrollToPosition(0)
+                            } else {
+                                binding.recyclerView.smoothScrollToPosition(0)
+                            }
                         }
                     }
                 }

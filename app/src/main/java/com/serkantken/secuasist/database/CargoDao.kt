@@ -5,13 +5,14 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Delete
+import androidx.room.OnConflictStrategy
 import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.CargoReport
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CargoDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(cargo: Cargo): Long
 
     @Update
@@ -28,6 +29,9 @@ interface CargoDao {
 
     @Query("SELECT * FROM Cargos WHERE cargoId IN (:cargoIds)")
     suspend fun getCargosByIds(cargoIds: List<Int>): List<Cargo>
+
+    @Query("SELECT * FROM Cargos WHERE cargoId IN (:cargoIds)")
+    fun getCargosByIdsAsFlow(cargoIds: List<Int>): Flow<List<Cargo>>
 
     // Belirli bir villaya ait kargoları çekmek için
     @Query("SELECT * FROM Cargos WHERE villaId = :villaId ORDER BY date DESC")
@@ -56,6 +60,9 @@ interface CargoDao {
     // YENİ METOD: Belirli bir şirkete ait, aranmamış (isCalled = 0) kargoları liste olarak döndürür.
     @Query("SELECT * FROM cargos WHERE companyId = :companyId AND isCalled = 0 ORDER BY date ASC")
     suspend fun getUncalledCargosForCompanyAsList(companyId: Int): List<Cargo>
+
+    @Query("SELECT * FROM cargos WHERE villaId = :villaId AND isCalled = 0 ORDER BY date ASC")
+    suspend fun getUncalledCargosForVillaAsList(villaId: Int): List<Cargo>
 
     @Query("""
         SELECT

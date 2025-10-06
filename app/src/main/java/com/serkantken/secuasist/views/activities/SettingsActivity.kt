@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.R
@@ -22,19 +23,25 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        _binding = ActivitySettingsBinding.inflate(layoutInflater)
         enableEdgeToEdge()
+
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         window.isNavigationBarContrastEnforced = false
         window.navigationBarColor = getColor(android.R.color.transparent)
-        _binding = ActivitySettingsBinding.inflate(layoutInflater)
         appDatabase = AppDatabase.getDatabase(this@SettingsActivity)
         setContentView(binding.root)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.toolbarLayout) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            v.setPadding(0, systemBars.top, 0, 0)
+            binding.scrollView.setPadding(0, systemBars.top + Tools(this).convertDpToPixel(55), 0, systemBars.bottom + Tools(this).convertDpToPixel(20))
             insets
         }
+        Hawk.init(this).build()
         Tools(this).blur(arrayOf(binding.blurBack), 10f, true)
         binding.blurBack.setOnClickListener {
+            Hawk.put("device_name", binding.etDeviceName.text.toString().trim())
+            Hawk.put("device_location", if (binding.chipGroupNavigation.checkedChipId == R.id.chip_gate_a) "A" else "B")
             finish()
         }
         binding.etIPAddress.text = Editable.Factory.getInstance().newEditable(Hawk.get("server_ip", ""))
@@ -59,6 +66,18 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 binding.etIPAddress.error = "IP adresi boş olamaz."
             }
+        }
+
+        binding.switchLessAnimations.isChecked = Hawk.contains("less_animations") && Hawk.get("less_animations", false)
+        binding.switchLessBlur.isChecked = Hawk.contains("less_blur") && Hawk.get("less_blur", true)
+        binding.switchLessAnimations.setOnCheckedChangeListener { _, isChecked ->
+            Hawk.put("less_animations", isChecked)
+            Toast.makeText(this, "Animasyonlar ${if (isChecked) "kapalı" else "açık"} olarak ayarlandı.", Toast.LENGTH_SHORT).show()
+            recreate()
+        }
+        binding.switchLessBlur.setOnCheckedChangeListener { _, isChecked ->
+            Hawk.put("less_blur", isChecked)
+            Toast.makeText(this, "Cam efekti ${if (isChecked) "kapalı" else "açık"} olarak ayarlandı.", Toast.LENGTH_SHORT).show()
         }
     }
 }

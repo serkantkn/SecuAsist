@@ -13,7 +13,7 @@ data class WebSocketMessage<T>(
 
 // Villas tablosu için JSON modeli
 data class VillaDto(
-    val villaId: Int? = null, // Opsiyonel ve null olabilir
+    val villaId: Int? = null,
     val villaNo: Int,
     val villaNotes: String? = null,
     val villaStreet: String? = null,
@@ -31,7 +31,7 @@ data class VillaDto(
 
 // Contacts tablosu için JSON modeli (Python tarafındaki Kisiler tablosuyla uyumlu)
 data class ContactDto(
-    val contactId: Int? = null, // YENİ: ID alanı eklendi
+    val contactId: Int? = null,
     val contactName: String?,
     val contactPhone: String?
 )

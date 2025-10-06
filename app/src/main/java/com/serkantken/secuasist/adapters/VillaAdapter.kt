@@ -6,6 +6,8 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.orhanobut.hawk.Hawk
+import com.serkantken.secuasist.R
 import com.serkantken.secuasist.databinding.ItemVillaBinding
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaWithContacts
@@ -31,6 +33,15 @@ class VillaAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         init {
+            if (Hawk.contains("less_blur")) {
+                if (Hawk.get<Boolean>("less_blur") == true) {
+                    binding.root.setBackgroundResource(R.drawable.background_no_blur)
+                } else {
+                    binding.root.setBackgroundResource(R.drawable.background_blur)
+                }
+            } else {
+                binding.root.setBackgroundResource(R.drawable.background_blur)
+            }
             binding.root.setOnClickListener {
                 val position = adapterPosition
                 if (position != RecyclerView.NO_POSITION) {
@@ -56,7 +67,15 @@ class VillaAdapter(
             // Veya daha spesifik: isRealOwner = 0 (kiracı) olan birincil kişi
             // val tenant = villaWithContacts.contacts.firstOrNull { it.contactType == "Tenant" }
 
-            binding.tvVillaOwnerName.isSelected = true
+            if (Hawk.contains("less_animations") && Hawk.get("less_animations")) {
+                if (Hawk.get("less_animations")) {
+                    binding.tvVillaOwnerName.isSelected = false
+                } else {
+                    binding.tvVillaOwnerName.isSelected = true
+                }
+            } else {
+                binding.tvVillaOwnerName.isSelected = true
+            }
             if (primaryContact != null) {
                 binding.tvVillaOwnerName.text = primaryContact.contactName
             } else {

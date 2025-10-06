@@ -4,9 +4,14 @@ package com.serkantken.secuasist.views.activities
 import android.Manifest
 import android.R
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.text.Editable
@@ -20,16 +25,19 @@ import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -39,7 +47,9 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.ChangeBounds
 import androidx.transition.TransitionManager
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.badge.ExperimentalBadgeUtils
 import com.google.gson.Gson
+import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.SecuAsistApplication
 import com.serkantken.secuasist.adapters.AssignedDeliverersAdapter
 import com.serkantken.secuasist.adapters.ContactsAdapter
@@ -76,6 +86,7 @@ import com.serkantken.secuasist.network.toCargoCompany
 import com.serkantken.secuasist.network.toContact
 import com.serkantken.secuasist.network.toVilla
 import com.serkantken.secuasist.network.toVillaContact
+import com.serkantken.secuasist.services.WhatsAppNotificationListener
 import com.serkantken.secuasist.utils.Tools
 import com.serkantken.secuasist.views.fragments.CargoFragment
 import com.serkantken.secuasist.views.fragments.ContactsFragment
@@ -100,6 +111,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 
+@ExperimentalBadgeUtils
 class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnMultiNumberSelectionListener {
 
     private lateinit var binding: ActivityMainBinding
@@ -107,7 +119,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     private lateinit var appDatabase: AppDatabase
     private lateinit var mainTabsAdapter: MainTabsAdapter
     private val tabsList = mutableListOf<MainTab>()
-    private val gson = Gson()
+    private lateinit var whatsappBadge: com.google.android.material.badge.BadgeDrawable
     private lateinit var csvFilePickerLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var contactCsvFilePickerLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
@@ -121,11 +133,25 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     private val activityScope: CoroutineScope
         get() = CoroutineScope(Dispatchers.Main + (activityScopeJob ?: Job()))
 
+    private val requestNotificationListenerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            // Kullanıcı ayarlar ekranından döndükten sonra iznin verilip verilmediğini tekrar kontrol et
+            if (isNotificationServiceEnabled()) {
+                showToast("Bildirim erişim izni verildi.")
+                updateWhatsAppBadgeVisibility()
+            } else {
+                showToast("Bildirim erişim izni gerekli.")
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         enableEdgeToEdge()
+
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+
         csvFilePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             uri?.let {
                 try {
@@ -182,15 +208,101 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             insets
         }
 
+        if (Hawk.contains("less_blur")) setupBlur(Hawk.get<Boolean>("less_blur"))
         Tools(this).blur(arrayOf(binding.blurFab, binding.blurToolbarButtons, binding.blurMessage, binding.blurNavView, binding.blurSearchbox), 10f, true)
+
         appDatabase = AppDatabase.Companion.getDatabase(this)
         webSocketClient = (application as SecuAsistApplication).webSocketClient
+
+        setupWhatsAppBadge() // Rozeti hazırlayan fonksiyonu çağır
+        checkAndRequestNotificationListenerPermission() // İzin kontrolünü yap
+
+        ContextCompat.registerReceiver(
+            this,
+            notificationUpdateReceiver,
+            IntentFilter("com.serkantken.secuasist.WHATSAPP_NOTIFICATION_UPDATE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED // Bu yayın sadece kendi uygulamamızdan geldiği için NOT_EXPORTED kullanıyoruz.
+        )
 
         setupViewPager()
         setupMainTabsRecyclerView()
         observeCargoNotificationStatus()
         setupListeners()
 
+    }
+
+    private val notificationUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.serkantken.secuasist.WHATSAPP_NOTIFICATION_UPDATE") {
+                Log.d("MainActivity", "WhatsApp bildirim güncelleme broadcast'i alındı.")
+                updateWhatsAppBadgeVisibility()
+            }
+        }
+    }
+
+    private fun setupWhatsAppBadge() {
+        // WhatsApp butonunuza bir bildirim rozeti oluşturup bağlıyoruz.
+        whatsappBadge = com.google.android.material.badge.BadgeDrawable.create(this).apply {
+            backgroundColor = ContextCompat.getColor(this@MainActivity, com.google.android.material.R.color.design_default_color_error)
+            badgeGravity = com.google.android.material.badge.BadgeDrawable.TOP_END
+            // Sayı göstermeyeceğimiz için numarasız bir rozet olacak.
+            // İsterseniz number = X diyerek sayı da gösterebilirsiniz.
+        }
+        // Rozetin görünürlüğünü Hawk'taki son duruma göre ayarla
+        updateWhatsAppBadgeVisibility()
+    }
+
+    private fun updateWhatsAppBadgeVisibility() {
+        val hasUnread = Hawk.get(WhatsAppNotificationListener.HAWK_KEY_HAS_UNREAD_WHATSAPP, false)
+        if (hasUnread) {
+            // Rozeti göster
+            com.google.android.material.badge.BadgeUtils.attachBadgeDrawable(whatsappBadge, binding.btnWhatsapp, binding.root as FrameLayout)
+        } else {
+            // Rozeti gizle
+            com.google.android.material.badge.BadgeUtils.detachBadgeDrawable(whatsappBadge, binding.btnWhatsapp)
+        }
+    }
+
+    private fun isNotificationServiceEnabled(): Boolean {
+        val enabledListeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        val componentName = ComponentName(this, WhatsAppNotificationListener::class.java)
+        return enabledListeners?.contains(componentName.flattenToString()) == true
+    }
+
+    private fun checkAndRequestNotificationListenerPermission() {
+        if (!isNotificationServiceEnabled()) {
+            // Eğer izin verilmemişse, kullanıcıya bir bilgilendirme diyaloğu göster
+            AlertDialog.Builder(this)
+                .setTitle("Bildirim Erişimi Gerekli")
+                .setMessage("WhatsApp bildirimlerini takip edebilmek ve size bildirebilmek için uygulamanın bildirimlerinize erişmesine izin vermeniz gerekmektedir.")
+                .setPositiveButton("Ayarlara Git") { _, _ ->
+                    // Kullanıcıyı Bildirim Erişimi Ayarları ekranına yönlendir
+                    val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                    requestNotificationListenerLauncher.launch(intent)
+                }
+                .setNegativeButton("İptal", null)
+                .show()
+        }
+    }
+
+    private fun setupBlur(lessBlur: Boolean?) {
+        if (lessBlur == true) {
+            binding.apply {
+                blurFab.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_no_blur)
+                blurToolbarButtons.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_no_blur)
+                blurMessage.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_no_blur)
+                blurNavView.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_no_blur)
+                blurSearchbox.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_edittext_no_blur)
+            }
+        } else {
+            binding.apply {
+                blurFab.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_blur)
+                blurToolbarButtons.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_blur)
+                blurMessage.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_blur)
+                blurNavView.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_blur)
+                blurSearchbox.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_edittext)
+            }
+        }
     }
 
     data class MainTab(
@@ -308,8 +420,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             else -> false
         }
 
-        // İkonu ve tıklama olayını her zaman fragment'a göre güncelle
-        // (görünür olup olmamasından bağımsız olarak, çünkü animasyon sırasında değişebilir)
         if (shouldShowFab) {
             when (fragmentPosition) {
                 0 -> {
@@ -435,6 +545,30 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     private fun setupListeners() {
+        binding.btnWhatsapp.setOnClickListener {
+            val whatsappPackageName = "com.whatsapp"
+            try {
+               val launchIntent = packageManager.getLaunchIntentForPackage(whatsappPackageName)
+               if (launchIntent != null) {
+                   startActivity(launchIntent)
+               } else {
+                   val intent = Intent(Intent.ACTION_VIEW)
+                   intent.data = Uri.parse("market://details?id=$whatsappPackageName")
+                   startActivity(intent)
+                }
+            } catch (e: android.content.ActivityNotFoundException) {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW)
+                    intent.data = Uri.parse("https://play.google.com/store/apps/details?id=$whatsappPackageName")
+                    startActivity(intent)
+                } catch (webEx: Exception) {
+                    showToast("WhatsApp yüklü değil ve uygulama mağazasına ulaşılamadı.")
+                }
+            } catch (e: Exception) {
+                showToast("İşlem gerçekleştirilemedi: ${e.message}")
+            }
+        }
+
         binding.btnSearch.setOnClickListener {
             toggleSearchMode(true)
         }
@@ -488,7 +622,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 setWidth(BalloonSizeSpec.WRAP)
                 setHeight(BalloonSizeSpec.WRAP)
                 setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                if (Hawk.contains("less_animations")) {
+                    if (Hawk.get<Boolean>("less_animations") == true) {
+                        setBalloonAnimation(BalloonAnimation.NONE)
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
+                } else {
+                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                }
                 setDismissWhenTouchOutside(true)
                 setIsVisibleOverlay(true)
                 setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
@@ -499,10 +641,19 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
 
             val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
             Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
-            binding.toolbarButtonLayout.visibility = View.INVISIBLE
-            balloon.showAlignTop(binding.toolbarButtonLayout, 90, it.height+50)
+            if (Hawk.contains("less_blur")) {
+                if (Hawk.get<Boolean>("less_blur") == true) {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon_no_blur)
+                } else {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+                }
+            } else {
+                blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+            }
+            binding.blurToolbarButtons.visibility = View.INVISIBLE
+            balloon.showAlignTop(binding.blurToolbarButtons, 90, it.height+50)
             balloon.setOnBalloonDismissListener {
-                binding.toolbarButtonLayout.visibility = View.VISIBLE
+                binding.blurToolbarButtons.visibility = View.VISIBLE
             }
 
             when (binding.viewPager.currentItem) {
@@ -579,7 +730,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                     setWidth(BalloonSizeSpec.WRAP)
                     setHeight(BalloonSizeSpec.WRAP)
                     setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    if (Hawk.contains("less_animations")) {
+                        if (Hawk.get<Boolean>("less_animations") == true) {
+                            setBalloonAnimation(BalloonAnimation.NONE)
+                        } else {
+                            setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                        }
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
                     setDismissWhenTouchOutside(true)
                     setIsVisibleOverlay(true)
                     setOverlayShape(BalloonOverlayCircle(12f))
@@ -591,6 +750,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 val contentView = balloonSortVillas.getContentView()
                 val blurView = contentView.findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
                 Tools(this@MainActivity).blur(arrayOf(blurView), 10f, true)
+                if (Hawk.contains("less_blur")) {
+                    if (Hawk.get<Boolean>("less_blur") == true) {
+                        blurView.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon_no_blur)
+                    } else {
+                        blurView.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+                    }
+                } else {
+                    blurView.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+                }
 
                 balloonSortVillas.setOnBalloonDismissListener {
                     val fadeinanimation = AnimationUtils.loadAnimation(this@MainActivity, R.anim.fade_in)
@@ -651,6 +819,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             // Yeni özel diyalog layout'umuzu inflate et
             val dialogBinding = DialogFilterByStreetBinding.inflate(layoutInflater)
             Tools(this@MainActivity).blur(arrayOf(dialogBinding.root), 10f, true)
+            if (Hawk.contains("less_blur")) {
+                if (Hawk.get<Boolean>("less_blur") == true) {
+                    dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+                } else {
+                    dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+                }
+            } else {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
 
             // AlertDialog'u oluştur
             val alertDialog = AlertDialog.Builder(this@MainActivity)
@@ -688,6 +865,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         val currentFilters = villaFragment.getCurrentFilterState().activeStatusFilters
         val dialogBinding = DialogFilterByStatusBinding.inflate(layoutInflater)
         Tools(this).blur(arrayOf(dialogBinding.root), 10f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
 
         // Mevcut aktif filtrelere göre CheckBox'ları işaretle
         dialogBinding.cbFilterUnderConstruction.isChecked = VillaFragment.StatusFilter.UNDER_CONSTRUCTION in currentFilters
@@ -741,144 +927,132 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     private fun processCsvFile(fileUri: Uri) {
-        Log.d("MainActivity_CSV", "processCsvFile (Update/Insert Logic) çağrıldı. URI: $fileUri")
-        activityScope.launch(Dispatchers.IO) {
+        Log.d("MainActivity_CSV", "processCsvFile çağrıldı. URI: $fileUri")
+        // Yükleniyor diyaloğunu göstermek iyi bir pratiktir
+        // val loadingDialog = showLoadingDialog("CSV işleniyor...")
+
+        lifecycleScope.launch(Dispatchers.IO) {
             val villasToInsert = mutableListOf<Villa>()
-            val villasToUpdate = mutableListOf<Villa>() // Güncellenecek villalar için ayrı liste
+            val villasToUpdate = mutableListOf<Villa>()
             var hataliSatirSayisi = 0
             var eklenenVillaSayisi = 0
             var guncellenenVillaSayisi = 0
 
             try {
                 contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                    val linesFromReader = mutableListOf<String>()
                     BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
-                        linesFromReader.addAll(reader.readLines())
-                    }
+                        // Başlık satırını atla (eğer varsa)
+                        // reader.readLine()
 
-                    if (linesFromReader.isEmpty()) {
-                        Log.w("MainActivity_CSV", "CSV dosyası boş veya okunamadı.")
-                        launch(Dispatchers.Main) { showToast("CSV dosyası boş veya okunamadı.")}
-                        return@launch
-                    }
+                        var isFirstLine = true
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            var currentLine = line!!
 
-                    val processedLines = linesFromReader.toMutableList()
-                    if (processedLines.isNotEmpty() && processedLines[0].startsWith("\uFEFF")) {
-                        Log.d("MainActivity_CSV", "UTF-8 BOM tespit edildi ve ilk satırdan kaldırılıyor.")
-                        processedLines[0] = processedLines[0].substring(1)
-                    }
-
-                    if (processedLines.isEmpty() || (processedLines.size == 1 && processedLines[0].isBlank())) {
-                        Log.w("MainActivity_CSV", "BOM temizliği sonrası veya tek boş satır, işlenecek veri yok.")
-                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.")}
-                        return@launch
-                    }
-
-                    // Başlık Satırı Kontrolü (Opsiyonel ama iyi bir pratik)
-                    // Eğer CSV'nizde başlık satırı olma ihtimali varsa:
-                    // val headerLine = processedLines.firstOrNull()?.lowercase()
-                    // val hasHeader = headerLine != null && headerLine.contains("villano") // vb.
-                    // val dataLines = if (hasHeader && processedLines.isNotEmpty()) {
-                    //    Log.d("MainActivity_CSV", "Başlık satırı algılandı ve atlanıyor: $headerLine")
-                    //    processedLines.drop(1)
-                    // } else {
-                    //    processedLines
-                    // }
-                    // ForEach döngüsünde `dataLines` kullanılır. Şimdilik başlık olmadığını varsayıyoruz.
-
-                    processedLines.forEachIndexed { index, line ->
-                        if (line.isBlank()) {
-                            Log.d("MainActivity_CSV", "Satır ${index + 1} boş, atlanıyor.")
-                            return@forEachIndexed
-                        }
-
-                        try {
-                            val columns = line.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-                                .map { it.trim().removeSurrounding("\"") }
-
-                            val villaNoStr = columns.getOrNull(0)
-                            val villaNo = villaNoStr?.toIntOrNull()
-                                ?: throw IllegalArgumentException("VillaNo Hatalı/Eksik: '$villaNoStr' Satır: '$line'")
-
-                            // CSV'den gelen diğer veriler
-                            val csvVillaNotes = columns.getOrNull(1)
-                            val csvVillaStreet = columns.getOrNull(2)
-                            val csvVillaNavigationA = columns.getOrNull(3)
-                            val csvVillaNavigationB = columns.getOrNull(4)
-                            val csvIsVillaUnderConstruction = columns.getOrNull(5)?.toIntOrNull() ?: 0
-                            val csvIsVillaSpecial = columns.getOrNull(6)?.toIntOrNull() ?: 0
-                            val csvIsVillaRental = columns.getOrNull(7)?.toIntOrNull() ?: 0
-                            val csvIsVillaCallFromHome = columns.getOrNull(8)?.toIntOrNull() ?: 0
-                            val csvIsVillaCallForCargo = columns.getOrNull(9)?.toIntOrNull() ?: 0
-                            val csvIsVillaEmpty = columns.getOrNull(10)?.toIntOrNull() ?: 0
-
-                            val existingVilla = appDatabase.villaDao().getVillaByNo(villaNo)
-
-                            if (existingVilla != null) {
-                                // Villa mevcut, güncelle
-                                existingVilla.villaNotes = csvVillaNotes
-                                existingVilla.villaStreet = csvVillaStreet
-                                existingVilla.villaNavigationA = csvVillaNavigationA
-                                existingVilla.villaNavigationB = csvVillaNavigationB
-                                existingVilla.isVillaUnderConstruction = csvIsVillaUnderConstruction
-                                existingVilla.isVillaSpecial = csvIsVillaSpecial
-                                existingVilla.isVillaRental = csvIsVillaRental
-                                existingVilla.isVillaCallFromHome = csvIsVillaCallFromHome
-                                existingVilla.isVillaCallForCargo = csvIsVillaCallForCargo
-                                existingVilla.isVillaEmpty = csvIsVillaEmpty
-                                // villaId ve villaNo değişmez
-                                villasToUpdate.add(existingVilla)
-                            } else {
-                                // Villa yeni, ekle
-                                val newVilla = Villa(
-                                    // villaId = 0, // Otomatik
-                                    villaNo = villaNo,
-                                    villaNotes = csvVillaNotes,
-                                    villaStreet = csvVillaStreet,
-                                    villaNavigationA = csvVillaNavigationA,
-                                    villaNavigationB = csvVillaNavigationB,
-                                    isVillaUnderConstruction = csvIsVillaUnderConstruction,
-                                    isVillaSpecial = csvIsVillaSpecial,
-                                    isVillaRental = csvIsVillaRental,
-                                    isVillaCallFromHome = csvIsVillaCallFromHome,
-                                    isVillaCallForCargo = csvIsVillaCallForCargo,
-                                    isVillaEmpty = csvIsVillaEmpty
-                                )
-                                villasToInsert.add(newVilla)
+                            // Sadece ilk satır için BOM karakterini kontrol et ve temizle
+                            if (isFirstLine) {
+                                if (currentLine.startsWith("\uFEFF")) {
+                                    currentLine = currentLine.substring(1)
+                                    Log.d("MainActivity_CSV", "UTF-8 BOM karakteri bulundu ve temizlendi.")
+                                }
+                                isFirstLine = false // Bayrağı indir, artık diğer satırlar için bu kontrol yapılmayacak
                             }
-                        } catch (e: NumberFormatException) {
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Sayı Formatı Hatası: '$line'. Hata: ${e.message}")
-                        } catch (e: IllegalArgumentException) {
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Veri Hatası: '$line'. Hata: ${e.message}")
-                        } catch (e: Exception) {
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_CSV", "Satır ${index + 1} işlenirken Genel Hata: '$line'. Hata: ${e.message}", e)
+
+                            if (currentLine.isBlank()) {
+                                continue
+                            }
+
+                            try {
+                                val columns = currentLine.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+                                    .map { it.trim().removeSurrounding("\"") }
+
+                                val villaNoStr = columns.getOrNull(0)
+                                val villaNo = villaNoStr?.toIntOrNull()
+                                    ?: throw IllegalArgumentException("VillaNo Hatalı/Eksik: '$villaNoStr'")
+
+                                val csvVillaNotes = columns.getOrNull(1)
+                                val csvVillaStreet = columns.getOrNull(2)
+                                val csvVillaNavigationA = columns.getOrNull(3)
+                                val csvVillaNavigationB = columns.getOrNull(4)
+                                val csvIsVillaUnderConstruction = columns.getOrNull(5)?.toIntOrNull() ?: 0
+                                val csvIsVillaSpecial = columns.getOrNull(6)?.toIntOrNull() ?: 0
+                                val csvIsVillaRental = columns.getOrNull(7)?.toIntOrNull() ?: 0
+                                val csvIsVillaCallFromHome = columns.getOrNull(8)?.toIntOrNull() ?: 0
+                                val csvIsVillaCallForCargo = columns.getOrNull(9)?.toIntOrNull() ?: 0
+                                val csvIsVillaEmpty = columns.getOrNull(10)?.toIntOrNull() ?: 0
+
+                                val existingVilla = appDatabase.villaDao().getVillaByNo(villaNo)
+
+                                if (existingVilla != null) {
+                                    existingVilla.villaNotes = csvVillaNotes
+                                    existingVilla.villaStreet = csvVillaStreet
+                                    existingVilla.villaNavigationA = csvVillaNavigationA
+                                    existingVilla.villaNavigationB = csvVillaNavigationB
+                                    existingVilla.isVillaUnderConstruction = csvIsVillaUnderConstruction
+                                    existingVilla.isVillaSpecial = csvIsVillaSpecial
+                                    existingVilla.isVillaRental = csvIsVillaRental
+                                    existingVilla.isVillaCallFromHome = csvIsVillaCallFromHome
+                                    existingVilla.isVillaCallForCargo = csvIsVillaCallForCargo
+                                    existingVilla.isVillaEmpty = csvIsVillaEmpty
+                                    villasToUpdate.add(existingVilla)
+                                } else {
+                                    val newVilla = Villa(
+                                        villaNo = villaNo,
+                                        villaNotes = csvVillaNotes,
+                                        villaStreet = csvVillaStreet,
+                                        villaNavigationA = csvVillaNavigationA,
+                                        villaNavigationB = csvVillaNavigationB,
+                                        isVillaUnderConstruction = csvIsVillaUnderConstruction,
+                                        isVillaSpecial = csvIsVillaSpecial,
+                                        isVillaRental = csvIsVillaRental,
+                                        isVillaCallFromHome = csvIsVillaCallFromHome,
+                                        isVillaCallForCargo = csvIsVillaCallForCargo,
+                                        isVillaEmpty = csvIsVillaEmpty
+                                    )
+                                    villasToInsert.add(newVilla)
+                                }
+                            } catch (e: Exception) {
+                                hataliSatirSayisi++
+                                Log.e("MainActivity_CSV", "Satır işlenirken Hata: '$line'. Hata: ${e.message}", e)
+                            }
                         }
                     }
-                } ?: run {
-                    Log.e("MainActivity_CSV", "contentResolver.openInputStream(fileUri) null döndü.")
-                    launch(Dispatchers.Main) { showToast("Dosya akışı açılamadı.") }
-                    return@launch
-                }
+                } ?: throw Exception("Dosya akışı açılamadı.")
 
-                // Veritabanı işlemleri
+                // --- VERİTABANI VE SENKRONİZASYON İŞLEMLERİ (DÜZELTİLMİŞ KISIM) ---
+
+                // 1. Yeni villaları ekle ve sunucuya gönder
                 if (villasToInsert.isNotEmpty()) {
-                    val insertResults = appDatabase.villaDao().insertAll(villasToInsert)
-                    eklenenVillaSayisi = insertResults.count { it != -1L } // Başarılı eklemeler (IGNORE stratejisi için)
-                    Log.d("MainActivity_CSV", "$eklenenVillaSayisi yeni villa eklendi.")
+                    Log.d("MainActivity_CSV", "${villasToInsert.size} yeni villa eklenecek ve senkronize edilecek.")
+                    villasToInsert.forEach { villaToInsert ->
+                        // Yerel DB'ye ekle ve Room tarafından üretilen yeni ID'yi al
+                        val newId = appDatabase.villaDao().insert(villaToInsert)
+
+                        // Sunucuya göndermek için ID'si atanmış bir kopya oluştur
+                        val villaToSend = villaToInsert.copy(villaId = newId.toInt())
+
+                        // Sunucuya gönder
+                        (application as SecuAsistApplication).sendUpsert(villaToSend)
+                    }
+                    eklenenVillaSayisi = villasToInsert.size
                 }
 
+                // 2. Mevcut villaları güncelle ve sunucuya gönder
                 if (villasToUpdate.isNotEmpty()) {
+                    Log.d("MainActivity_CSV", "${villasToUpdate.size} mevcut villa güncellenecek ve senkronize edilecek.")
                     villasToUpdate.forEach { villaToUpdate ->
+                        // Yerel DB'de güncelle
                         appDatabase.villaDao().update(villaToUpdate)
+
+                        // Sunucuya gönder
+                        (application as SecuAsistApplication).sendUpsert(villaToUpdate)
                     }
                     guncellenenVillaSayisi = villasToUpdate.size
-                    Log.d("MainActivity_CSV", "$guncellenenVillaSayisi mevcut villa güncellendi.")
                 }
 
+                // 3. Kullanıcıyı bilgilendir
                 launch(Dispatchers.Main) {
+                    // loadingDialog.dismiss()
                     var message = ""
                     if (eklenenVillaSayisi > 0) message += "$eklenenVillaSayisi yeni villa eklendi. "
                     if (guncellenenVillaSayisi > 0) message += "$guncellenenVillaSayisi mevcut villa güncellendi. "
@@ -887,12 +1061,16 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
 
                     showToast(message.trim())
                     Log.d("MainActivity_CSV", "Villa CSV İşlem sonucu: ${message.trim()}")
+
+                    // VillaFragment'taki listeyi yenilemek için bir callback veya event tetiklenebilir.
+                    // villaRefreshCallback?.invoke()
                 }
 
             } catch (e: Exception) {
                 launch(Dispatchers.Main) {
-                    showToast("Dosya okunurken bir hata oluştu: ${e.message}")
-                    Log.e("MainActivity_CSV", "CSV dosyası okunurken genel hata", e)
+                    // loadingDialog.dismiss()
+                    showToast("Dosya işlenirken bir hata oluştu: ${e.message}")
+                    Log.e("MainActivity_CSV", "CSV dosyası işlenirken genel hata", e)
                 }
             }
         }
@@ -1137,6 +1315,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         val dialogBinding = DialogAddEditVillaBinding.inflate(layoutInflater)
         val isEditMode = villaToEdit != null
         Tools(this).blur(arrayOf(dialogBinding.blurWindow), 10f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
 
         val streets = resources.getStringArray(com.serkantken.secuasist.R.array.street_names)
         val streetArrayAdapter = ArrayAdapter(this, R.layout.simple_dropdown_item_1line, streets)
@@ -1200,14 +1387,14 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                     if (isEditMode) {
                         appDatabase.villaDao().update(villa)
                         showToast("Villa ${villa.villaNo} güncellendi.")
-                        sendVillaDataToWebSocket(villa, "update_villa")
+                        (application as SecuAsistApplication).sendUpsert(villa)
                     } else {
                         val existingVilla = appDatabase.villaDao().getVillaByNo(villa.villaNo)
                         if (existingVilla == null) {
                             val newId = appDatabase.villaDao().insert(villa) // insert'in yeni ID'yi döndürdüğünü varsayalım
                             showToast("Villa ${villa.villaNo} eklendi.")
                             val newVillaWithId = villa.copy(villaId = newId.toInt())
-                            sendVillaDataToWebSocket(newVillaWithId, "add_villa")
+                            (application as SecuAsistApplication).sendUpsert(newVillaWithId)
                         } else {
                             showToast("Bu villa numarası zaten mevcut.")
                         }
@@ -1218,7 +1405,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
 
             dialogBinding.btnVillaContacts.setOnClickListener {
                 villaToEdit?.let { showManageVillaContactsDialog(it) }
-                alertDialog.dismiss()
             }
 
             dialogBinding.btnClose.setOnClickListener {
@@ -1233,6 +1419,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     fun showVillaInfoBalloon(villa: Villa) {
         val dialogBinding = LayoutBalloonVillaInfoBinding.inflate(layoutInflater)
         Tools(this).blur(arrayOf(dialogBinding.layoutVillaBalloon), 15f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon_no_blur)
+            } else {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+            }
+        } else {
+            dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_balloon)
+        }
         val dialog = AlertDialog.Builder(this)
             .setView(dialogBinding.root)
             .create()
@@ -1243,7 +1438,9 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             if (villa.villaNotes != null) notesText.text = villa.villaNotes else notesText.visibility = View.GONE
             streetTitle.text = villa.villaStreet
             streetTitle.isSelected = true
-            navigationText.text = villa.villaNavigationA
+            if (Hawk.contains("device_location")) {
+                if (Hawk.get("device_location", "A") == "A") chipGateA.isChecked = true else chipGateB.isChecked = true
+            } else chipGateA.isChecked = true
             cameraText.text = "Bulunamadı"
             chipGroupNavigation.setOnCheckedChangeListener { chipGroupNavigation, chipId ->
                 navigationText.text = when (chipId) {
@@ -1319,6 +1516,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     private fun showManageVillaContactsDialog(villa: Villa) {
         villaContactsBinding = DialogManageVillaContactsBinding.inflate(layoutInflater)
         Tools(this).blur(arrayOf(villaContactsBinding.blur), 10f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                villaContactsBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                villaContactsBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            villaContactsBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
         val dialog = AlertDialog.Builder(this).setView(villaContactsBinding.root).create()
 
         lateinit var draggableAdapter: DraggableContactsAdapter
@@ -1330,6 +1536,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 .setPositiveButton("Evet, Sil") { _, _ ->
                     activityScope.launch(Dispatchers.IO) {
                         appDatabase.villaContactDao().deleteByVillaIdAndContactId(villa.villaId, contact.contactId)
+                        (application as SecuAsistApplication).sendUnlinkVillaContact(villa.villaId, contact.contactId)
 
                         val currentList = draggableAdapter.currentList.toMutableList()
                         currentList.remove(contact)
@@ -1348,6 +1555,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                                     .setPositiveButton("Evet, Tamamen Sil") { _, _ ->
                                         activityScope.launch(Dispatchers.IO) {
                                             appDatabase.contactDao().delete(contact)
+                                            (application as SecuAsistApplication).sendDelete("CONTACT", contact.contactId)
                                             launch(Dispatchers.Main) { showToast("${contact.contactName} sistemden tamamen silindi.") }
                                         }
                                     }
@@ -1411,7 +1619,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 setWidth(BalloonSizeSpec.WRAP)
                 setHeight(BalloonSizeSpec.WRAP)
                 setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                setBalloonAnimation(BalloonAnimation.CIRCULAR)
+                if (Hawk.contains("less_animations")) {
+                    if (Hawk.get<Boolean>("less_animations") == true) {
+                        setBalloonAnimation(BalloonAnimation.NONE)
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
+                } else {
+                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                }
                 setIsVisibleOverlay(true)
                 setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
                 setLifecycleOwner(this@MainActivity)
@@ -1420,6 +1636,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             balloon.showAlignTop(it, 50, it.height+10)
             val blur: BlurView = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.layout_menu_balloon)
             Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
+            if (Hawk.contains("less_blur")) {
+                if (Hawk.get<Boolean>("less_blur") == true) {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+                } else {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+                }
+            } else {
+                blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
             balloon.setOnBalloonDismissListener { it.visibility = View.VISIBLE }
             val newContact: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_new_person)
             val existingContacts: ConstraintLayout = balloon.getContentView().findViewById(com.serkantken.secuasist.R.id.btn_existing_person)
@@ -1469,28 +1694,41 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     private fun linkContactToVilla(contact: Contact, villaId: Int, onComplete: () -> Unit) {
-        activityScope.launch {
-            // İlişkinin daha önce var olup olmadığını kontrol et
-            val existingRelation = appDatabase.villaContactDao().getVillaContact(
-                villaId, contact.contactId,
-                contactType = "Diğer"
-            )
-            if (existingRelation != null) {
-                showToast("${contact.contactName} zaten bu villa ile ilişkili.")
-            } else {
-                val newRelation = VillaContact(
-                    villaId = villaId,
-                    contactId = contact.contactId,
-                    isRealOwner = false, // Varsayılan değerler
-                    contactType = "Diğer",
-                    notes = null,
-                    orderIndex = 999 // Yeni eklenenler sona gitsin diye yüksek bir değer
-            )
-                appDatabase.villaContactDao().insert(newRelation)
-                showToast("${contact.contactName} villaya eklendi.")
-                sendVillaContactAddToWebSocket(newRelation)
+        activityScope.launch(Dispatchers.IO) {
+            try {
+                // Önce bu ilişkinin veritabanında zaten var olup olmadığını kontrol et
+                val existingRelation = appDatabase.villaContactDao().getVillaContact(villaId, contact.contactId, "Diğer")
+
+                if (existingRelation == null) {
+                    // Yeni bir ilişki nesnesi oluştur. 'orderIndex' için o villadaki mevcut kişi sayısını kullanabiliriz.
+                    val newOrderIndex = appDatabase.villaContactDao().getVillaContactRelations(villaId).size
+                    val newVillaRelation = VillaContact(
+                        villaId = villaId,
+                        contactId = contact.contactId,
+                        contactType = "Diğer", // Varsayılan bir tip
+                        isRealOwner = false, // Varsayılan
+                        notes = null,
+                        orderIndex = newOrderIndex
+                    )
+
+                    // 1. Yerel veritabanına ekle
+                    appDatabase.villaContactDao().insert(newVillaRelation)
+                    Log.i("MainActivityContacts", "Linked contact ${contact.contactId} to villa $villaId locally.")
+
+                    // 2. Sunucuya senkronize et
+                    (application as SecuAsistApplication).sendUpsert(newVillaRelation)
+                    Log.i("MainActivityContacts", "Sent link-relation to server for contact ${contact.contactId} and villa $villaId.")
+
+                } else {
+                    Log.i("MainActivityContacts", "Contact ${contact.contactId} is already linked to villa $villaId. Skipping.")
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivityContacts", "Error in linkContactToVilla for contact ${contact.contactId} and villa $villaId: ${e.message}", e)
+            } finally {
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
             }
-            onComplete() // İşlem bittiğinde çağrılacak (diyaloğu kapatmak için)
         }
     }
 
@@ -1536,7 +1774,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 setWidth(BalloonSizeSpec.WRAP)
                 setHeight(BalloonSizeSpec.WRAP)
                 setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                setBalloonAnimation(BalloonAnimation.CIRCULAR)
+                if (Hawk.contains("less_animations")) {
+                    if (Hawk.get<Boolean>("less_animations") == true) {
+                        setBalloonAnimation(BalloonAnimation.NONE)
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
+                } else {
+                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                }
                 setIsVisibleOverlay(true)
                 setOverlayShape(BalloonOverlayRoundRect(12f, 12f))
                 setLifecycleOwner(this@MainActivity)
@@ -1586,6 +1832,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     private fun showExistingContactsSelectionDialog(villaIdToAssociate: Int) {
         val dialogBinding = DialogSelectContactBinding.inflate(layoutInflater)
         Tools(this).blur(arrayOf(dialogBinding.blur), 15f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
         val dialog = AlertDialog.Builder(this)
             .setView(dialogBinding.root)
             .create()
@@ -1662,6 +1917,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             .create()
 
         Tools(this).blur(arrayOf(dialogBinding.blur), 15f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                dialogBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            dialogBinding.blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
 
         dialogBinding.windowTitle.text = dialogTitle
         dialogBinding.titleSave.text = positiveButtonText
@@ -1677,6 +1941,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                     setHeight(BalloonSizeSpec.WRAP)
                     setTextSize(15f)
                     autoDismissDuration = 3000
+                    if (Hawk.contains("less_animations")) {
+                        if (Hawk.get<Boolean>("less_animations") == true) {
+                            setBalloonAnimation(BalloonAnimation.NONE)
+                        } else {
+                            setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                        }
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
                     build()
                 }
                 balloon.showAlignBottom(dialogBinding.btnSave)
@@ -1692,7 +1965,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         )
                         appDatabase.contactDao().update(updatedContact)
                         showToast("Kişi ${updatedContact.contactName} güncellendi.")
-                        sendContactAddOrUpdateToWebSocket(updatedContact) // Bu fonksiyonun UPDATE için ayrı bir type göndermesi gerekebilir
+                        (application as SecuAsistApplication).sendUpsert(updatedContact)
                         alertDialog.dismiss()
                     }
                 } else {
@@ -1735,8 +2008,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         if (insertedContactId > 0) {
                             val createdContact = newContact.copy(contactId = insertedContactId.toInt())
                             showToast("Yeni kişi ${createdContact.contactName} oluşturuldu.")
-                            sendContactAddOrUpdateToWebSocket(createdContact) // ADD type ile gitmeli
-
+                            (application as SecuAsistApplication).sendUpsert(createdContact)
                             villaIdForAssociation?.let { villaId ->
                                 linkContactToVilla(createdContact, villaId)
                             }
@@ -1762,27 +2034,16 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             if (existingRelation != null) {
                 showToast("${contact.contactName} zaten Villa $villaId ile ilişkili.")
             } else {
-                // TODO: VillaContact için diğer detayları (isRealOwner, contactType, notes) kullanıcıdan almak üzere
-                //       ayrı bir diyalog açılabilir veya varsayılan değerler kullanılabilir.
-                //       Şimdilik varsayılan/null değerler kullanılıyor.
                 val villaContact = VillaContact(
                     villaId = villaId,
                     contactId = contact.contactId,
-                    isRealOwner = false, // Varsayılan
-                    contactType = "Diğer", // Varsayılan
+                    isRealOwner = false,
+                    contactType = "Diğer",
                     notes = null
                 )
                 appDatabase.villaContactDao().insert(villaContact)
                 showToast("${contact.contactName} başarıyla Villa $villaId için eklendi.")
-                sendVillaContactAddToWebSocket(
-                    VillaContact(
-                        villaId,
-                        contact.contactId,
-                        villaContact.isRealOwner,
-                        villaContact.contactType,
-                        villaContact.notes
-                    )
-                )
+                (application as SecuAsistApplication).sendUpsert(villaContact)
             }
         }
     }
@@ -1791,6 +2052,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         val dialogBinding = DialogAddEditCargoCompanyBinding.inflate(layoutInflater)
         val isEditMode = companyToEdit != null
         Tools(this).blur(arrayOf(dialogBinding.blurWindow), 10f, true)
+        if (Hawk.contains("less_blur")) {
+            if (Hawk.get<Boolean>("less_blur") == true) {
+                dialogBinding.blurWindow.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+            } else {
+                dialogBinding.blurWindow.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
+        } else {
+            dialogBinding.blurWindow.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+        }
 
         if (isEditMode) {
             dialogBinding.windowTitle.text = "Kargo Şirketini Düzenle"
@@ -1819,7 +2089,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         val updatedCompany = companyToEdit.copy(companyName = companyName)
                         appDatabase.cargoCompanyDao().update(updatedCompany) // cargoDao'da update fonksiyonunuz olmalı
                         showToast("${updatedCompany.companyName} güncellendi.")
-                        sendCargoCompanyAddOrUpdateToWebSocket(updatedCompany)
+                        (application as SecuAsistApplication).sendUpsert(updatedCompany)
                     } else {
                         // CargoCompany modelinizde companyId'nin autoGenerate olduğunu varsayıyorum.
                         // Bu yüzden önce DB'ye ekleyip ID'sini alıyoruz.
@@ -1831,7 +2101,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         if (newGeneratedId > 0) {
                             val newCompanyWithId = tempNewCompany.copy(companyId = newGeneratedId.toInt())
                             showToast("$companyName eklendi (ID: ${newCompanyWithId.companyId}).")
-                            sendCargoCompanyAddOrUpdateToWebSocket(newCompanyWithId)
+                            (application as SecuAsistApplication).sendUpsert(newCompanyWithId)
                         } else {
                             showToast("Veritabanına eklenirken hata oluştu.")
                         }
@@ -1854,89 +2124,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         // }
 
         alertDialog.show()
-    }
-
-    private fun sendVillaDataToWebSocket(villa: Villa, type: String) {
-        val villaDto = VillaDto(
-            // ID'yi sadece güncelleme ve silme için gönderiyoruz,
-            // yeni eklemede sunucunun ID ataması daha doğru bir pratik olabilir
-            // ama mevcut sistemimizde ID'yi istemciden gönderiyoruz.
-            villaId = if (villa.villaId > 0) villa.villaId else null,
-            villaNo = villa.villaNo,
-            villaNotes = villa.villaNotes,
-            villaStreet = villa.villaStreet,
-            villaNavigationA = villa.villaNavigationA,
-            villaNavigationB = villa.villaNavigationB,
-            isVillaUnderConstruction = villa.isVillaUnderConstruction,
-            isVillaSpecial = villa.isVillaSpecial,
-            isVillaRental = villa.isVillaRental,
-            isVillaCallFromHome = villa.isVillaCallFromHome,
-            isVillaCallForCargo = villa.isVillaCallForCargo,
-            isVillaEmpty = villa.isVillaEmpty
-        )
-        val message = gson.toJson(WebSocketMessage(type = type, data = villaDto))
-        webSocketClient.sendMessage(message)
-    }
-
-    private fun sendContactAddOrUpdateToWebSocket(contact: Contact) {
-        val type = if (contact.contactId > 0) "update_contact" else "add_contact"
-        val contactDto = ContactDto(
-            contactId = if (contact.contactId > 0) contact.contactId else null,
-            contactName = contact.contactName,
-            contactPhone = contact.contactPhone
-        )
-        val message = gson.toJson(WebSocketMessage(type = type, data = contactDto))
-        webSocketClient.sendMessage(message)
-    }
-
-    fun sendContactDeleteToWebSocket(contactId: Int) {
-        if (!webSocketClient.isConnected()) {
-            showToast("WebSocket bağlantısı yok. Silme işlemi sunucuya iletilemedi.")
-            return
-        }
-        val contactDeleteDto = ContactDto(contactId = contactId, contactName = null, contactPhone = null)
-        val webSocketMessage = WebSocketMessage(
-            type = "delete_contact",
-            data = gson.toJson(contactDeleteDto) // DTO'yu JSON string'ine çeviriyoruz
-        )
-        // WebSocketMessage nesnesinin tamamını JSON string'ine çeviriyoruz
-        val messageToSend = gson.toJson(webSocketMessage)
-        webSocketClient.sendMessage(messageToSend)
-        // showToast("Kişi silme bilgisi sunucuya gönderildi: ID $contactId") // İsteğe bağlı: Başarılı gönderim mesajı
-    }
-
-    private fun sendVillaContactAddToWebSocket(villaContact: VillaContact) {
-        val vcDto = VillaContactDto(
-            villaId = villaContact.villaId,
-            contactId = villaContact.contactId,
-            isRealOwner = villaContact.isRealOwner,
-            contactType = villaContact.contactType,
-            notes = villaContact.notes
-        )
-        val message = gson.toJson(WebSocketMessage(type = "add_villacontact", data = vcDto))
-        webSocketClient.sendMessage(message)
-    }
-
-    private fun sendVillaContactDeleteToWebSocket(villaId: Int, contactId: Int) {
-        val deleteDto = VillaContactDeleteDto(villaId = villaId, contactId = contactId)
-        val message = gson.toJson(WebSocketMessage(type = "delete_villacontact", data = deleteDto))
-        webSocketClient.sendMessage(message)
-    }
-
-    private fun sendCargoCompanyAddOrUpdateToWebSocket(company: CargoCompany) {
-        val type = if (company.companyId > 0) "update_cargo_company" else "add_cargo_company"
-        val dto = CargoCompanyDto(
-            companyId = if (company.companyId > 0) company.companyId else null,
-            companyName = company.companyName
-        )
-        val message = gson.toJson(WebSocketMessage(dto, type))
-        webSocketClient.sendMessage(message)
-    }
-
-    private fun sendCargoCompanyDeleteToWebSocket(companyId: Int) {
-        val dto = CargoCompanyDto(companyId = companyId, companyName = null)
-        val message = gson.toJson(WebSocketMessage(dto,"delete_cargo_company" ))
-        webSocketClient.sendMessage(message)
     }
 
     private val requestContactsPermissionLauncher =
@@ -2114,7 +2301,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                         }
                         // else: İsim, villa numarası kalıbıyla başlamıyorsa, detectedVillaIdsForCurrentContact boş kalacak.
 
-                        val newAppContact = com.serkantken.secuasist.models.Contact(
+                        val newAppContact = Contact(
                             contactName = displayName,
                             contactPhone = selectedPhoneNumber,
                             lastCallTimestamp = null
@@ -2147,9 +2334,19 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         if (processedContactsForDb.isNotEmpty()) {
             val contactsOnlyToInsert = processedContactsForDb.map { it.first }
             try {
-                appDatabase.contactDao().insertAll(contactsOnlyToInsert)
-                successfullyInsertedNewContactCount = contactsOnlyToInsert.size
-                Log.d("MainActivityContacts", "Successfully inserted $successfullyInsertedNewContactCount new contacts into Contacts table.")
+                // Room'un insertAll metodu, eklenen satırların ID'lerini bir liste olarak döndürür.
+                val insertedIds = appDatabase.contactDao().insertAll(contactsOnlyToInsert)
+                successfullyInsertedNewContactCount = insertedIds.size
+                Log.d("MainActivityContacts", "Successfully inserted $successfullyInsertedNewContactCount new contacts into Local DB.")
+
+                // YENİ VE KRİTİK KISIM: Eklenen kişileri sunucuya gönder
+                insertedIds.forEachIndexed { index, newId ->
+                    // Orijinal nesneyi alıp, yeni ID'si ile bir kopyasını oluştur.
+                    val originalContactData = contactsOnlyToInsert[index]
+                    val contactToSend = originalContactData.copy(contactId = newId.toInt())
+                    (application as SecuAsistApplication).sendUpsert(contactToSend)
+                    Log.d("MainActivityContacts", "Syncing new contact to server: ${contactToSend.contactName}")
+                }
             } catch (e: Exception) {
                 Log.e("MainActivityContacts", "Error inserting contacts to DB: ${e.message}", e)
                 // Hata durumunda, başarılı sayısını ve sonraki adımları gözden geçirmek gerekebilir.
@@ -2166,14 +2363,12 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                     // DB'ye yeni eklenen Contact nesnesini (artık contactId'si var) telefon numarasıyla çek
                     val contactFromDb = appDatabase.contactDao().getContactByPhoneNumber(contactDataFromPair.contactPhone!!)
                     if (contactFromDb != null) {
-                        for (villaIdToLink in villaIdListFromPair) {
-                            try {
+                        if (villaIdListFromPair.isNotEmpty()) {
+                            for (villaIdToLink in villaIdListFromPair) {
                                 linkContactToVilla(contactFromDb, villaIdToLink) {
                                     Log.d("MainActivityContacts", "Villa linking process callback for contact ${contactFromDb.contactId} to villa $villaIdToLink.")
                                 }
-                                successfullyLinkedToVillaAttemptCount++ // Her başarılı linkleme çağrısını say
-                            } catch (e: Exception) {
-                                Log.e("MainActivityContacts", "Error initiating link for contact ${contactFromDb.contactId} to villa $villaIdToLink: ${e.message}", e)
+                                successfullyLinkedToVillaAttemptCount++
                             }
                         }
                     } else {
@@ -2201,6 +2396,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                     .create()
             }
             Tools(this@MainActivity).blur(arrayOf(layoutDialogLoadingBinding.blurPopup), 10f, true)
+            if (Hawk.contains("less_blur")) {
+                if (Hawk.get<Boolean>("less_blur") == true) {
+                    layoutDialogLoadingBinding.blurPopup.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
+                } else {
+                    layoutDialogLoadingBinding.blurPopup.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+                }
+            } else {
+                layoutDialogLoadingBinding.blurPopup.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
+            }
             layoutDialogLoadingBinding.titleLoading.text = "Lütfen Bekleyin"
             layoutDialogLoadingBinding.labelLoading.text = "Rehber okunuyor..."
             progressDialog?.window?.setBackgroundDrawableResource(R.color.transparent)
@@ -2288,7 +2492,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 }
             }
 
-            val newAppContact = com.serkantken.secuasist.models.Contact(
+            val newAppContact = Contact(
                 contactName = finalContactName,
                 contactPhone = selectedPhoneNumber.replace("\\s".toRegex(), ""),
                 lastCallTimestamp = null
@@ -2354,6 +2558,11 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         activityScopeJob = null
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(notificationUpdateReceiver)
+    }
+
     fun showToast(message: String) {
         binding.textMessage.text = message
         binding.blurMessage.visibility = View.VISIBLE
@@ -2373,6 +2582,15 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             setHeight(BalloonSizeSpec.WRAP)
             setTextSize(15f)
             autoDismissDuration = 3000
+            if (Hawk.contains("less_animations")) {
+                if (Hawk.get<Boolean>("less_animations") == true) {
+                    setBalloonAnimation(BalloonAnimation.NONE)
+                } else {
+                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                }
+            } else {
+                setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+            }
             build()
         }
         when (location) {

@@ -7,10 +7,13 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.badge.ExperimentalBadgeUtils
+import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.R
 import com.serkantken.secuasist.databinding.ItemMainTabBinding
 import com.serkantken.secuasist.views.activities.MainActivity
 
+@ExperimentalBadgeUtils
 class MainTabsAdapter(
     private val onItemClicked: (MainActivity.MainTab) -> Unit
 ) : ListAdapter<MainActivity.MainTab, MainTabsAdapter.TabViewHolder>(TabDiffCallback()) {
@@ -30,7 +33,7 @@ class MainTabsAdapter(
         currentList.forEachIndexed { index, tab ->
             tab.isSelected = index == position
         }
-        notifyDataSetChanged() // Basitlik için, daha performanslı update'ler de düşünülebilir
+        notifyDataSetChanged()
     }
 
     inner class TabViewHolder(private val binding: ItemMainTabBinding) :
@@ -42,14 +45,20 @@ class MainTabsAdapter(
             if (tab.id == 2 && tab.hasNotification) binding.ivPendingCargoIndicator.visibility = View.VISIBLE else binding.ivPendingCargoIndicator.visibility = View.GONE
 
             if (tab.isSelected) {
-                binding.root.setBackgroundResource(R.drawable.background_blur) // Seçili arka plan
-                // İsteğe bağlı: Seçili ikon ve metin rengini de değiştirebilirsiniz
-                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.colorSecondary)) // Örneğin
+                if (Hawk.contains("less_blur")) {
+                    if (Hawk.get<Boolean>("less_blur") == true) {
+                        binding.root.setBackgroundResource(R.drawable.background_no_blur)
+                    } else {
+                        binding.root.setBackgroundResource(R.drawable.background_blur)
+                    }
+                } else {
+                    binding.root.setBackgroundResource(R.drawable.background_blur)
+                }
+                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.colorSecondary))
                 binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.colorSecondary))
             } else {
-                binding.root.background = null // Seçili olmayan için arka planı kaldır
-                // İsteğe bağlı: Seçili olmayan ikon ve metin rengini varsayılana döndür
-                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.white)) // Örneğin
+                binding.root.background = null
+                binding.ivTabIcon.setColorFilter(ContextCompat.getColor(itemView.context, R.color.white))
                 binding.tvTabTitle.setTextColor(ContextCompat.getColor(itemView.context, R.color.white))
             }
 

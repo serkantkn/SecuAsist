@@ -34,6 +34,9 @@ interface ContactDao {
     @Query("SELECT * FROM Contacts WHERE contactId IN (:contactIds)")
     suspend fun getContactsByIds(contactIds: List<Int>): List<Contact>
 
+    @Query("SELECT * FROM Contacts WHERE contactId IN (:contactIds)")
+    fun getContactsByIdsAsFlow(contactIds: List<Int>): Flow<List<Contact>>
+
     @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
     fun getAllContactsAsList(): List<Contact>
 

@@ -41,6 +41,9 @@ interface VillaDao {
     @Query("SELECT * FROM Villas WHERE villaId IN (:villaIds)")
     suspend fun getVillasByIds(villaIds: List<Int>): List<Villa>
 
+    @Query("SELECT * FROM Villas WHERE villaId IN (:villaIds)")
+    fun getVillasByIdsAsFlow(villaIds: List<Int>): Flow<List<Villa>>
+
     @Query("SELECT * FROM Villas WHERE villaNo = :villaNo LIMIT 1")
     suspend fun getVillaByNo(villaNo: Int): Villa?
 

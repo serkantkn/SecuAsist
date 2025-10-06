@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.badge.ExperimentalBadgeUtils
 import com.serkantken.secuasist.R
 import com.serkantken.secuasist.SecuAsistApplication
 import com.serkantken.secuasist.adapters.AvailableVillasAdapter
@@ -53,6 +54,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 
+@ExperimentalBadgeUtils
 class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListener {
 
     private var _binding: FragmentCargoBinding? = null
@@ -308,7 +310,6 @@ class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListen
 
             lifecycleScope.launch {
                 val newCargoIds = mutableListOf<Int>()
-                val webSocketClient = (activity?.application as? SecuAsistApplication)?.webSocketClient
                 selectedVillas.forEach { selectableVilla ->
                     val cargo = Cargo(
                         companyId = companyId,
@@ -323,8 +324,9 @@ class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListen
                     )
                     try {
                         val insertedId = appDatabase.cargoDao().insert(cargo)
+                        val newCargoToSend = cargo.copy(cargoId = insertedId.toInt())
+                        (activity?.application as? SecuAsistApplication)?.sendUpsert(newCargoToSend)
                         newCargoIds.add(insertedId.toInt())
-                        // WebSocket gönderme...
                     } catch (e: Exception) {
                         Log.e("SelectRecipientsDialog", "Kargo ekleme hatası", e)
                     }
