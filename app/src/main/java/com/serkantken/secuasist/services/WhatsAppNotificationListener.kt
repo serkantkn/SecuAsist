@@ -5,7 +5,6 @@ import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.app.NotificationCompat.FLAG_GROUP_SUMMARY
 import com.orhanobut.hawk.Hawk
 
 class WhatsAppNotificationListener : NotificationListenerService() {
@@ -13,9 +12,9 @@ class WhatsAppNotificationListener : NotificationListenerService() {
     private val TAG = "WhatsAppListener"
     private val WHATSAPP_PACKAGE_NAME = "com.whatsapp"
 
-    // Hawk'ta durumu saklamak için kullanacağımız anahtar
     companion object {
         const val HAWK_KEY_HAS_UNREAD_WHATSAPP = "has_unread_whatsapp"
+        const val ACTION_NOTIFICATION_UPDATE = "com.serkantken.secuasist.WHATSAPP_NOTIFICATION_UPDATE"
     }
 
     override fun onCreate() {
@@ -23,27 +22,42 @@ class WhatsAppNotificationListener : NotificationListenerService() {
         if (!Hawk.isBuilt()) {
             Hawk.init(this).build()
         }
-        Log.d(TAG, "WhatsAppNotificationListener servisi oluşturuldu.")
+        Log.d(TAG, "onCreate: Servis oluşturuldu.")
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d(TAG, "Bildirim dinleyici bağlandı.")
-        // Servis bağlandığında, mevcut aktif bildirimleri kontrol et
+        // Bu logu görüyorsan, kullanıcı izni vermiş ve servis sisteme bağlanmış demektir.
+        Log.i(TAG, "onListenerConnected: Bildirim dinleyici sisteme başarıyla bağlandı.")
         checkForActiveWhatsAppNotifications()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        // Bu log, bir sorun olduğunu veya iznin geri alındığını gösterebilir.
+        Log.w(TAG, "onListenerDisconnected: Bildirim dinleyici bağlantısı kesildi.")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
 
-        // Bildirim WhatsApp'tan mı geldi?
+        // Sadece WhatsApp'tan gelen bildirimlerle ilgilen
         if (sbn.packageName == WHATSAPP_PACKAGE_NAME) {
-            // ÖNEMLİ: WhatsApp'ın grup mesajları veya "mesajlar kontrol ediliyor" gibi
-            // bildirimlerini filtrelememiz gerekir. Gerçek mesaj bildirimleri genellikle
-            // Notification.FLAG_GROUP_SUMMARY bayrağını içermez.
-            if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0) {
-                Log.d(TAG, "Yeni WhatsApp mesaj bildirimi algılandı.")
+            val notification = sbn.notification
+            val isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+
+            // Gelen her WhatsApp bildiriminin detaylarını loglayalım
+            Log.d(TAG, "onNotificationPosted: WhatsApp bildirimi geldi. " +
+                    "ID: ${sbn.id}, " +
+                    "Özet mi?: $isGroupSummary, " +
+                    "Kategori: ${notification.category}, " +
+                    "Başlık: ${notification.extras.getString(Notification.EXTRA_TITLE)}")
+
+            // Eğer bu bir grup özeti değilse (yani tek bir sohbetten gelen mesaj gibi görünüyorsa),
+            // durumu "okunmamış var" olarak güncelle.
+            if (!isGroupSummary) {
+                Log.i(TAG, "onNotificationPosted: Gerçek bir mesaj bildirimi tespit edildi. Durum güncelleniyor.")
                 updateUnreadStatus(true)
             }
         }
@@ -54,45 +68,43 @@ class WhatsAppNotificationListener : NotificationListenerService() {
         if (sbn == null) return
 
         if (sbn.packageName == WHATSAPP_PACKAGE_NAME) {
-            Log.d(TAG, "Bir WhatsApp bildirimi kaldırıldı.")
-            // Bir bildirim kaldırıldığında, hala başka okunmamış WhatsApp bildirimi var mı diye tekrar kontrol et.
+            Log.d(TAG, "onNotificationRemoved: Bir WhatsApp bildirimi kaldırıldı. Aktif bildirimler tekrar kontrol ediliyor.")
+            // Bir bildirim (okundu, kaydırıldı vb.) kaldırıldığında,
+            // hala başka okunmamış WhatsApp bildirimi var mı diye tekrar kontrol et.
             checkForActiveWhatsAppNotifications()
         }
     }
 
     private fun checkForActiveWhatsAppNotifications() {
         try {
-            // Aktif bildirimler listesini al
-            val activeNotifications = activeNotifications
-            if (activeNotifications == null) {
+            val activeNotifications = activeNotifications ?: run {
+                Log.d(TAG, "checkForActiveWhatsAppNotifications: Aktif bildirim listesi null. Durum 'false' olarak ayarlanıyor.")
                 updateUnreadStatus(false)
                 return
             }
 
-            // WhatsApp'tan gelen ve özet olmayan (gerçek mesaj) bir bildirim var mı diye kontrol et
             val hasUnread = activeNotifications.any {
-                it.packageName == WHATSAPP_PACKAGE_NAME && (it.notification.flags and FLAG_GROUP_SUMMARY == 0)
+                it.packageName == WHATSAPP_PACKAGE_NAME && (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0
             }
 
-            Log.d(TAG, "Aktif WhatsApp bildirimi kontrolü. Sonuç: $hasUnread")
+            Log.d(TAG, "checkForActiveWhatsAppNotifications: Aktif bildirim kontrolü tamamlandı. Sonuç: $hasUnread")
             updateUnreadStatus(hasUnread)
 
         } catch (e: Exception) {
             Log.e(TAG, "Aktif bildirimler kontrol edilirken hata oluştu", e)
-            // Hata durumunda durumu false yapabiliriz.
             updateUnreadStatus(false)
         }
     }
 
     private fun updateUnreadStatus(hasUnread: Boolean) {
-        // Durumu Hawk'a kaydet. Sadece durum değiştiyse işlem yap.
         val oldStatus = Hawk.get(HAWK_KEY_HAS_UNREAD_WHATSAPP, false)
         if (oldStatus != hasUnread) {
             Hawk.put(HAWK_KEY_HAS_UNREAD_WHATSAPP, hasUnread)
-            Log.i(TAG, "WhatsApp okunmamış durumu değişti: $hasUnread. MainActivity'e haber verilecek.")
-
-            val intent = Intent("com.serkantken.secuasist.WHATSAPP_NOTIFICATION_UPDATE")
-            sendBroadcast(intent)
+            // Bu logu görüyorsan, durum değişmiş ve MainActivity'e haber gönderiliyor demektir.
+            Log.i(TAG, "updateUnreadStatus: WhatsApp okunmamış durumu değişti -> $hasUnread. Broadcast gönderiliyor.")
+            sendBroadcast(Intent(ACTION_NOTIFICATION_UPDATE))
+        } else {
+            Log.d(TAG, "updateUnreadStatus: Durum değişmedi (hala $hasUnread), broadcast gönderilmiyor.")
         }
     }
 }

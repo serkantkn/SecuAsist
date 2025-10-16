@@ -21,15 +21,20 @@ class Tools(private val activity: Activity) {
             val decorView: View = activity.window.decorView
             val rootView = decorView.findViewById<ViewGroup>(R.id.content)
             val windowBackground = decorView.background
+            Hawk.init(activity).build()
 
             view.setupWith(rootView, RenderScriptBlur(activity))
                 .setFrameClearDrawable(windowBackground)
                 .setBlurRadius(radius)
                 .setBlurAutoUpdate(true)
-            if (Hawk.contains("less_blur") && Hawk.get<Boolean>("less_blur") == false) {
-                view.setBlurEnabled(true)
+            if (Hawk.contains("enable_blur")) {
+                if (Hawk.get<Boolean>("enable_blur") == true) {
+                    view.setBlurEnabled(true)
+                } else {
+                    view.setBlurEnabled(false)
+                }
             } else {
-                view.setBlurEnabled(false)
+                view.setBlurEnabled(true)
             }
             if (isRounded) {
                 view.outlineProvider = ViewOutlineProvider.BACKGROUND

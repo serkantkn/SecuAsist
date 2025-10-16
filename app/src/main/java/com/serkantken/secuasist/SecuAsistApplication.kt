@@ -1,7 +1,9 @@
 package com.serkantken.secuasist
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
+import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
@@ -17,7 +19,13 @@ import com.serkantken.secuasist.network.WebSocketClient
 import com.serkantken.secuasist.utils.VillaContactDeserializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlin.text.get
 
 // Gelen mesajın önce tipini anlamak için kullanılacak basit bir veri sınıfı
 data class BaseWebSocketMessage(val type: String, val payload: JsonElement)
@@ -36,10 +44,7 @@ class SecuAsistApplication : Application() {
             Log.i("SecuAsistApplication", "Hawk'tan okunan IP kullanılıyor: $savedIp")
             savedIp
         }
-        WebSocketClient(serverIpToUse, 8765, // Port 8765
-            onMessageReceived = { messageText ->
-                processIncomingWebSocketMessage(messageText)
-            })
+        WebSocketClient(serverIpToUse, 8765)
     }
 
     val database: AppDatabase by lazy {
@@ -55,10 +60,12 @@ class SecuAsistApplication : Application() {
 
     // Uygulama genelinde arka plan işlemleri için CoroutineScope
     private val applicationScope = CoroutineScope(Dispatchers.IO)
+    private var uiUpdateDebounceJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         Hawk.init(this).build()
+        initWebSocketListener()
         Log.d("SecuAsistApplication", "Uygulama başlatıldı, WebSocket bağlanıyor...")
         webSocketClient.connect() // WebSocket bağlantısını başlat
     }
@@ -66,68 +73,91 @@ class SecuAsistApplication : Application() {
     override fun onTerminate() {
         super.onTerminate()
         Log.d("SecuAsistApplication", "Uygulama sonlandırılıyor, WebSocket bağlantısı kesiliyor...")
+        uiUpdateDebounceJob?.cancel()
         webSocketClient.disconnect()
+    }
+
+    private fun initWebSocketListener() {
+        Log.d("SecuAsistApplication", "WebSocket mesaj dinleyicisi başlatılıyor.")
+        webSocketClient.incomingMessages
+            .onEach { messageText ->
+                // Bu blok, her yeni mesaj geldiğinde sıralı olarak çalışır
+                processIncomingWebSocketMessage(messageText)
+            }
+            .catch { e ->
+                Log.e("SecuAsistApplication", "Mesaj akışını dinlerken hata oluştu.", e)
+            }
+            .launchIn(applicationScope) // Bu Flow'u uygulama ömrü boyunca dinle
     }
 
     /**
      * Sunucudan gelen tüm WebSocket mesajlarını işleyen ana fonksiyon.
      */
-    private fun processIncomingWebSocketMessage(jsonMessage: String) {try {
-        val baseMessage = gson.fromJson(jsonMessage, BaseWebSocketMessage::class.java)
-        Log.d("WebSocketProcessing", "Gelen Mesaj Tipi: ${baseMessage.type}")
 
-        applicationScope.launch {
-            when (baseMessage.type) {
-                "VILLA_UPSERT" -> {
-                    val villa = gson.fromJson(baseMessage.payload, Villa::class.java)
-                    database.villaDao().insert(villa)
-                    Log.i("WebSocketProcessing", "Villa güncellendi/eklendi: ID ${villa.villaId}")
-                }
-                "CONTACT_UPSERT" -> {
-                    val contact = gson.fromJson(baseMessage.payload, Contact::class.java)
-                    database.contactDao().insert(contact)
-                    Log.i("WebSocketProcessing", "Kişi güncellendi/eklendi: ID ${contact.contactId}")
-                }
-                "VILLACONTACT_LINK" -> {
-                    val villaContact = gson.fromJson(baseMessage.payload, VillaContact::class.java)
-                    database.villaContactDao().insert(villaContact)
-                    Log.i("WebSocketProcessing", "Villa-Kişi ilişkisi güncellendi/eklendi: VillaID ${villaContact.villaId}, ContactID ${villaContact.contactId}")
-                }
-                "CARGOCOMPANY_UPSERT" -> {
-                    val cargoCompany = gson.fromJson(baseMessage.payload, CargoCompany::class.java)
-                    database.cargoCompanyDao().insert(cargoCompany)
-                    Log.i("WebSocketProcessing", "Kargo Şirketi güncellendi/eklendi: ID ${cargoCompany.companyId}")
-                }
-                "CARGO_UPSERT" -> {
-                    val cargo = gson.fromJson(baseMessage.payload, Cargo::class.java)
-                    database.cargoDao().insert(cargo)
-                    Log.i("WebSocketProcessing", "Kargo güncellendi/eklendi: ID ${cargo.cargoId}")
-                }
-                "VILLA_DELETE" -> {
-                    val villaId = baseMessage.payload.asJsonObject.get("villaId").asInt
-                    database.villaDao().deleteById(villaId)
-                    Log.i("WebSocketProcessing", "Villa silindi: ID $villaId")
-                }
-                "CONTACT_DELETE" -> {
-                    val contactId = baseMessage.payload.asJsonObject.get("contactId").asInt
-                    database.contactDao().deleteById(contactId) // Dao'da bu metod olmalı
-                    Log.i("WebSocketProcessing", "Kişi silindi: ID $contactId")
-                }
-                "VILLACONTACT_UNLINK" -> {
-                    val payload = baseMessage.payload.asJsonObject
-                    val villaId = payload.get("villaId").asInt
-                    val contactId = payload.get("contactId").asInt
-                    database.villaContactDao().deleteByVillaIdAndContactId(villaId, contactId) // Dao'da bu metod olmalı
-                    Log.i("WebSocketProcessing", "Villa-Kişi ilişkisi silindi: VillaID $villaId, ContactID $contactId")
-                }
-                else -> {
-                    Log.w("WebSocketProcessing", "Bilinmeyen mesaj tipi alındı: ${baseMessage.type}")
+    private suspend fun processIncomingWebSocketMessage(jsonMessage: String) {
+        try {
+            if (!jsonMessage.startsWith("{")) {
+                Log.d("WebSocketProcessing", "Statü mesajı alındı, işlenmiyor: $jsonMessage")
+                return
+            }
+
+            val baseMessage = gson.fromJson(jsonMessage, BaseWebSocketMessage::class.java)
+            Log.d("WebSocketProcessing", "İşlem Başladı: ${baseMessage.type}")
+
+            var isDataChanged = false
+            database.withTransaction {
+                when (baseMessage.type) {
+                    "VILLA_UPSERT" -> {
+                        val villa = gson.fromJson(baseMessage.payload, Villa::class.java)
+                        val existing = database.villaDao().getVillaById(villa.villaId)
+                        if (existing == null) database.villaDao().insert(villa)
+                        else database.villaDao().update(villa)
+                        isDataChanged = true
+                    }
+                    "CONTACT_UPSERT" -> {
+                        val contact = gson.fromJson(baseMessage.payload, Contact::class.java)
+                        val existing = database.contactDao().getContactById(contact.contactId)
+                        if (existing == null) database.contactDao().insert(contact)
+                        else database.contactDao().update(contact)
+                        isDataChanged = true
+                    }
+                    // İlişki ve diğer tablolarda REPLACE kullanmak genellikle daha basittir
+                    "VILLACONTACT_LINK" -> {
+                        database.villaContactDao().insert(gson.fromJson(baseMessage.payload, VillaContact::class.java))
+                        isDataChanged = true
+                    }
+                    "CARGOCOMPANY_UPSERT" -> {
+                        database.cargoCompanyDao().insert(gson.fromJson(baseMessage.payload, CargoCompany::class.java))
+                        isDataChanged = true
+                    }
+                    "CARGO_UPSERT" -> {
+                        database.cargoDao().insert(gson.fromJson(baseMessage.payload, Cargo::class.java))
+                        isDataChanged = true
+                    }
+                    "VILLA_DELETE" -> database.villaDao().deleteById(baseMessage.payload.asJsonObject.get("villaId").asInt)
+                    "CONTACT_DELETE" -> database.contactDao().deleteById(baseMessage.payload.asJsonObject.get("contactId").asInt)
+                    "VILLACONTACT_UNLINK" -> {
+                        val payload = baseMessage.payload.asJsonObject
+                        val villaId = payload.get("villaId").asInt
+                        val contactId = payload.get("contactId").asInt
+                        database.villaContactDao().deleteByVillaIdAndContactId(villaId, contactId)
+                    }
+                    else -> Log.w("WebSocketProcessing", "Bilinmeyen mesaj tipi alındı: ${baseMessage.type}")
                 }
             }
+
+            if (isDataChanged) {
+                // Debounce mantığı arayüzün sadece en sonda güncellenmesini sağlar.
+                uiUpdateDebounceJob?.cancel()
+                uiUpdateDebounceJob = applicationScope.launch {
+                    delay(750) // Gecikmeyi biraz artırmak fırtına sonrası için daha güvenli olabilir.
+                    Log.i("WebSocketDebounce", "Mesaj fırtınası dindi. Arayüzü güncellemek için broadcast gönderiliyor.")
+                    sendBroadcast(Intent("com.serkantken.secuasist.DATA_UPDATED"))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("WebSocketProcessing", "Gelen WebSocket mesajı işlenirken hata oluştu: $jsonMessage", e)
         }
-    } catch (e: Exception) {
-        Log.e("WebSocketProcessing", "Gelen WebSocket mesajı işlenirken hata oluştu: $jsonMessage", e)
-    }
     }
 
     /**

@@ -66,25 +66,20 @@ class ContactsAdapter(
                 binding.root.setOnClickListener {
                     if (binding.areaDetail.isGone) {
                         binding.areaDetail.alpha = 0f
-                        TransitionManager.beginDelayedTransition(binding.root as ViewGroup,
-                            ChangeBounds().setDuration(300))
+                        TransitionManager.beginDelayedTransition(binding.root as ViewGroup, ChangeBounds().setDuration(200))
                         binding.areaDetail.visibility = View.VISIBLE
-                        binding.areaDetail.animate().alpha(1f).setDuration(200).start()
-                        binding.ivCallContact.animate().alpha(0f).setDuration(200).withEndAction {
+                        binding.areaDetail.animate().alpha(1f).setDuration(100).start()
+                        binding.ivCallContact.animate().alpha(0f).setDuration(100).withEndAction {
                             binding.ivCallContact.visibility = View.GONE
                         }.start()
-                        binding.root.background = AppCompatResources.getDrawable(binding.root.context, com.serkantken.secuasist.R.drawable.background_edittext)
                     } else {
-                        binding.areaDetail.animate().alpha(0f).setDuration(200).withEndAction {
-                            TransitionManager.beginDelayedTransition(binding.root as ViewGroup,
-                                ChangeBounds().setDuration(300))
+                        binding.areaDetail.animate().alpha(0f).setDuration(100).withEndAction {
+                            TransitionManager.beginDelayedTransition(binding.root as ViewGroup, ChangeBounds().setDuration(200))
                             binding.areaDetail.visibility = View.GONE
                             binding.ivCallContact.alpha = 0f
                             binding.ivCallContact.visibility = View.VISIBLE
-                            binding.ivCallContact.animate().alpha(1f).setDuration(300).withEndAction {
-                                TransitionManager.beginDelayedTransition(binding.root as ViewGroup,
-                                    ChangeBounds().setDuration(200))
-                                binding.root.background = AppCompatResources.getDrawable(binding.root.context, com.serkantken.secuasist.R.drawable.background_blur)
+                            binding.ivCallContact.animate().alpha(1f).setDuration(200).withEndAction {
+                                TransitionManager.beginDelayedTransition(binding.root as ViewGroup, ChangeBounds().setDuration(100))
                             }.start()
                         }.start()
                     }

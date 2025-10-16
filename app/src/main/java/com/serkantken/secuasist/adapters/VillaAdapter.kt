@@ -33,8 +33,8 @@ class VillaAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         init {
-            if (Hawk.contains("less_blur")) {
-                if (Hawk.get<Boolean>("less_blur") == true) {
+            if (Hawk.contains("enable_blur")) {
+                if (Hawk.get<Boolean>("enable_blur") == false) {
                     binding.root.setBackgroundResource(R.drawable.background_no_blur)
                 } else {
                     binding.root.setBackgroundResource(R.drawable.background_blur)
