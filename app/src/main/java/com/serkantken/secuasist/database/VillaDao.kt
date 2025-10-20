@@ -29,6 +29,9 @@ interface VillaDao {
     @Query("DELETE FROM villas WHERE villaId = :id")
     suspend fun deleteById(id: Int)
 
+    @Query("DELETE FROM villas")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM Villas")
     fun getAllVillas(): Flow<List<Villa>> // Tüm villaları gözlemlenebilir bir şekilde döndürür
 

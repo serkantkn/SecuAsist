@@ -33,6 +33,7 @@ import com.serkantken.secuasist.models.SelectableVilla
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.utils.Tools
 import com.serkantken.secuasist.views.activities.CallingActivity
+import com.serkantken.secuasist.views.activities.ChooseCargoActivity
 import com.serkantken.secuasist.views.activities.MainActivity
 import com.skydoves.balloon.BalloonAnimation
 import com.skydoves.balloon.BalloonSizeSpec
@@ -219,145 +220,19 @@ class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListen
 
             btnAddNewCargos.setOnClickListener {
                 balloon.dismiss()
-                showSelectRecipientsDialog(company.companyId)
+                showSelectRecipientsActivity(company.companyId)
             }
 
             balloon.showAlignBottom(anchorView)
         } else {
-            showSelectRecipientsDialog(company.companyId)
+            showSelectRecipientsActivity(company.companyId)
         }
     }
 
-    private fun showSelectRecipientsDialog(companyId: Int) {
-        // ... (Bu metodun içeriği öncekiyle aynı, değişiklik yok) ...
-        val dialogBinding = DialogSelectRecipientsBinding.inflate(layoutInflater)
-        val dialog = AlertDialog.Builder(requireContext())
-            .setView(dialogBinding.root)
-            .setCancelable(false)
-            .create()
-        Tools(requireActivity()).blur(arrayOf(dialogBinding.blurWindow, dialogBinding.selectedItemsLayout), 15f, true)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val allVillas = mutableListOf<SelectableVilla>()
-        val selectedVillas = mutableListOf<SelectableVilla>()
-
-        lateinit var availableVillasAdapter: AvailableVillasAdapter
-        lateinit var selectedVillasAdapter: SelectedVillasAdapter
-
-        fun updateAdapters() {
-            val query = dialogBinding.etSearch.text.toString()
-            val filteredList = if (query.isBlank()) {
-                allVillas.toList()
-            } else {
-                val lowerCaseQuery = query.lowercase()
-                allVillas.filter {
-                    it.villa.villaNo.toString().contains(lowerCaseQuery) ||
-                            it.defaultContactName?.lowercase()?.contains(lowerCaseQuery) == true
-                }
-            }
-            availableVillasAdapter.differ.submitList(filteredList.sortedBy { it.villa.villaNo })
-            selectedVillasAdapter.differ.submitList(selectedVillas.sortedBy { it.villa.villaNo }.toList())
-            dialogBinding.btnCreateCargos.isEnabled = selectedVillas.isNotEmpty()
-            dialogBinding.selectedItemsLayout.visibility = if (selectedVillas.isEmpty()) View.GONE else View.VISIBLE
-        }
-
-        fun moveVilla(villaToMove: SelectableVilla, from: MutableList<SelectableVilla>, to: MutableList<SelectableVilla>) {
-            if (from.removeIf { it.villa.villaId == villaToMove.villa.villaId }) {
-                to.add(villaToMove)
-                updateAdapters()
-            }
-        }
-
-        availableVillasAdapter = AvailableVillasAdapter(requireActivity()) { selectableVilla ->
-            moveVilla(selectableVilla, from = allVillas, to = selectedVillas)
-        }
-        dialogBinding.rvAvailableVillas.adapter = availableVillasAdapter
-
-        selectedVillasAdapter = SelectedVillasAdapter { selectableVilla ->
-            moveVilla(selectableVilla, from = selectedVillas, to = allVillas)
-        }
-        dialogBinding.rvSelectedVillas.adapter = selectedVillasAdapter
-
-        dialogBinding.etSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                updateAdapters()
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-        lifecycleScope.launch {
-            try {
-                val villasFromDb: List<Villa> = appDatabase.villaDao().getAllVillasAsList()
-                val selectableVillasList = villasFromDb.map { villa ->
-                    val defaultContact = appDatabase.villaContactDao().getRealOwnersForVillaNonFlow(villa.villaId).firstOrNull()
-                        ?: appDatabase.villaContactDao().getContactsForVillaNonFlow(villa.villaId).firstOrNull()
-                    SelectableVilla(villa, defaultContact?.contactId, defaultContact?.contactName)
-                }
-                allVillas.clear()
-                allVillas.addAll(selectableVillasList)
-                selectedVillas.clear()
-                updateAdapters()
-            } catch (e: Exception) {
-                Log.e("SelectRecipientsDialog", "Veri yükleme hatası", e)
-            }
-        }
-
-        dialogBinding.btnClose.setOnClickListener { dialog.dismiss() }
-        dialogBinding.btnCreateCargos.isEnabled = false
-        dialogBinding.btnCreateCargos.setOnClickListener {
-            if (selectedVillas.isEmpty()) return@setOnClickListener
-
-            lifecycleScope.launch {
-                val newCargoIds = mutableListOf<Int>()
-                selectedVillas.forEach { selectableVilla ->
-                    val cargo = Cargo(
-                        companyId = companyId,
-                        villaId = selectableVilla.villa.villaId,
-                        whoCalled = selectableVilla.defaultContactId,
-                        isCalled = 0, isMissed = 0,
-                        date = SimpleDateFormat(
-                            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-                            Locale.getDefault()
-                        ).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date()),
-                        callDate = null, callAttemptCount = 0
-                    )
-                    try {
-                        val insertedId = appDatabase.cargoDao().insert(cargo)
-                        val newCargoToSend = cargo.copy(cargoId = insertedId.toInt())
-                        (activity?.application as? SecuAsistApplication)?.sendUpsert(newCargoToSend)
-                        newCargoIds.add(insertedId.toInt())
-                    } catch (e: Exception) {
-                        Log.e("SelectRecipientsDialog", "Kargo ekleme hatası", e)
-                    }
-                }
-
-                if (newCargoIds.isNotEmpty()) { // newCargoIds sadece yeni eklenenlerin ID'lerini tutuyor
-                    // Yeni kargolar eklendi, şimdi TÜM bekleyen kargoları çekelim
-                    // companyId'nin bu scope'ta erişilebilir olduğundan emin olun.
-                    // Bu, showSelectRecipientsDialog metodunun bir parametresi olmalı.
-                    val allUncalledCargosForCompany = appDatabase.cargoDao().getUncalledCargosForCompanyAsList(companyId)
-
-                    if (allUncalledCargosForCompany.isNotEmpty()) {
-                        val intent = Intent(activity, CallingActivity::class.java)
-                        // CallingActivity'ye TÜM bekleyen kargoları gönder
-                        intent.putExtra("CARGO_LIST", ArrayList(allUncalledCargosForCompany) as Serializable)
-                        startActivity(intent)
-                        dialog.dismiss()
-                    } else {
-                        // Bu durum pek olası değil çünkü en azından yeni eklenenler olmalı
-                        // Eğer buraya düşerse, triggerRefresh() çağrılabilir.
-                        Toast.makeText(requireContext(), "Bu şirkete ait gösterilecek kargo bulunamadı.", Toast.LENGTH_SHORT).show()
-                        dialog.dismiss() // Yine de dialogu kapat
-                        triggerRefresh() // Kargo listesini yenile
-                    }
-                } else {
-                    Toast.makeText(requireContext(), "Kargo oluşturulamadı.", Toast.LENGTH_SHORT).show()
-                    // Belki burada da triggerRefresh() çağrılabilir.
-                }
-            }
-        }
-        dialog.show()
+    private fun showSelectRecipientsActivity(companyId: Int) {
+        val intent = Intent(requireActivity(), ChooseCargoActivity::class.java)
+        intent.putExtra("COMPANY_ID", companyId)
+        startActivity(intent)
     }
 
 

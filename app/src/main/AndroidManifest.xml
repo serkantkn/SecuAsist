@@ -12,6 +12,10 @@
         android:name="android.hardware.telephony"
         android:required="false" />
 
+    <queries>
+        <package android:name="com.whatsapp" />
+    </queries>
+
     <application
         android:name=".SecuAsistApplication"
         android:allowBackup="true"
@@ -24,6 +28,9 @@
         android:theme="@style/Theme.SecuAsist"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+        <activity
+            android:name=".views.activities.ChooseCargoActivity"
+            android:exported="false" />
         <activity
             android:name=".views.activities.CargoReportActivity"
             android:exported="false"
@@ -53,17 +60,13 @@
 
         <service
             android:name=".services.WhatsAppNotificationListener"
+            android:exported="true"
             android:label="SecuAsist Bildirim Servisi"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="true">
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
     </application>
-
-    <queries>
-        <package android:name="com.whatsapp" />
-    </queries>
 
 </manifest>

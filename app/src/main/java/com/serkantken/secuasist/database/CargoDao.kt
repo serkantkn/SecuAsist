@@ -15,11 +15,17 @@ interface CargoDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(cargo: Cargo): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(cargos: List<Cargo>): List<Long>
+
     @Update
     suspend fun update(cargo: Cargo)
 
     @Delete
     suspend fun delete(cargo: Cargo)
+
+    @Query("DELETE FROM Cargos")
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM Cargos ORDER BY date DESC")
     fun getAllCargos(): Flow<List<Cargo>>

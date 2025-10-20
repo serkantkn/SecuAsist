@@ -14,6 +14,9 @@ interface CargoCompanyDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(company: CargoCompany): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(cargoCompanies: List<CargoCompany>): List<Long>
+
     @Update
     suspend fun update(company: CargoCompany)
 
@@ -22,6 +25,9 @@ interface CargoCompanyDao {
 
     @Query("DELETE FROM CargoCompanies WHERE companyId = :id")
     suspend fun deleteById(id: Int)
+
+    @Query("DELETE FROM CargoCompanies")
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM CargoCompanies")
     fun getAllCargoCompanies(): Flow<List<CargoCompany>>

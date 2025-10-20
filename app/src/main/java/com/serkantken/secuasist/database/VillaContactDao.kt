@@ -15,11 +15,17 @@ interface VillaContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(villaContact: VillaContact): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(villaContacts: List<VillaContact>): List<Long>
+
     @Delete
     suspend fun delete(villaContact: VillaContact)
 
     @Query("DELETE FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId")
     suspend fun deleteByVillaIdAndContactId(villaId: Int, contactId: Int)
+
+    @Query("DELETE FROM VillaContacts")
+    suspend fun deleteAll()
 
     // Belirli bir villanın tüm ilgili kişilerini çekmek için
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId ORDER BY VC.orderIndex ASC")

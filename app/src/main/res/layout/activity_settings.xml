@@ -293,7 +293,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/label_app_version"
-                android:text="SecuAsist\nversiyon 0.17.1-beta4\n\nDerleme tarihi: 7 Ekim 2025"
+                android:text="SecuAsist\nversiyon 0.17.2-beta4\n\nDerleme tarihi: 19 Ekim 2025"
                 android:gravity="center"
                 android:textSize="11sp"
                 android:textColor="@color/textColorSecondary"

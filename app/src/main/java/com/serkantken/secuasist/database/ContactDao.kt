@@ -28,6 +28,9 @@ interface ContactDao {
     @Query("DELETE FROM Contacts WHERE contactId = :id")
     suspend fun deleteById(id: Int)
 
+    @Query("DELETE FROM Contacts")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
     fun getAllContacts(): LiveData<List<Contact>>
 
