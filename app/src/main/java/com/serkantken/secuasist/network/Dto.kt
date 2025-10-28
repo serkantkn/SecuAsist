@@ -5,10 +5,13 @@ import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
 
-// Temel bir WebSocket mesaj yapısı için
-data class WebSocketMessage<T>(
-    val data: T,       // Mesajın içeriği (örneğin VillaDto, CargoDto)
-    val type: String // "add_villa", "add_contact", "add_cargo" vb.
+// Tüm verileri almak için
+data class FullSyncPayload(
+    val villas: List<VillaDto> = emptyList(),
+    val contacts: List<ContactDto> = emptyList(),
+    val villaContacts: List<VillaContactDto> = emptyList(),
+    val cargoCompanies: List<CargoCompanyDto> = emptyList(),
+    val cargos: List<CargoDto> = emptyList()
 )
 
 // Villas tablosu için JSON modeli

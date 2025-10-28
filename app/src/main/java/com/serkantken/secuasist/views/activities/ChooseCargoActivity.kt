@@ -183,6 +183,7 @@ class ChooseCargoActivity : AppCompatActivity() {
             }
         }
         availableVillasAdapter.differ.submitList(filteredList.sortedBy { it.villa.villaNo })
+        binding.rvAvailableVillas.smoothScrollToPosition(0)
         selectedVillasAdapter.differ.submitList(selectedVillas.sortedBy { it.villa.villaNo }.toList())
         binding.btnCreateCargos.isEnabled = selectedVillas.isNotEmpty()
         if (selectedVillas.isEmpty()) {
