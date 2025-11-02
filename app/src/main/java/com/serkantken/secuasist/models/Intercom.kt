@@ -21,5 +21,7 @@ data class Intercom(
     val location: String,
     val ipAddress: String,
     var isFaulty: Boolean = false,
-    var faultDate: Date? = null
+    var faultDate: Date? = null,
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 )

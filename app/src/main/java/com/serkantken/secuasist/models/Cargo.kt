@@ -34,5 +34,7 @@ data class Cargo(
     var callAttemptCount: Int = 0,
     var callingDeviceName: String? = null,
     @ColumnInfo(index = true) // Bu ID üzerinden sorgulama yapılacaksa index eklemek performansı artırabilir
-    var delivererContactId: Int? = null // Dağıtıcı Contact ID'si, nullable
+    var delivererContactId: Int? = null, // Dağıtıcı Contact ID'si, nullable
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 ): Serializable

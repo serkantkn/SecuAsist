@@ -20,8 +20,7 @@ import android.view.ViewGroup
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.InputMethodManager
-import android.widget.ArrayAdapter
-import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
@@ -57,7 +56,6 @@ import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.databinding.ActivityMainBinding
 import com.serkantken.secuasist.databinding.DialogAddEditCargoCompanyBinding
 import com.serkantken.secuasist.databinding.DialogAddEditContactBinding
-import com.serkantken.secuasist.databinding.DialogAddEditVillaBinding
 import com.serkantken.secuasist.databinding.DialogFilterByStatusBinding
 import com.serkantken.secuasist.databinding.DialogFilterByStreetBinding
 import com.serkantken.secuasist.databinding.DialogManageCompanyDeliverersBinding
@@ -71,9 +69,11 @@ import com.serkantken.secuasist.models.ContactFromPhone
 import com.serkantken.secuasist.models.PhoneOptionForContact
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
+import com.serkantken.secuasist.network.ConnectionState
 import com.serkantken.secuasist.network.WebSocketClient
 import com.serkantken.secuasist.services.WhatsAppNotificationListener
 import com.serkantken.secuasist.utils.Tools
+import com.serkantken.secuasist.views.fragments.AddEditVillaDialogFragment
 import com.serkantken.secuasist.views.fragments.CargoFragment
 import com.serkantken.secuasist.views.fragments.ContactsFragment
 import com.serkantken.secuasist.views.fragments.MultiNumberSelectionDialogFragment
@@ -83,7 +83,6 @@ import com.skydoves.balloon.BalloonAlign
 import com.skydoves.balloon.BalloonAnimation
 import com.skydoves.balloon.BalloonSizeSpec
 import com.skydoves.balloon.createBalloon
-import com.skydoves.balloon.overlay.BalloonOverlayCircle
 import com.skydoves.balloon.overlay.BalloonOverlayRoundRect
 import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CoroutineScope
@@ -94,12 +93,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.nio.charset.StandardCharsets
+import org.json.JSONException
+import org.json.JSONObject
 
 @ExperimentalBadgeUtils
-class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnMultiNumberSelectionListener {
+class MainActivity : AppCompatActivity(),
+    MultiNumberSelectionDialogFragment.OnMultiNumberSelectionListener,
+    AddEditVillaDialogFragment.DialogListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var webSocketClient: WebSocketClient
@@ -111,10 +111,8 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     private lateinit var contactCsvFilePickerLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var requestContactCsvPermissionLauncher: ActivityResultLauncher<String>
-    private var isBalloonShowing = false
     private lateinit var balloonSortVillas: Balloon
     private var isSearchModeActive = false
-    private val READ_CONTACTS_PERMISSION_CODE = 123
     private var contactsToProcessAfterPermission: List<ContactFromPhone>? = null
     private var activityScopeJob: Job? = null
     private val activityScope: CoroutineScope
@@ -159,22 +157,8 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 } catch (e: SecurityException) {
                     Log.e("MainActivity", "Failed to take persistable URI permission", e)
                 }
-                processCsvFile(it)
+                Tools(this@MainActivity).processVillaCsvFile(it)
             } ?: run { showToast("Dosya seçilmedi.") }
-        }
-        contactCsvFilePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            uri?.let {
-                try {
-                    val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    contentResolver.takePersistableUriPermission(it, takeFlags)
-                    Log.d("MainActivity_ContactCSV", "Kişi CSV için kalıcı okuma izni alındı: $it")
-                } catch (e: SecurityException) {
-                    Log.e("MainActivity_ContactCSV", "Kişi CSV için kalıcı URI izni alınamadı", e)
-                }
-                processContactCsvFile(it) // Bu fonksiyonu birazdan oluşturacağız
-            } ?: run {
-                showToast("Kişi CSV dosyası seçilmedi.")
-            }
         }
         requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
@@ -208,10 +192,19 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         }
 
         if (Hawk.contains("enable_blur")) setupBlur(Hawk.get<Boolean>("enable_blur"))
-        Tools(this).blur(arrayOf(binding.blurFab, binding.blurToolbarButtons, binding.blurMessage, binding.blurNavView, binding.blurSearchbox), 10f, true)
+        Tools(this).blur(arrayOf(binding.blurFab, binding.blurToolbarButtons, binding.blurMessage, binding.blurNavView, binding.blurSearchbox, binding.blurStatusIndicator), 10f, true)
+        if (Hawk.contains("enable_blur")) {
+            if (Hawk.get<Boolean>("enable_blur") == false) {
+                binding.blurStatusIndicator.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_no_blur)
+            } else {
+                binding.blurStatusIndicator.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+            }
+        } else {
+            binding.blurStatusIndicator.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+        }
 
         appDatabase = AppDatabase.Companion.getDatabase(this)
-        webSocketClient = (application as SecuAsistApplication).webSocketClient
+        webSocketClient = (application as SecuAsistApplication).wsClient
 
         setupWhatsAppBadge() // Rozeti hazırlayan fonksiyonu çağır
         //checkAndRequestNotificationListenerPermission() // İzin kontrolünü yap
@@ -229,7 +222,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         setupMainTabsRecyclerView()
         observeCargoNotificationStatus()
         setupListeners()
-
+        observeConnectionStatus()
     }
 
     private fun setupWhatsAppBadge() {
@@ -252,7 +245,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         binding.btnWhatsapp.post {
             if (hasUnread) {
                 Log.i("MainActivity_WhatsApp", "Rozet gösteriliyor.")
-                BadgeUtils.attachBadgeDrawable(whatsappBadge, binding.btnWhatsapp, binding.root as FrameLayout)
+                BadgeUtils.attachBadgeDrawable(whatsappBadge, binding.btnWhatsapp, binding.root)
             } else {
                 Log.i("MainActivity_WhatsApp", "Rozet gizleniyor.")
                 BadgeUtils.detachBadgeDrawable(whatsappBadge, binding.btnWhatsapp)
@@ -282,6 +275,130 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         } else {
             // Bu log, iznin zaten verilmiş olduğunu ve her şeyin yolunda olması gerektiğini gösterir.
             Log.i("MainActivity_WhatsApp", "checkAndRequest: Bildirim erişim izni zaten verilmiş.")
+        }
+    }
+
+    private fun observeConnectionStatus() {
+        lifecycleScope.launch {
+            (application as SecuAsistApplication).wsClient.connectionState.collect { state ->
+                updateIndicator(state)
+            }
+        }
+    }
+
+    private fun updateIndicator(status: ConnectionState) {
+        when (status) {
+            ConnectionState.CONNECTING -> {
+                binding.icIndicator.background = AppCompatResources.getDrawable(this, com.serkantken.secuasist.R.drawable.indicator_yellow)
+                val blink = AnimationUtils.loadAnimation(this@MainActivity, com.serkantken.secuasist.R.anim.blink_connecting)
+                binding.icIndicator.startAnimation(blink)
+            }
+            ConnectionState.CONNECTED -> {
+                binding.icIndicator.background = AppCompatResources.getDrawable(this, com.serkantken.secuasist.R.drawable.indicator_green)
+                binding.icIndicator.clearAnimation()
+
+                val balloon: Balloon = createBalloon(this) {
+                    setLayout(com.serkantken.secuasist.R.layout.layout_balloon_server_status)
+                    setArrowSize(0)
+                    setWidth(BalloonSizeSpec.WRAP)
+                    setHeight(BalloonSizeSpec.WRAP)
+                    setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
+                    if (Hawk.contains("less_animations")) {
+                        if (Hawk.get<Boolean>("less_animations") == true) {
+                            setBalloonAnimation(BalloonAnimation.NONE)
+                        } else {
+                            setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                        }
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
+                    setDismissWhenTouchOutside(true)
+                    autoDismissDuration = 5000L
+                    setLifecycleOwner(this@MainActivity)
+                    build()
+                }
+                val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.blur_popup)
+                val text = balloon.getContentView().findViewById<TextView>(com.serkantken.secuasist.R.id.tv_server_status)
+                Tools(this).blur(arrayOf(blur), 10f, true)
+                if (Hawk.contains("enable_blur")) {
+                    if (Hawk.get<Boolean>("enable_blur") == false) {
+                        blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_no_blur)
+                    } else {
+                        blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+                    }
+                } else {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+                }
+                text.text = "Sunucuya bağlandı"
+
+                balloon.setOnBalloonInitializedListener {
+                    // 🔹 Küçük bir "parlama" efekti
+                    binding.apply {
+                        blurStatusIndicator.scaleX = 0.8f
+                        blurStatusIndicator.scaleY = 0.8f
+                        blurStatusIndicator.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(1000)
+                            .start()
+                    }
+                }
+
+                balloon.showAlignBottom(binding.blurStatusIndicator)
+            }
+            ConnectionState.DISCONNECTED -> {
+                binding.icIndicator.background = AppCompatResources.getDrawable(this, com.serkantken.secuasist.R.drawable.indicator_red)
+                binding.icIndicator.clearAnimation()
+
+                val balloon: Balloon = createBalloon(this@MainActivity) {
+                    setLayout(com.serkantken.secuasist.R.layout.layout_balloon_server_status)
+                    setArrowSize(0)
+                    setWidth(BalloonSizeSpec.WRAP)
+                    setHeight(BalloonSizeSpec.WRAP)
+                    setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
+                    if (Hawk.contains("less_animations")) {
+                        if (Hawk.get<Boolean>("less_animations") == true) {
+                            setBalloonAnimation(BalloonAnimation.NONE)
+                        } else {
+                            setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                        }
+                    } else {
+                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
+                    }
+                    setDismissWhenTouchOutside(true)
+                    autoDismissDuration = 5000L
+                    setLifecycleOwner(this@MainActivity)
+                    build()
+                }
+                val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.blur_popup)
+                val text = balloon.getContentView().findViewById<TextView>(com.serkantken.secuasist.R.id.tv_server_status)
+                Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
+                if (Hawk.contains("enable_blur")) {
+                    if (Hawk.get<Boolean>("enable_blur") == false) {
+                        blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_no_blur)
+                    } else {
+                        blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+                    }
+                } else {
+                    blur.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_blur)
+                }
+                text.text = "Sunucu bağlantısı kesildi"
+
+                balloon.setOnBalloonInitializedListener {
+                    // 🔹 Küçük bir "parlama" efekti
+                    binding.apply {
+                        blurStatusIndicator.scaleX = 0.8f
+                        blurStatusIndicator.scaleY = 0.8f
+                        blurStatusIndicator.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(1000)
+                            .start()
+                    }
+                }
+
+                balloon.showAlignBottom(binding.blurStatusIndicator)
+            }
         }
     }
 
@@ -485,6 +602,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             binding.btnSearch.visibility = View.GONE
             binding.btnWhatsapp.visibility = View.GONE
             binding.btnMore.visibility = View.GONE
+            binding.blurStatusIndicator.visibility = View.GONE
             binding.blurSearchbox.visibility = View.VISIBLE
 
             // Klavyeyi otomatik aç ve arama kutusuna odaklan
@@ -498,6 +616,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
             binding.btnSearch.visibility = View.VISIBLE
             binding.btnWhatsapp.visibility = View.VISIBLE
             binding.btnMore.visibility = View.VISIBLE
+            binding.blurStatusIndicator.visibility = View.VISIBLE
             binding.blurSearchbox.visibility = View.GONE
             binding.btnCancel.visibility = View.GONE
 
@@ -594,33 +713,16 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         }
 
         binding.btnMore.setOnClickListener {
-            val balloon: Balloon = createBalloon(this) {
-                when (binding.viewPager.currentItem) {
-                    0 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_villa)
-                    1 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_contact)
-                    2 -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_cargo)
-                    else -> setLayout(com.serkantken.secuasist.R.layout.layout_balloon_more_options_fault)
-                }
-                setArrowSize(0)
-                setWidth(BalloonSizeSpec.WRAP)
-                setHeight(BalloonSizeSpec.WRAP)
-                setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                if (Hawk.contains("less_animations")) {
-                    if (Hawk.get<Boolean>("less_animations") == true) {
-                        setBalloonAnimation(BalloonAnimation.NONE)
-                    } else {
-                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
-                    }
-                } else {
-                    setBalloonAnimation(BalloonAnimation.OVERSHOOT)
-                }
-                setDismissWhenTouchOutside(true)
-                setIsVisibleOverlay(true)
-                setOverlayShape(BalloonOverlayCircle(12f))
-                overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
-                setLifecycleOwner(this@MainActivity)
-                build()
-            }
+            val balloon: Balloon = Tools(this@MainActivity).createBalloon(
+                layout = when (binding.viewPager.currentItem) {
+                    0 -> com.serkantken.secuasist.R.layout.layout_balloon_more_options_villa
+                    1 -> com.serkantken.secuasist.R.layout.layout_balloon_more_options_contact
+                    2 -> com.serkantken.secuasist.R.layout.layout_balloon_more_options_cargo
+                    else -> com.serkantken.secuasist.R.layout.layout_balloon_more_options_fault
+                },
+                isDismissWhenTouchOutside = true,
+                isVisibleOverlay = true
+            )
 
             val blur = balloon.getContentView().findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
             Tools(this@MainActivity).blur(arrayOf(blur), 10f, true)
@@ -634,9 +736,11 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 blur.background = AppCompatResources.getDrawable(this@MainActivity, com.serkantken.secuasist.R.drawable.background_balloon)
             }
             binding.blurToolbarButtons.visibility = View.INVISIBLE
+            binding.blurStatusIndicator.visibility = View.INVISIBLE
             balloon.showAlignTop(binding.blurToolbarButtons, 90, it.height+50)
             balloon.setOnBalloonDismissListener {
                 binding.blurToolbarButtons.visibility = View.VISIBLE
+                binding.blurStatusIndicator.visibility = View.VISIBLE
             }
 
             when (binding.viewPager.currentItem) {
@@ -708,28 +812,11 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         val fadeoutanimation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
         fadeoutanimation.setAnimationListener(object : Animation.AnimationListener {
             override fun onAnimationStart(animation: Animation?) {
-                balloonSortVillas = createBalloon(this@MainActivity) {
-                    setLayout(com.serkantken.secuasist.R.layout.layout_balloon_sort_villas)
-                    setArrowSize(0)
-                    setWidth(BalloonSizeSpec.WRAP)
-                    setHeight(BalloonSizeSpec.WRAP)
-                    setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.transparent))
-                    if (Hawk.contains("less_animations")) {
-                        if (Hawk.get<Boolean>("less_animations") == true) {
-                            setBalloonAnimation(BalloonAnimation.NONE)
-                        } else {
-                            setBalloonAnimation(BalloonAnimation.OVERSHOOT)
-                        }
-                    } else {
-                        setBalloonAnimation(BalloonAnimation.OVERSHOOT)
-                    }
-                    setDismissWhenTouchOutside(true)
-                    setIsVisibleOverlay(true)
-                    setOverlayShape(BalloonOverlayCircle(12f))
-                    overlayColor = ContextCompat.getColor(this@MainActivity, com.serkantken.secuasist.R.color.black_transparent)
-                    setLifecycleOwner(this@MainActivity)
-                    build()
-                }
+                balloonSortVillas = Tools(this@MainActivity).createBalloon(
+                    layout = com.serkantken.secuasist.R.layout.layout_balloon_sort_villas,
+                    isDismissWhenTouchOutside = true,
+                    isVisibleOverlay = true
+                )
 
                 val contentView = balloonSortVillas.getContentView()
                 val blurView = contentView.findViewById<BlurView>(com.serkantken.secuasist.R.id.layout_menu_balloon)
@@ -895,146 +982,6 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         }
     }
 
-    private fun processCsvFile(fileUri: Uri) {
-        Log.d("MainActivity_CSV", "processCsvFile çağrıldı. URI: $fileUri")
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            val villasToInsert = mutableListOf<Villa>()
-            val villasToUpdate = mutableListOf<Villa>()
-            var hataliSatirSayisi = 0
-            var eklenenVillaSayisi = 0
-            var guncellenenVillaSayisi = 0
-
-            try {
-                contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                    BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
-                        var isFirstLine = true
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            var currentLine = line!!
-
-                            if (isFirstLine) {
-                                if (currentLine.startsWith("\uFEFF")) {
-                                    currentLine = currentLine.substring(1)
-                                    Log.d("MainActivity_CSV", "UTF-8 BOM karakteri bulundu ve temizlendi.")
-                                }
-                                isFirstLine = false
-                            }
-
-                            if (currentLine.isBlank()) {
-                                continue
-                            }
-
-                            try {
-                                val columns = currentLine.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-                                    .map { it.trim().removeSurrounding("\"") }
-
-                                val villaNoStr = columns.getOrNull(0)
-                                val villaNo = villaNoStr?.toIntOrNull()
-                                    ?: throw IllegalArgumentException("VillaNo Hatalı/Eksik: '$villaNoStr'")
-
-                                val csvVillaNotes = columns.getOrNull(1)
-                                val csvVillaStreet = columns.getOrNull(2)
-                                val csvVillaNavigationA = columns.getOrNull(3)
-                                val csvVillaNavigationB = columns.getOrNull(4)
-                                val csvIsVillaUnderConstruction = columns.getOrNull(5)?.toIntOrNull() ?: 0
-                                val csvIsVillaSpecial = columns.getOrNull(6)?.toIntOrNull() ?: 0
-                                val csvIsVillaRental = columns.getOrNull(7)?.toIntOrNull() ?: 0
-                                val csvIsVillaCallFromHome = columns.getOrNull(8)?.toIntOrNull() ?: 0
-                                val csvIsVillaCallForCargo = columns.getOrNull(9)?.toIntOrNull() ?: 0
-                                val csvIsVillaEmpty = columns.getOrNull(10)?.toIntOrNull() ?: 0
-
-                                val existingVilla = appDatabase.villaDao().getVillaByNo(villaNo)
-
-                                if (existingVilla != null) {
-                                    existingVilla.villaNotes = csvVillaNotes
-                                    existingVilla.villaStreet = csvVillaStreet
-                                    existingVilla.villaNavigationA = csvVillaNavigationA
-                                    existingVilla.villaNavigationB = csvVillaNavigationB
-                                    existingVilla.isVillaUnderConstruction = csvIsVillaUnderConstruction
-                                    existingVilla.isVillaSpecial = csvIsVillaSpecial
-                                    existingVilla.isVillaRental = csvIsVillaRental
-                                    existingVilla.isVillaCallFromHome = csvIsVillaCallFromHome
-                                    existingVilla.isVillaCallForCargo = csvIsVillaCallForCargo
-                                    existingVilla.isVillaEmpty = csvIsVillaEmpty
-                                    villasToUpdate.add(existingVilla)
-                                } else {
-                                    val newVilla = Villa(
-                                        villaNo = villaNo,
-                                        villaNotes = csvVillaNotes,
-                                        villaStreet = csvVillaStreet,
-                                        villaNavigationA = csvVillaNavigationA,
-                                        villaNavigationB = csvVillaNavigationB,
-                                        isVillaUnderConstruction = csvIsVillaUnderConstruction,
-                                        isVillaSpecial = csvIsVillaSpecial,
-                                        isVillaRental = csvIsVillaRental,
-                                        isVillaCallFromHome = csvIsVillaCallFromHome,
-                                        isVillaCallForCargo = csvIsVillaCallForCargo,
-                                        isVillaEmpty = csvIsVillaEmpty
-                                    )
-                                    villasToInsert.add(newVilla)
-                                }
-                            } catch (e: Exception) {
-                                hataliSatirSayisi++
-                                Log.e("MainActivity_CSV", "Satır işlenirken Hata: '$line'. Hata: ${e.message}", e)
-                            }
-                        }
-                    }
-                } ?: throw Exception("Dosya akışı açılamadı.")
-
-                // --- VERİTABANI VE SENKRONİZASYON İŞLEMLERİ ---
-
-                // 1. Yeni villaları ekle ve sunucuya gönder
-                if (villasToInsert.isNotEmpty()) {
-                    Log.d("MainActivity_CSV", "${villasToInsert.size} yeni villa eklenecek ve senkronize edilecek.")
-                    villasToInsert.forEach { villaToInsert ->
-                        // Yerel DB'ye ekle ve Room tarafından üretilen yeni ID'yi al
-                        val newId = appDatabase.villaDao().insert(villaToInsert)
-
-                        // Sunucuya göndermek için ID'si atanmış bir kopya oluştur
-                        val villaToSend = villaToInsert.copy(villaId = newId.toInt())
-
-                        // Sunucuya gönder
-                        (application as SecuAsistApplication).sendUpsert(villaToSend)
-                    }
-                    eklenenVillaSayisi = villasToInsert.size
-                }
-
-                // 2. Mevcut villaları güncelle ve sunucuya gönder
-                if (villasToUpdate.isNotEmpty()) {
-                    Log.d("MainActivity_CSV", "${villasToUpdate.size} mevcut villa güncellenecek ve senkronize edilecek.")
-                    villasToUpdate.forEach { villaToUpdate ->
-                        // Yerel DB'de güncelle
-                        appDatabase.villaDao().update(villaToUpdate)
-
-                        // Sunucuya gönder
-                        (application as SecuAsistApplication).sendUpsert(villaToUpdate)
-                    }
-                    guncellenenVillaSayisi = villasToUpdate.size
-                }
-
-                // 3. Kullanıcıyı bilgilendir
-                launch(Dispatchers.Main) {
-                    // loadingDialog.dismiss()
-                    var message = ""
-                    if (eklenenVillaSayisi > 0) message += "$eklenenVillaSayisi yeni villa eklendi. "
-                    if (guncellenenVillaSayisi > 0) message += "$guncellenenVillaSayisi mevcut villa güncellendi. "
-                    if (hataliSatirSayisi > 0) message += "$hataliSatirSayisi satır hatalıydı."
-                    if (message.isBlank() && hataliSatirSayisi == 0) message = "İşlenecek yeni veya güncellenecek villa bulunamadı."
-
-                    showToast(message.trim())
-                    Log.d("MainActivity_CSV", "Villa CSV İşlem sonucu: ${message.trim()}")
-                }
-
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    showToast("Dosya işlenirken bir hata oluştu: ${e.message}")
-                    Log.e("MainActivity_CSV", "CSV dosyası işlenirken genel hata", e)
-                }
-            }
-        }
-    }
-
     private fun launchContactCsvFilePicker() {
         val mimeTypes = arrayOf(
             "text/csv",
@@ -1050,320 +997,16 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         }
     }
 
-    private fun processContactCsvFile(fileUri: Uri) {
-        Log.d("MainActivity_ContactRelCSV", "processContactAndRelationsCsvFile çağrıldı. URI: $fileUri")
-        activityScope.launch(Dispatchers.IO) {
-            var hataliSatirSayisi = 0
-            var eklenenKisiSayisi = 0
-            var guncellenenKisiSayisi = 0
-            var eklenenIliskiSayisi = 0
-            var atlananVillaNoSayisi = 0
-
-            try {
-                contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                    val linesFromReader = mutableListOf<String>()
-                    BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
-                        linesFromReader.addAll(reader.readLines())
-                    }
-
-                    if (linesFromReader.isEmpty()) {
-                        Log.w("MainActivity_ContactRelCSV", "CSV dosyası boş.")
-                        launch(Dispatchers.Main) { showToast("Seçilen CSV dosyası boş.") }
-                        return@launch
-                    }
-
-                    val processedLines = linesFromReader.toMutableList()
-                    if (processedLines.isNotEmpty() && processedLines[0].startsWith("\uFEFF")) {
-                        Log.d("MainActivity_ContactRelCSV", "UTF-8 BOM tespit edildi.")
-                        processedLines[0] = processedLines[0].substring(1)
-                    }
-                    if (processedLines.isEmpty() || (processedLines.size == 1 && processedLines[0].isBlank())) {
-                        Log.w("MainActivity_ContactRelCSV", "İşlenecek veri yok.")
-                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.")}
-                        return@launch
-                    }
-
-                    val headerLine = processedLines.firstOrNull()?.lowercase()
-                    val hasHeader = headerLine != null &&
-                            (headerLine.contains("ad") || headerLine.contains("isim")) &&
-                            headerLine.contains("telefon") &&
-                            headerLine.contains("villa")
-
-                    val dataLines = if (hasHeader && processedLines.isNotEmpty()) {
-                        Log.d("MainActivity_ContactRelCSV", "Başlık satırı algılandı: $headerLine")
-                        processedLines.drop(1)
-                    } else {
-                        processedLines
-                    }
-
-                    if (dataLines.isEmpty()) {
-                        Log.w("MainActivity_ContactRelCSV", "Veri satırı bulunamadı.")
-                        launch(Dispatchers.Main) { showToast("CSV dosyasında işlenecek veri bulunamadı.") }
-                        return@launch
-                    }
-
-                    dataLines.forEachIndexed { index, line ->
-                        if (line.isBlank()) {
-                            Log.d("MainActivity_ContactRelCSV", "Satır ${index + 1} (veri) boş.")
-                            return@forEachIndexed
-                        }
-
-                        var currentContactId: Int = 0
-
-                        try {
-                            val columns = line.split(";(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-                                .map { it.trim().removeSurrounding("\"") }
-
-                            if (columns.size < 2) {
-                                throw IllegalArgumentException("Yetersiz sütun (${columns.size}). Beklenen en az 2 (Ad, Telefon).")
-                            }
-
-                            // --- Kişi İşlemleri ---
-                            val csvContactName = columns.getOrNull(0)?.takeIf { it.isNotBlank() }
-                                ?: throw IllegalArgumentException("Kişi Adı (1. sütun) boş.")
-
-                            val csvContactPhoneInput = columns.getOrNull(1)
-                            if (csvContactPhoneInput.isNullOrBlank()) {
-                                throw IllegalArgumentException("Telefon Numarası (2. sütun) boş.")
-                            }
-                            val csvContactPhoneRaw = csvContactPhoneInput.filter { it.isDigit() }
-                            val csvContactPhone = when {
-                                csvContactPhoneRaw.startsWith("90") && csvContactPhoneRaw.length == 12 -> "+$csvContactPhoneRaw"
-                                csvContactPhoneRaw.length == 10 -> "+90$csvContactPhoneRaw"
-                                csvContactPhoneRaw.startsWith("+90") && csvContactPhoneRaw.length == 13 -> csvContactPhoneRaw
-                                else -> throw IllegalArgumentException("Telefon formatı geçersiz: '$csvContactPhoneInput'.")
-                            }
-
-                            val existingContact = appDatabase.contactDao().getContactByPhone(csvContactPhone)
-
-                            if (existingContact != null) {
-                                currentContactId = existingContact.contactId
-                                if (existingContact.contactName != csvContactName) {
-                                    val updatedContact = existingContact.copy(
-                                        contactName = csvContactName
-                                    )
-                                    appDatabase.contactDao().update(updatedContact)
-                                    guncellenenKisiSayisi++
-                                    Log.i("MainActivity_ContactRelCSV", "Kişi güncellendi: ID $currentContactId, Tel: $csvContactPhone")
-                                } else {
-                                    Log.i("MainActivity_ContactRelCSV", "Kişi mevcut, bilgi aynı: ID $currentContactId, Tel: $csvContactPhone")
-                                }
-                            } else {
-                                val newContact = Contact(
-                                    contactName = csvContactName,
-                                    contactPhone = csvContactPhone
-                                )
-                                val insertedId = appDatabase.contactDao().insert(newContact)
-                                if (insertedId > 0) {
-                                    val justInsertedContact = appDatabase.contactDao().getContactByPhone(csvContactPhone)
-                                    if (justInsertedContact != null) {
-                                        currentContactId = justInsertedContact.contactId
-                                        eklenenKisiSayisi++
-                                        Log.i("MainActivity_ContactRelCSV", "Kişi eklendi: ID $currentContactId, Tel: $csvContactPhone")
-                                    } else {
-                                        throw IllegalStateException("Yeni eklenen kişi hemen bulunamadı: $csvContactPhone")
-                                    }
-                                } else {
-                                    throw IllegalStateException("Kişi eklenemedi (insert ID <= 0): $csvContactPhone")
-                                }
-                            }
-
-                            if (currentContactId == 0) {
-                                throw IllegalStateException("Kişi ID'si alınamadı: $csvContactPhone")
-                            }
-
-                            // --- Villa İlişkileri ---
-                            val associatedVillaNumbersStr = columns.getOrNull(2) // 3. sütun
-                            if (!associatedVillaNumbersStr.isNullOrBlank()) {
-                                val villaNumbersToAssociate = associatedVillaNumbersStr.split(',')
-                                    .mapNotNull { it.trim().toIntOrNull() }
-
-                                villaNumbersToAssociate.forEach { villaNo ->
-                                    val villa = appDatabase.villaDao().getVillaByNo(villaNo)
-                                    if (villa != null) {
-                                        val villaContact = VillaContact(
-                                            villaId = villa.villaId,
-                                            contactId = currentContactId,
-                                            isRealOwner = false,
-                                            contactType = TODO(),
-                                            notes = TODO(),
-                                            orderIndex = TODO()
-                                        )
-                                        val relationInsertResult = appDatabase.villaContactDao().insert(villaContact)
-                                        if (relationInsertResult != -1L) { // IGNORE stratejisi -1L dönebilir (zaten varsa veya hata)
-                                            // Eğer IGNORE ve kayıt zaten varsa, -1L döner.
-                                            // Eğer insert metodunuz Long ID değil de başka bir şey dönerse bu kontrolü güncelleyin.
-                                            // Ya da basitçe, hata vermediği sürece eklendi/zaten vardı sayabiliriz.
-                                            // Başarılı bir ekleme (ya da zaten vardı ve ignore edildi)
-                                            // Gerçekten yeni eklendiğini saymak için, insert öncesi bir kontrol gerekebilir.
-                                            // Şimdilik, çakışma olmadıysa sayalım.
-                                            var relationExists = false // Bunu kontrol etmenin daha iyi bir yolu lazım
-                                            // val existingRel = appDatabase.villaContactDao().getRelation(villa.villaId, currentContactId)
-                                            // if (existingRel == null) { ... }
-                                            // Bu kontrol için VillaContactDao'da getRelation gibi bir metod olmalı.
-                                            // Şimdilik OnConflictStrategy.IGNORE'a güveniyoruz.
-
-                                            // Eğer insert metodu her zaman pozitif bir ID dönerse (IGNORE değilse)
-                                            // if (relationInsertResult > 0) eklenenIliskiSayisi++
-                                            // IGNORE ile, gerçekten yeni mi eklendiğini anlamak için insert öncesi select gerekir.
-                                            // Şimdilik her başarılı insert girişimini (hata fırlatmayan) sayalım.
-                                            eklenenIliskiSayisi++ // Bu sayaç, "ilişki kurulmaya çalışıldı" demek daha doğru olabilir.
-                                            Log.i("MainActivity_ContactRelCSV", "İlişki eklendi/mevcuttu: VillaID ${villa.villaId} - ContactID $currentContactId")
-
-                                        } else {
-                                            Log.w("MainActivity_ContactRelCSV", "İlişki eklenemedi veya zaten mevcut (IGNORE): VillaID ${villa.villaId} - ContactID $currentContactId")
-                                        }
-                                    } else {
-                                        Log.w("MainActivity_ContactRelCSV", "İlişki için Villa bulunamadı: VillaNo $villaNo")
-                                        atlananVillaNoSayisi++
-                                    }
-                                }
-                            }
-
-                        } catch (e: IllegalArgumentException) {
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Veri Hatası: '$line'. Hata: ${e.message}")
-                        } catch (e: IllegalStateException){
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Mantık Hatası: '$line'. Hata: ${e.message}")
-                        } catch (e: Exception) {
-                            hataliSatirSayisi++
-                            Log.e("MainActivity_ContactRelCSV", "Satır ${index + 1} Genel Hata: '$line'. Hata: ${e.message}", e)
-                        }
-                    }
-
-                } ?: run {
-                    Log.e("MainActivity_ContactRelCSV", "CSV dosyası için contentResolver.openInputStream(fileUri) null döndü.")
-                    launch(Dispatchers.Main) { showToast("Dosya akışı açılamadı.") }
-                    return@launch
-                }
-
-                // Sonuçları göster
-                launch(Dispatchers.Main) {
-                    var message = ""
-                    if (eklenenKisiSayisi > 0) message += "$eklenenKisiSayisi yeni kişi eklendi. "
-                    if (guncellenenKisiSayisi > 0) message += "$guncellenenKisiSayisi kişi güncellendi. "
-                    if (eklenenIliskiSayisi > 0) message += "$eklenenIliskiSayisi villa-kişi ilişkisi kuruldu/mevcuttu. "
-                    if (atlananVillaNoSayisi > 0) message += "$atlananVillaNoSayisi ilişkide belirtilen villa bulunamadı. "
-                    if (hataliSatirSayisi > 0) message += "$hataliSatirSayisi satır hatalıydı."
-                    if (message.isBlank() && hataliSatirSayisi == 0) message = "İşlenecek yeni veri bulunamadı."
-
-                    showToast(message.trim())
-                    Log.d("MainActivity_ContactRelCSV", "İşlem sonucu: ${message.trim()}")
-                }
-
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    showToast("CSV dosyası okunurken bir hata oluştu: ${e.message}")
-                    Log.e("MainActivity_ContactRelCSV", "CSV dosyası okunurken genel hata", e)
-                }
-            }
-        }
+    override fun onVillaSaved() {
+        showToast("Villa başarıyla kaydedildi.")
+        // Gerekirse VillaFragment'taki listeyi yenilemek için bir callback çağrılabilir.
+        // villaRefreshCallback?.invoke()
     }
 
     fun showAddEditVillaDialog(villaToEdit: Villa?) {
-        val dialogBinding = DialogAddEditVillaBinding.inflate(layoutInflater)
-        val isEditMode = villaToEdit != null
-        Tools(this).blur(arrayOf(dialogBinding.blurWindow), 10f, true)
-        if (Hawk.contains("enable_blur")) {
-            if (Hawk.get<Boolean>("enable_blur") == false) {
-                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window_no_blur)
-            } else {
-                dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
-            }
-        } else {
-            dialogBinding.root.setBackgroundResource(com.serkantken.secuasist.R.drawable.background_window)
-        }
-
-        val streets = resources.getStringArray(com.serkantken.secuasist.R.array.street_names)
-        val streetArrayAdapter = ArrayAdapter(this, R.layout.simple_dropdown_item_1line, streets)
-        dialogBinding.actvVillaStreet.setAdapter(streetArrayAdapter)
-
-        if (isEditMode) {
-            dialogBinding.windowTitle.text = "Villa Düzenle"
-            dialogBinding.etVillaNo.setText(villaToEdit?.villaNo?.toString())
-            dialogBinding.etVillaNotes.setText(villaToEdit?.villaNotes)
-            dialogBinding.actvVillaStreet.setText(villaToEdit?.villaStreet, false)
-            dialogBinding.etVillaNavigationA.setText(villaToEdit?.villaNavigationA)
-            dialogBinding.etVillaNavigationB.setText(villaToEdit?.villaNavigationB)
-            dialogBinding.chipIsUnderConstruction.isChecked = villaToEdit?.isVillaUnderConstruction == 1
-            dialogBinding.chipIsSpecial.isChecked = villaToEdit?.isVillaSpecial == 1
-            dialogBinding.chipIsRental.isChecked = villaToEdit?.isVillaRental == 1
-            dialogBinding.chipIsCallFromHome.isChecked = villaToEdit?.isVillaCallFromHome == 1
-            dialogBinding.chipIsCallForCargo.isChecked = villaToEdit?.isVillaCallForCargo == 1
-            dialogBinding.chipIsEmpty.isChecked = villaToEdit?.isVillaEmpty == 1
-
-            dialogBinding.etVillaNo.isEnabled = false
-            dialogBinding.btnVillaContacts.visibility = View.VISIBLE
-        } else {
-            dialogBinding.windowTitle.text = "Villa Ekle"
-            dialogBinding.btnVillaContacts.visibility = View.GONE
-        }
-
-        val alertDialog = AlertDialog.Builder(this)
-            .setView(dialogBinding.root)
-            .create()
-
-        alertDialog.setOnShowListener {
-            dialogBinding.btnSave.setOnClickListener {
-                val villaNo = dialogBinding.etVillaNo.text.toString().toIntOrNull()
-                if (villaNo == null) {
-                    showBalloon(dialogBinding.etVillaNo, "Villa numarası geçerli değil.", 2)
-                    return@setOnClickListener
-                }
-
-                val selectedStreet = dialogBinding.actvVillaStreet.text.toString()
-                if (selectedStreet.isBlank()) {
-                    showBalloon(dialogBinding.tilVillaStreet, "Lütfen bir sokak seçin.", 2)
-                    return@setOnClickListener
-                }
-
-                val villa = Villa(
-                    villaId = villaToEdit?.villaId ?: 0,
-                    villaNo = villaNo,
-                    villaNotes = dialogBinding.etVillaNotes.text.toString().takeIf { it.isNotBlank() },
-                    villaStreet = selectedStreet,
-                    villaNavigationA = dialogBinding.etVillaNavigationA.text.toString().takeIf { it.isNotBlank() },
-                    villaNavigationB = dialogBinding.etVillaNavigationB.text.toString().takeIf { it.isNotBlank() },
-                    isVillaUnderConstruction = if (dialogBinding.chipIsUnderConstruction.isChecked) 1 else 0,
-                    isVillaSpecial = if (dialogBinding.chipIsSpecial.isChecked) 1 else 0,
-                    isVillaRental = if (dialogBinding.chipIsRental.isChecked) 1 else 0,
-                    isVillaCallFromHome = if (dialogBinding.chipIsCallFromHome.isChecked) 1 else 0,
-                    isVillaCallForCargo = if (dialogBinding.chipIsCallForCargo.isChecked) 1 else 0,
-                    isVillaEmpty = if (dialogBinding.chipIsEmpty.isChecked) 1 else 0
-                )
-
-                activityScope.launch {
-                    if (isEditMode) {
-                        appDatabase.villaDao().update(villa)
-                        showToast("Villa ${villa.villaNo} güncellendi.")
-                        (application as SecuAsistApplication).sendUpsert(villa)
-                    } else {
-                        val existingVilla = appDatabase.villaDao().getVillaByNo(villa.villaNo)
-                        if (existingVilla == null) {
-                            val newId = appDatabase.villaDao().insert(villa)
-                            showToast("Villa ${villa.villaNo} eklendi.")
-                            val newVillaWithId = villa.copy(villaId = newId.toInt())
-                            (application as SecuAsistApplication).sendUpsert(newVillaWithId)
-                        } else {
-                            showToast("Bu villa numarası zaten mevcut.")
-                        }
-                    }
-                    alertDialog.dismiss()
-                }
-            }
-
-            dialogBinding.btnVillaContacts.setOnClickListener {
-                villaToEdit?.let { showManageVillaContactsDialog(it) }
-            }
-
-            dialogBinding.btnClose.setOnClickListener {
-                alertDialog.dismiss()
-            }
-        }
-
-        alertDialog.window?.setBackgroundDrawableResource(R.color.transparent)
-        alertDialog.show()
+        val dialogFragment = AddEditVillaDialogFragment.newInstance(villaToEdit)
+        dialogFragment.listener = this
+        dialogFragment.show(supportFragmentManager, "AddEditVillaDialog")
     }
 
     fun showVillaInfoBalloon(villa: Villa) {
@@ -1472,7 +1115,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
     }
 
     lateinit var villaContactsBinding : DialogManageVillaContactsBinding
-    private fun showManageVillaContactsDialog(villa: Villa) {
+    fun showManageVillaContactsDialog(villa: Villa) {
         villaContactsBinding = DialogManageVillaContactsBinding.inflate(layoutInflater)
         Tools(this).blur(arrayOf(villaContactsBinding.blur), 10f, true)
         if (Hawk.contains("enable_blur")) {
@@ -1495,7 +1138,7 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
                 .setPositiveButton("Evet, Sil") { _, _ ->
                     activityScope.launch(Dispatchers.IO) {
                         appDatabase.villaContactDao().deleteByVillaIdAndContactId(villa.villaId, contact.contactId)
-                        (application as SecuAsistApplication).sendUnlinkVillaContact(villa.villaId, contact.contactId)
+                        (application as SecuAsistApplication).sendUnlink(villa.villaId, contact.contactId)
 
                         val currentList = draggableAdapter.currentList.toMutableList()
                         currentList.remove(contact)
@@ -2489,20 +2132,62 @@ class MainActivity : AppCompatActivity(), MultiNumberSelectionDialogFragment.OnM
         super.onStart()
         activityScopeJob = activityScope.launch {
             webSocketClient.incomingMessages.collect { message ->
-                if (message.startsWith("STATUS:")) {
-                    if (message.startsWith("STATUS:CONNECTED:")) {
-                        showToast("Sunucuya bağlandı.")
-                    } else if (message.startsWith("STATUS:DISCONNECTED:")) {
-                        showToast("Sunucu bağlantısı kesildi. Yeniden bağlanıyor...")
-                    } else if (message.startsWith("STATUS:DISCONNECTING:")) {
-                        showToast("Sunucu bağlantısı kapanıyor...")
-                    } else if (message.startsWith("STATUS:ERROR:")) {
-                        showToast("Sunucuya bağlantı hatası oluştu. Yeniden bağlanıyor...")
-                    } else {
-                        showToast("Sunucu Durum: $message")
+                try {
+                    val json = JSONObject(message)
+                    val action = json.optString("type")
+                    val status = json.optString("status")
+                    val origin = json.optString("origin")
+
+                    when (action) {
+                        "STATUS" -> {
+                            val msg = json.optJSONObject("payload")?.optString("message") ?: "Sunucuya bağlandı."
+                            showToast(msg)
+                        }
+
+                        // 🏠 Villa işlemleri
+                        "VILLA_UPSERT", "VILLA_DELETE" -> {
+                            val villaName = json.optJSONObject("payload")?.optString("villaNo") ?: "Bilinmeyen villa"
+                            val where = if (origin == "self") "bu cihazdan" else "sunucudan"
+                            val operation = if (action == "VILLA_UPSERT") "güncellendi/eklendi" else "silindi"
+                            showToast("🏠 Villa $villaName $where $operation")
+                        }
+
+                        // 👤 Kişi (Contact) işlemleri
+                        "CONTACT_UPSERT", "CONTACT_DELETE" -> {
+                            val contactName = json.optJSONObject("payload")?.optString("contactName") ?: "Bilinmeyen kişi"
+                            val operation = if (action == "CONTACT_UPSERT") "Güncellendi/Eklendi" else "Silindi"
+                            showToast("👤 $contactName $operation")
+                        }
+
+                        // 🔄 Senkronizasyon vb.
+                        "SYNC_COMPLETE" -> {
+                            showToast("🔄 Senkronizasyon tamamlandı")
+                        }
+
+                        else -> {
+                            // JSON olarak geldi ama tanımsız bir işlemse
+                            showToast("🔹 Sunucu bildirimi: $message")
+                        }
                     }
-                } else {
-                    showToast("Sunucudan gelen mesaj: $message")
+
+                } catch (e: JSONException) {
+                    // JSON değilse, eski STATUS formatıdır
+                    if (message.startsWith("STATUS:")) {
+                        when {
+                            message.startsWith("STATUS:CONNECTED:") ->
+                                showToast("Sunucuya bağlandı.")
+                            message.startsWith("STATUS:DISCONNECTED:") ->
+                                showToast("Sunucu bağlantısı kesildi. Yeniden bağlanıyor...")
+                            message.startsWith("STATUS:DISCONNECTING:") ->
+                                showToast("Sunucu bağlantısı kapanıyor...")
+                            message.startsWith("STATUS:ERROR:") ->
+                                showToast("Sunucuya bağlantı hatası oluştu. Yeniden bağlanıyor...")
+                            else ->
+                                showToast("Sunucu Durum: $message")
+                        }
+                    } else {
+                        showToast("Sunucudan gelen mesaj: $message")
+                    }
                 }
             }
         }

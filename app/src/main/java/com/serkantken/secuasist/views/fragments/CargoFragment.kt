@@ -129,7 +129,7 @@ class CargoFragment : Fragment(), CargoCompanyAdapter.OnCargoCompanyActionListen
             triggerRefresh()
         }
         // İsteğe bağlı: Renk şeması
-        // binding.swipeRefreshLayout.setColorSchemeResources(R.color.your_color_primary, R.color.your_color_accent)
+        binding.swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimaryDark, R.color.teal_700)
     }
 
     fun setSearchQuery(query: String) {

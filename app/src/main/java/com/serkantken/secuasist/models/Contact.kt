@@ -9,5 +9,7 @@ data class Contact(
     val contactId: Int = 0,
     val contactName: String?,
     val contactPhone: String?,
-    var lastCallTimestamp: Long? = null
+    var lastCallTimestamp: Long? = null,
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 )

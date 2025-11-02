@@ -11,5 +11,7 @@ data class Camera(
     val name: String,
     val ipAddress: String,
     var isFaulty: Boolean = false,
-    var faultDate: Date? = null // Arızalı değilse null olacak
+    var faultDate: Date? = null, // Arızalı değilse null olacak
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 )

@@ -24,5 +24,7 @@ data class VillaContact(
     val isRealOwner: Boolean = false,
     val contactType: String?,
     val notes: String?,
-    var orderIndex: Int = 0
+    var orderIndex: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 )

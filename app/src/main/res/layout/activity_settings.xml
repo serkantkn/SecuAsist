@@ -88,7 +88,6 @@
                     android:id="@+id/btnConnect"
                     android:background="@drawable/background_blur"
                     app:layout_constraintTop_toBottomOf="@id/et_IP_Address"
-                    app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     android:layout_marginTop="10dp">
 
@@ -105,11 +104,98 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:id="@+id/titleConnect"
-                        android:text="Bağlan"
+                        android:text="Kaydet ve bağlan"
                         android:textColor="@color/white"
                         app:layout_constraintStart_toEndOf="@id/icConnect"
                         app:layout_constraintTop_toTopOf="@id/icConnect"
                         app:layout_constraintBottom_toBottomOf="@id/icConnect"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        android:layout_marginEnd="10dp"/>
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <View
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:id="@+id/indicator_server_status"
+                    android:background="@drawable/background_blur_called_villa"
+                    app:layout_constraintTop_toTopOf="@id/btnConnect"
+                    app:layout_constraintBottom_toBottomOf="@id/btnConnect"
+                    app:layout_constraintStart_toStartOf="parent"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/label_server_status"
+                    android:text="Bağlandı"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    app:layout_constraintTop_toTopOf="@id/indicator_server_status"
+                    app:layout_constraintBottom_toBottomOf="@id/indicator_server_status"
+                    app:layout_constraintStart_toEndOf="@id/indicator_server_status"
+                    android:layout_marginStart="5dp"/>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:id="@+id/divider1"
+                    android:background="@drawable/shape_divider"
+                    app:layout_constraintTop_toBottomOf="@id/btnConnect"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="10dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/title_sync_status"
+                    android:text="Senkronizasyon Durumu"
+                    android:textSize="17sp"
+                    android:textColor="@color/colorAccent"
+                    app:layout_constraintTop_toBottomOf="@id/divider1"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="10dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/label_sync_status"
+                    android:text="Bilinmiyor"
+                    android:textSize="17sp"
+                    android:textColor="@color/white"
+                    app:layout_constraintTop_toBottomOf="@id/title_sync_status"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="5dp"/>
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/btnSync"
+                    android:background="@drawable/background_blur"
+                    app:layout_constraintTop_toBottomOf="@id/label_sync_status"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="10dp">
+
+                    <com.makeramen.roundedimageview.RoundedImageView
+                        android:id="@+id/icSync"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:src="@drawable/ic_sync"
+                        android:padding="7dp"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:id="@+id/titleSync"
+                        android:text="Senkronize et"
+                        android:textColor="@color/white"
+                        app:layout_constraintStart_toEndOf="@id/icSync"
+                        app:layout_constraintTop_toTopOf="@id/icSync"
+                        app:layout_constraintBottom_toBottomOf="@id/icSync"
                         app:layout_constraintEnd_toEndOf="parent"
                         android:layout_marginEnd="10dp"/>
 
@@ -168,6 +254,16 @@
                     app:layout_constraintStart_toStartOf="parent"
                     android:layout_marginTop="5dp"/>
 
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:id="@+id/divider2"
+                    android:background="@drawable/shape_divider"
+                    app:layout_constraintTop_toBottomOf="@id/et_device_name"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="10dp"/>
+
                 <androidx.appcompat.widget.SwitchCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -180,6 +276,15 @@
                     android:layout_marginEnd="9dp"
                     android:layout_marginTop="10dp"/>
 
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:id="@+id/divider3"
+                    android:background="@drawable/shape_divider"
+                    app:layout_constraintTop_toBottomOf="@id/switch_set_launcher"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"/>
+
                 <androidx.appcompat.widget.SwitchCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -187,10 +292,20 @@
                     android:text="Telefon aramalarını yapmadan önce numaranın düzenlenmesine izin ver"
                     android:textSize="17sp"
                     android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@id/switch_set_launcher"
-                    android:layout_marginTop="10dp"
+                    app:layout_constraintTop_toBottomOf="@id/divider3"
+                    android:layout_marginTop="7dp"
                     android:layout_marginStart="9dp"
                     android:layout_marginEnd="9dp"/>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:id="@+id/divider4"
+                    android:background="@drawable/shape_divider"
+                    app:layout_constraintTop_toBottomOf="@id/switch_phone_call"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginTop="7dp"/>
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -199,7 +314,7 @@
                     android:text="Cihazın bulunduğu konum"
                     android:textSize="17sp"
                     android:textColor="@color/colorAccent"
-                    app:layout_constraintTop_toBottomOf="@id/switch_phone_call"
+                    app:layout_constraintTop_toBottomOf="@id/divider4"
                     app:layout_constraintStart_toStartOf="parent"
                     android:layout_marginStart="9dp"
                     android:layout_marginTop="10dp"/>
@@ -275,6 +390,15 @@
                     android:layout_marginEnd="9dp"
                     android:layout_marginTop="10dp"/>
 
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:id="@+id/divider5"
+                    android:background="@drawable/shape_divider"
+                    app:layout_constraintTop_toBottomOf="@id/switch_less_animations"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"/>
+
                 <androidx.appcompat.widget.SwitchCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -282,8 +406,7 @@
                     android:text="Bulanıklık efekti"
                     android:textSize="17sp"
                     android:textColor="@color/white"
-                    app:layout_constraintTop_toBottomOf="@id/switch_less_animations"
-                    android:layout_marginTop="5dp"
+                    app:layout_constraintTop_toBottomOf="@id/divider5"
                     android:layout_marginStart="9dp"
                     android:layout_marginEnd="9dp"/>
 
@@ -293,7 +416,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:id="@+id/label_app_version"
-                android:text="SecuAsist\nversiyon 0.17.2-beta4\n\nDerleme tarihi: 19 Ekim 2025"
+                android:text="SecuAsist\nversiyon 0.18.0-beta5\n\nDerleme tarihi: 1 Kasım 2025"
                 android:gravity="center"
                 android:textSize="11sp"
                 android:textColor="@color/textColorSecondary"
@@ -331,7 +454,7 @@
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:id="@+id/toolbar_button_layout">
+                android:id="@+id/back_button_layout">
 
                 <com.makeramen.roundedimageview.RoundedImageView
                     android:id="@+id/btn_back"
@@ -360,6 +483,37 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toEndOf="@id/blur_back"
             android:layout_marginStart="16dp"/>
+
+        <eightbitlab.com.blurview.BlurView
+            android:id="@+id/blur_toolbar_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/background_blur"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/btn_android_settings"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:paddingHorizontal="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:id="@+id/title_android_settings"
+                    android:text="Android Ayarları"
+                    android:textColor="@color/white"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"/>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+        </eightbitlab.com.blurview.BlurView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

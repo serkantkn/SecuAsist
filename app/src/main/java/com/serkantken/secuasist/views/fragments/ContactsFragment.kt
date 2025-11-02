@@ -146,8 +146,8 @@ class ContactsFragment : Fragment() {
                     } else {
                         // Arama doluysa, isim veya telefonda ara (büyük/küçük harf duyarsız)
                         allContacts.filter { contact ->
-                            contact.contactName?.contains(query, ignoreCase = true) ?: false ||
-                                    contact.contactPhone?.contains(query, ignoreCase = true) ?: false
+                            contact.contactName?.contains(query, ignoreCase = true) ?: false
+                                    // || contact.contactPhone?.contains(query, ignoreCase = true) ?: false
                         }
                     }
                 }

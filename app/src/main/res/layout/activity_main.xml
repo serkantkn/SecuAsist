@@ -144,6 +144,24 @@
 
             </eightbitlab.com.blurview.BlurView>
 
+            <eightbitlab.com.blurview.BlurView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:id="@+id/blur_status_indicator"
+                android:background="@drawable/background_blur"
+                app:layout_constraintBottom_toBottomOf="@id/blur_toolbar_buttons"
+                app:layout_constraintEnd_toStartOf="@id/blur_toolbar_buttons"
+                android:layout_marginEnd="10dp">
+
+                <View
+                    android:layout_width="25dp"
+                    android:layout_height="25dp"
+                    android:id="@+id/ic_indicator"
+                    android:background="@drawable/background_blur_pending_villa"
+                    android:layout_margin="7dp"/>
+
+            </eightbitlab.com.blurview.BlurView>
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <ImageView

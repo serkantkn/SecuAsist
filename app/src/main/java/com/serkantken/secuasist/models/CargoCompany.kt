@@ -8,7 +8,9 @@ data class CargoCompany(
     @PrimaryKey(autoGenerate = true)
     val companyId: Int = 0,
     val companyName: String?, // UNIQUE olacak
-    val isCargoInOperation: Int = 0 // 0: Yok, 1: Var
+    val isCargoInOperation: Int = 0, // 0: Yok, 1: Var
+    val updatedAt: Long = System.currentTimeMillis(),
+    var deviceId: String? = "Bilinmiyor"
 ) : SearchableItem {
     override fun getDisplayId(): String? {
         return companyName

@@ -5,171 +5,182 @@ import android.content.Intent
 import android.util.Log
 import androidx.room.withTransaction
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
-import com.google.gson.reflect.TypeToken
 import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.database.AppDatabase
-import com.serkantken.secuasist.models.Cargo
-import com.serkantken.secuasist.models.CargoCompany
-import com.serkantken.secuasist.models.Contact
-import com.serkantken.secuasist.models.Villa
-import com.serkantken.secuasist.models.VillaContact
+import com.serkantken.secuasist.models.*
 import com.serkantken.secuasist.network.WebSocketClient
-import com.serkantken.secuasist.utils.VillaContactDeserializer
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
-import kotlin.text.get
 
-// Gelen mesajın önce tipini anlamak için kullanılacak basit bir veri sınıfı
-data class BaseWebSocketMessage(val type: String, val payload: JsonElement)
-
+/**
+ * Tüm uygulama genelinde WebSocket bağlantısını, gelen mesajların işlenmesini ve
+ * veritabanı ile senkronizasyonu yöneten sınıf.
+ */
 class SecuAsistApplication : Application() {
 
-    // WebSocket istemcisini lazy initialization ile kur.
-    // IP adresini Hawk'tan okur, bulamazsa varsayılan bir IP kullanır.
-    val webSocketClient: WebSocketClient by lazy {
-        WebSocketClient(Hawk.get("server_ip", "192.168.1.34"), 8765)
-    }
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val gson = Gson()
 
-    val database: AppDatabase by lazy {
-        AppDatabase.getDatabase(this)
-    }
+    lateinit var db: AppDatabase
+    lateinit var wsClient: WebSocketClient
 
-    // Gson nesnesini tekrar tekrar oluşturmamak için
-    private val gson: Gson by lazy {
-        GsonBuilder()
-            .registerTypeAdapter(VillaContact::class.java, VillaContactDeserializer())
-            .create()
-    }
-
-    // Uygulama genelinde arka plan işlemleri için CoroutineScope
-    private val applicationScope = CoroutineScope(Dispatchers.IO)
-    private var uiUpdateDebounceJob: Job? = null
+    private var debounceJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
+
         Hawk.init(this).build()
+        db = AppDatabase.getDatabase(this)
+
+        val savedIp = Hawk.get("server_ip", "192.168.1.34")
+        wsClient = WebSocketClient(savedIp, 8765)
+
         initWebSocketListener()
-        Log.d("SecuAsistApplication", "Uygulama başlatıldı, WebSocket bağlanıyor...")
-        webSocketClient.connect() // WebSocket bağlantısını başlat
+        wsClient.connect()
+
+        Log.i("SecuAsistApp", "✅ Uygulama başlatıldı, WS bağlanıyor: $savedIp")
     }
 
     override fun onTerminate() {
         super.onTerminate()
-        Log.d("SecuAsistApplication", "Uygulama sonlandırılıyor, WebSocket bağlantısı kesiliyor...")
-        uiUpdateDebounceJob?.cancel()
-        webSocketClient.disconnect()
+        wsClient.disconnect()
+        appScope.cancel()
     }
+
+    // ============================================================
+    // 🔊 GELEN MESAJLARIN DİNLENMESİ
+    // ============================================================
 
     private fun initWebSocketListener() {
-        Log.d("SecuAsistApplication", "WebSocket mesaj dinleyicisi başlatılıyor.")
-        webSocketClient.incomingMessages
+        wsClient.incomingMessages
             .onEach { messageText ->
-                // Bu blok, her yeni mesaj geldiğinde sıralı olarak çalışır
-                processIncomingWebSocketMessage(messageText)
+                processIncomingMessage(messageText)
             }
             .catch { e ->
-                Log.e("SecuAsistApplication", "Mesaj akışını dinlerken hata oluştu.", e)
+                Log.e("SecuAsistApp", "Mesaj akışı hatası", e)
             }
-            .launchIn(applicationScope) // Bu Flow'u uygulama ömrü boyunca dinle
+            .launchIn(appScope)
     }
 
-    /**
-     * Sunucudan gelen tüm WebSocket mesajlarını işleyen ana fonksiyon.
-     */
+    // ============================================================
+    // 🧩 MESAJLARIN İŞLENMESİ
+    // ============================================================
 
-    private suspend fun processIncomingWebSocketMessage(jsonMessage: String) {
+    private suspend fun processIncomingMessage(json: String) {
+        if (!json.startsWith("{")) {
+            Log.d("WSProcessing", "Durum mesajı (JSON değil): $json")
+            return
+        }
+
         try {
-            if (!jsonMessage.startsWith("{")) {
-                Log.d("WebSocketProcessing", "Statü mesajı alındı, işlenmiyor: $jsonMessage")
-                return
-            }
+            val base = gson.fromJson(json, BaseWebSocketMessage::class.java)
+            Log.d("WSProcessing", "📨 Alındı: ${base.type}")
 
-            val baseMessage = gson.fromJson(jsonMessage, BaseWebSocketMessage::class.java)
-            Log.d("WebSocketProcessing", "İşlem Başladı: ${baseMessage.type}")
+            var dataChanged = false
 
-            var isDataChanged = false
-            database.withTransaction {
-                when (baseMessage.type) {
+            db.withTransaction {
+                when (base.type) {
+
+                    // ----------- EKLEME/GÜNCELLEME -----------
+
                     "VILLA_UPSERT" -> {
-                        val villa = gson.fromJson(baseMessage.payload, Villa::class.java)
-                        val existing = database.villaDao().getVillaById(villa.villaId)
-                        if (existing == null) database.villaDao().insert(villa)
-                        else database.villaDao().update(villa)
-                        isDataChanged = true
+                        val villa = gson.fromJson(base.payload, Villa::class.java)
+                        if (db.villaDao().getVillaById(villa.villaId) != null)
+                            db.villaDao().update(villa)
+                        else
+                            db.villaDao().insert(villa)
+                        dataChanged = true
                     }
+
                     "CONTACT_UPSERT" -> {
-                        val contact = gson.fromJson(baseMessage.payload, Contact::class.java)
-                        val existing = database.contactDao().getContactById(contact.contactId)
-                        if (existing == null) database.contactDao().insert(contact)
-                        else database.contactDao().update(contact)
-                        isDataChanged = true
+                        val contact = gson.fromJson(base.payload, Contact::class.java)
+                        if (db.contactDao().getContactById(contact.contactId) != null)
+                            db.contactDao().update(contact)
+                        else
+                            db.contactDao().insert(contact)
+                        dataChanged = true
                     }
-                    // İlişki ve diğer tablolarda REPLACE kullanmak genellikle daha basittir
+
                     "VILLACONTACT_LINK" -> {
-                        database.villaContactDao().insert(gson.fromJson(baseMessage.payload, VillaContact::class.java))
-                        isDataChanged = true
+                        val vc = gson.fromJson(base.payload, VillaContact::class.java)
+                        db.villaContactDao().insert(vc)
+                        dataChanged = true
                     }
+
                     "CARGOCOMPANY_UPSERT" -> {
-                        database.cargoCompanyDao().insert(gson.fromJson(baseMessage.payload, CargoCompany::class.java))
-                        isDataChanged = true
+                        val c = gson.fromJson(base.payload, CargoCompany::class.java)
+                        if (db.cargoCompanyDao().getCargoCompanyById(c.companyId) != null)
+                            db.cargoCompanyDao().update(c)
+                        else
+                            db.cargoCompanyDao().insert(c)
+                        dataChanged = true
                     }
+
                     "CARGO_UPSERT" -> {
-                        database.cargoDao().insert(gson.fromJson(baseMessage.payload, Cargo::class.java))
-                        isDataChanged = true
+                        val cargo = gson.fromJson(base.payload, Cargo::class.java)
+                        if (db.cargoDao().getCargoById(cargo.cargoId) != null)
+                            db.cargoDao().update(cargo)
+                        else
+                            db.cargoDao().insert(cargo)
+                        dataChanged = true
                     }
-                    "VILLA_DELETE" -> database.villaDao().deleteById(baseMessage.payload.asJsonObject.get("villaId").asInt)
-                    "CONTACT_DELETE" -> database.contactDao().deleteById(baseMessage.payload.asJsonObject.get("contactId").asInt)
+
+                    // ----------- SİLME -----------
+
+                    "VILLA_DELETE" -> {
+                        val id = base.payload.asJsonObject["villaId"].asInt
+                        db.villaDao().deleteById(id)
+                        dataChanged = true
+                    }
+
+                    "CONTACT_DELETE" -> {
+                        val id = base.payload.asJsonObject["contactId"].asInt
+                        db.contactDao().deleteById(id)
+                        dataChanged = true
+                    }
+
                     "VILLACONTACT_UNLINK" -> {
-                        val payload = baseMessage.payload.asJsonObject
-                        val villaId = payload.get("villaId").asInt
-                        val contactId = payload.get("contactId").asInt
-                        database.villaContactDao().deleteByVillaIdAndContactId(villaId, contactId)
+                        val obj = base.payload.asJsonObject
+                        val villaId = obj["villaId"].asInt
+                        val contactId = obj["contactId"].asInt
+                        db.villaContactDao().deleteByVillaIdAndContactId(villaId, contactId)
+                        dataChanged = true
                     }
-                    else -> Log.w("WebSocketProcessing", "Bilinmeyen mesaj tipi alındı: ${baseMessage.type}")
+
+                    else -> Log.w("WSProcessing", "⚠️ Bilinmeyen mesaj tipi: ${base.type}")
                 }
             }
 
-            if (isDataChanged) {
-                // Debounce mantığı arayüzün sadece en sonda güncellenmesini sağlar.
-                uiUpdateDebounceJob?.cancel()
-                uiUpdateDebounceJob = applicationScope.launch {
-                    delay(750) // Gecikmeyi biraz artırmak fırtına sonrası için daha güvenli olabilir.
-                    Log.i("WebSocketDebounce", "Mesaj fırtınası dindi. Arayüzü güncellemek için broadcast gönderiliyor.")
-                    sendBroadcast(Intent("com.serkantken.secuasist.DATA_UPDATED"))
-                }
-            }
+            if (dataChanged) debounceUIBroadcast()
+
         } catch (e: Exception) {
-            Log.e("WebSocketProcessing", "Gelen WebSocket mesajı işlenirken hata oluştu: $jsonMessage", e)
+            Log.e("WSProcessing", "Mesaj işlenirken hata: $json", e)
         }
     }
 
-    /**
-     * Sunucuya bir veri göndermek için kullanılan genel yardımcı fonksiyon.
-     * @param type Mesajın tipi (örn: "VILLA_UPSERT", "CONTACT_DELETE").
-     * @param payload Gönderilecek veri nesnesi (örn: bir Villa, Contact veya sadece bir ID).
-     */
-    private fun sendWebSocketMessage(type: String, payload: Any) {
-        applicationScope.launch {
-            try {
-                // Sunucunun beklediği format: {"type": "...", "payload": ...}
-                val message = mapOf("type" to type, "payload" to payload)
-                val jsonMessage = gson.toJson(message)
-                webSocketClient.sendMessage(jsonMessage)
-            } catch (e: Exception) {
-                Log.e("WebSocketSending", "WebSocket mesajı gönderilirken hata: Type=$type", e)
-            }
+    // ============================================================
+    // 🔁 UI GÜNCELLEMELERİ
+    // ============================================================
+
+    private fun debounceUIBroadcast() {
+        debounceJob?.cancel()
+        debounceJob = appScope.launch {
+            delay(600)
+            Log.i("WSProcessing", "🔄 Veri değişti, broadcast gönderiliyor.")
+            sendBroadcast(Intent("com.serkantiken.secuasist.DATA_UPDATED"))
         }
     }
 
-    // --- DIŞARIDAN ÇAĞRILACAK KOLAYLAŞTIRICI FONKSİYONLAR ---
+    // ============================================================
+    // 📤 MESAJ GÖNDERME
+    // ============================================================
+
+    private fun sendMessage(type: String, payload: Any) {
+        val json = gson.toJson(mapOf("type" to type, "payload" to payload))
+        wsClient.sendMessage(json)
+    }
 
     fun sendUpsert(data: Any) {
         val type = when (data) {
@@ -178,31 +189,20 @@ class SecuAsistApplication : Application() {
             is VillaContact -> "VILLACONTACT_LINK"
             is CargoCompany -> "CARGOCOMPANY_UPSERT"
             is Cargo -> "CARGO_UPSERT"
-            else -> {
-                Log.w("SecuAsistApplication", "Desteklenmeyen veri tipi: ${data.javaClass.simpleName}")
-                return
-            }
+            else -> return
         }
-        sendWebSocketMessage(type, data)
+        sendMessage(type, data)
     }
 
-    fun sendDelete(entityName: String, id: Any) {
-        val type = when(entityName.uppercase()) {
-            "VILLA" -> "VILLA_DELETE"
-            "CONTACT" -> "CONTACT_DELETE"
-            // Diğerleri...
-            else -> {
-                Log.w("SecuAsistApplication", "Desteklenmeyen silme tipi: $entityName")
-                return
-            }
-        }
-        // Silme işlemi için genellikle sadece ID'yi içeren bir payload göndeririz.
-        val payload = mapOf("${entityName.lowercase()}Id" to id)
-        sendWebSocketMessage(type, payload)
+    fun sendDelete(entity: String, id: Int) {
+        val type = "${entity.uppercase()}_DELETE"
+        val key = "${entity.lowercase()}Id"
+        val payload = mapOf(key to id)
+        sendMessage(type, payload)
     }
 
-    fun sendUnlinkVillaContact(villaId: Int, contactId: Int) {
+    fun sendUnlink(villaId: Int, contactId: Int) {
         val payload = mapOf("villaId" to villaId, "contactId" to contactId)
-        sendWebSocketMessage("VILLACONTACT_UNLINK", payload)
+        sendMessage("VILLACONTACT_UNLINK", payload)
     }
 }

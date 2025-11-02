@@ -41,7 +41,7 @@ interface VillaContactDao {
     @Update
     suspend fun updateVillaContacts(villaContacts: List<VillaContact>)
 
-    @Query("SELECT * FROM VillaContacts WHERE villaId = :villaId")
+    @Query("SELECT * FROM VillaContacts WHERE villaId = :villaId ORDER BY `orderIndex` ASC")
     suspend fun getVillaContactRelations(villaId: Int): List<VillaContact>
 
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId AND VC.isRealOwner = 1")
