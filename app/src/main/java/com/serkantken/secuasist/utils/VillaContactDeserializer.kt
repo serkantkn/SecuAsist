@@ -3,6 +3,7 @@ package com.serkantken.secuasist.utils
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.serkantken.secuasist.models.VillaContact
 import java.lang.reflect.Type
 
@@ -13,13 +14,23 @@ class VillaContactDeserializer : JsonDeserializer<VillaContact> {
         context: JsonDeserializationContext?
     ): VillaContact? {
         val jsonObject = json?.asJsonObject ?: return null
-        val isRealOwnerAsInt = jsonObject.get("isRealOwner")?.asInt
-        val isRealOwnerBoolean = isRealOwnerAsInt == 1
-        val villaId = jsonObject.get("villaId")?.asInt ?: 0
-        val contactId = jsonObject.get("contactId")?.asInt ?: 0
-        val contactType = jsonObject.get("contactType")?.asString
-        val notes = jsonObject.get("notes")?.asString
-        val orderIndex = jsonObject.get("orderIndex")?.asInt ?: 0
+
+        fun getStringSafe(key: String): String? {
+            val el = jsonObject.get(key)
+            return if (el == null || el is JsonNull) null else el.asString
+        }
+
+        fun getIntSafe(key: String): Int {
+            val el = jsonObject.get(key)
+            return if (el == null || el is JsonNull) 0 else el.asInt
+        }
+
+        val isRealOwnerBoolean = getIntSafe("isRealOwner") == 1
+        val villaId = getIntSafe("villaId")
+        val contactId = getIntSafe("contactId")
+        val contactType = getStringSafe("contactType")
+        val notes = getStringSafe("notes")
+        val orderIndex = getIntSafe("orderIndex")
 
         return VillaContact(
             villaId = villaId,

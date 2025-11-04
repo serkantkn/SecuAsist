@@ -5,10 +5,13 @@ import android.content.Intent
 import android.util.Log
 import androidx.room.withTransaction
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
 import com.orhanobut.hawk.Hawk
 import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.models.*
 import com.serkantken.secuasist.network.WebSocketClient
+import com.serkantken.secuasist.utils.VillaContactDeserializer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
@@ -21,7 +24,9 @@ import kotlinx.coroutines.flow.onEach
 class SecuAsistApplication : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val gson = Gson()
+    private val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(VillaContact::class.java, VillaContactDeserializer())
+        .create()
 
     lateinit var db: AppDatabase
     lateinit var wsClient: WebSocketClient
@@ -149,6 +154,25 @@ class SecuAsistApplication : Application() {
                         dataChanged = true
                     }
 
+                    // ----------- SENKRONİZASYON -----------
+
+                    "SYNC_RESPONSE" -> {
+                        try {
+                            val payloadObj = base.payload.asJsonObject ?: return@withTransaction
+
+                            val villas = payloadObj["villas"]?.asJsonArray ?: JsonArray()
+                            val contacts = payloadObj["contacts"]?.asJsonArray ?: JsonArray()
+                            val villaContacts = payloadObj["villaContacts"]?.asJsonArray ?: JsonArray()
+                            val cargoCompanies = payloadObj["cargoCompanies"]?.asJsonArray ?: JsonArray()
+
+                            handleSyncData(villas, contacts, villaContacts, cargoCompanies)
+
+                        } catch (ex: Exception) {
+                            Log.e("WSProcessing", "❌ SYNC_RESPONSE parse hatası: $json", ex)
+                        }
+                        return@withTransaction
+                    }
+
                     else -> Log.w("WSProcessing", "⚠️ Bilinmeyen mesaj tipi: ${base.type}")
                 }
             }
@@ -158,6 +182,75 @@ class SecuAsistApplication : Application() {
         } catch (e: Exception) {
             Log.e("WSProcessing", "Mesaj işlenirken hata: $json", e)
         }
+    }
+
+    private suspend fun handleSyncData(
+        villas: JsonArray,
+        contacts: JsonArray,
+        villaContacts: JsonArray,
+        cargoCompanies: JsonArray
+    ) {
+        db.withTransaction {
+            // 1. VILLAS
+            for (item in villas) {
+                try {
+                    val villa = gson.fromJson(item, Villa::class.java)
+                    if (db.villaDao().getVillaById(villa.villaId) != null)
+                        db.villaDao().update(villa)
+                    else
+                        db.villaDao().insert(villa)
+                } catch (e: Exception) {
+                    Log.e("SYNC", "❌ Villa parse hatası: $item", e)
+                }
+            }
+
+            // 2. CONTACTS
+            for (item in contacts) {
+                try {
+                    val contact = gson.fromJson(item, Contact::class.java)
+                    if (db.contactDao().getContactById(contact.contactId) != null)
+                        db.contactDao().update(contact)
+                    else
+                        db.contactDao().insert(contact)
+                } catch (e: Exception) {
+                    Log.e("SYNC", "❌ Contact parse hatası: $item", e)
+                }
+            }
+
+            // 3. CARGO COMPANIES
+            for (item in cargoCompanies) {
+                try {
+                    val company = gson.fromJson(item, CargoCompany::class.java)
+                    if (db.cargoCompanyDao().getCargoCompanyById(company.companyId) != null)
+                        db.cargoCompanyDao().update(company)
+                    else
+                        db.cargoCompanyDao().insert(company)
+                } catch (e: Exception) {
+                    Log.e("SYNC", "❌ CargoCompany parse hatası: $item", e)
+                }
+            }
+
+            // 4. VILLA-CONTACTS (En Sonda)
+            for (item in villaContacts) {
+                try {
+                    val vc = gson.fromJson(item, VillaContact::class.java)
+
+                    val villaExists = db.villaDao().getVillaById(vc.villaId) != null
+                    val contactExists = db.contactDao().getContactById(vc.contactId) != null
+
+                    if (villaExists && contactExists) {
+                        db.villaContactDao().insert(vc)
+                    } else {
+                        Log.w("SYNC", "⚠️ Atlandı (FK yok): $vc")
+                    }
+                } catch (e: Exception) {
+                    Log.e("SYNC", "❌ VillaContact parse hatası: $item", e)
+                }
+            }
+        }
+
+        Log.d("SYNC", "✅ Senkronizasyon başarıyla tamamlandı.")
+        debounceUIBroadcast()
     }
 
     // ============================================================
