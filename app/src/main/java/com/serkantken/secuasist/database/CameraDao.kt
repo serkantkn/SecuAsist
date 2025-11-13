@@ -16,11 +16,20 @@ interface CameraDao {
     fun getAllCameras(): Flow<List<Camera>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdate(camera: Camera)
+    suspend fun insert(camera: Camera)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(cameras: List<Camera>)
+
+    @Update
+    suspend fun update(camera: Camera)
 
     @Query("DELETE FROM cameras WHERE id = :cameraId")
     suspend fun deleteById(cameraId: Int)
 
     @Query("UPDATE cameras SET isFaulty = :isFaulty, faultDate = :faultDate WHERE id = :cameraId")
     suspend fun updateFaultStatus(cameraId: Int, isFaulty: Boolean, faultDate: Date?)
+
+    @Query("SELECT * FROM cameras WHERE isFaulty = 1 ORDER BY name ASC")
+    fun getFaulty(): Flow<List<Camera>>
 }

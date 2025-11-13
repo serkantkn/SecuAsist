@@ -33,8 +33,11 @@ import kotlinx.coroutines.launch
 import kotlin.text.contains
 import kotlin.text.filter
 import androidx.core.net.toUri
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.badge.ExperimentalBadgeUtils
 import com.serkantken.secuasist.SecuAsistApplication
+import androidx.core.view.isVisible
+import androidx.core.view.marginBottom
 
 @ExperimentalBadgeUtils
 class ContactsFragment : Fragment() {
@@ -63,10 +66,15 @@ class ContactsFragment : Fragment() {
                 Tools(requireActivity()).convertDpToPixel(16),
                 systemBars.top + Tools(requireActivity()).convertDpToPixel(55),
                 Tools(requireActivity()).convertDpToPixel(16),
-                systemBars.bottom + Tools(requireActivity()).convertDpToPixel(72)
+                systemBars.bottom + Tools(requireActivity()).convertDpToPixel(80)
             )
+            val params: ViewGroup.MarginLayoutParams = binding.buttonScrollUp.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = systemBars.bottom + Tools(requireActivity()).convertDpToPixel(70)
+            params.rightMargin = Tools(requireActivity()).convertDpToPixel(16)
+            binding.buttonScrollUp.layoutParams = params
             insets
         }
+        Tools(requireActivity()).blur(arrayOf(binding.buttonScrollUp), 10f, true)
 
         setupRecyclerView()
         observeContacts()
@@ -106,10 +114,41 @@ class ContactsFragment : Fragment() {
             isShowingInfo = false,
             isChoosingContact = false
         )
+        val linearLayoutManager = LinearLayoutManager(requireContext())
         binding.rvContacts.apply {
-            layoutManager = LinearLayoutManager(requireContext())
+            layoutManager = linearLayoutManager
             clipToPadding = false
             adapter = contactsAdapter
+            setHasFixedSize(true)
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    super.onScrolled(recyclerView, dx, dy)
+                    if (dy > 0 && binding.buttonScrollUp.visibility != View.VISIBLE) {
+                        binding.buttonScrollUp.alpha = 0f
+                        binding.buttonScrollUp.visibility = View.VISIBLE
+                        if (binding.buttonScrollUp.isShown) {
+                            binding.buttonScrollUp.animate()
+                                .alpha(1f)
+                                .setDuration(200)
+                                .start()
+                        }
+                    }
+                    if (linearLayoutManager.findFirstCompletelyVisibleItemPosition() == 0) {
+                        if (binding.buttonScrollUp.isShown) {
+                            binding.buttonScrollUp.animate()
+                                .alpha(0f)
+                                .setDuration(200)
+                                .withEndAction {
+                                    binding.buttonScrollUp.visibility = View.GONE
+                                }
+                                .start()
+                        }
+                    }
+                }
+            })
+        }
+        binding.buttonScrollUp.setOnClickListener {
+            binding.rvContacts.smoothScrollToPosition(0)
         }
     }
 

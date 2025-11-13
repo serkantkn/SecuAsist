@@ -10,6 +10,7 @@ data class Camera(
     val id: Int = 0,
     val name: String,
     val ipAddress: String,
+    val board: String,
     var isFaulty: Boolean = false,
     var faultDate: Date? = null, // Arızalı değilse null olacak
     val updatedAt: Long = System.currentTimeMillis(),

@@ -13,7 +13,6 @@ import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.CompanyContact
 import com.serkantken.secuasist.models.CompanyDelivererCrossRef
 import com.serkantken.secuasist.models.Contact
-import com.serkantken.secuasist.models.Intercom
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
 
@@ -26,7 +25,6 @@ import com.serkantken.secuasist.models.VillaContact
         CompanyContact::class,
         Cargo::class,
         Camera::class,
-        Intercom::class,
         CompanyDelivererCrossRef::class
     ],
     version = 1,
@@ -43,7 +41,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun companyContactDao(): CompanyContactDao
     abstract fun cargoDao(): CargoDao
     abstract fun cameraDao(): CameraDao
-    abstract fun intercomDao(): IntercomDao
     abstract fun companyDelivererDao(): CompanyDelivererDao
 
     companion object {

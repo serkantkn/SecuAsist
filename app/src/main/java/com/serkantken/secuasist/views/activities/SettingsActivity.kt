@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
 import android.util.Log
+import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.CompoundButton
 import android.widget.TextView
@@ -112,12 +113,16 @@ class SettingsActivity : AppCompatActivity() {
                 put("type", "SYNC_REQUEST")
                 put("payload", payload)
             }.toString()
+
+            binding.progressSync.visibility = View.VISIBLE
+            binding.progressSync.progress = 0
+            binding.labelSyncStatus.text = "🔄 Sunucuya istek gönderiliyor..."
+            binding.btnSync.visibility = View.GONE
+
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
-                    // webSocketClient.sendMessage(message) — senin implementasyona göre bu metodu çağır
                     (application as SecuAsistApplication).wsClient.sendMessage(message)
 
-                    // opsiyonel: kısa geri bildirim (ana thread'te)
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@SettingsActivity, "Senkronizasyon isteği gönderildi.", Toast.LENGTH_SHORT).show()
                     }
@@ -139,6 +144,24 @@ class SettingsActivity : AppCompatActivity() {
             Hawk.put("enable_blur", isChecked)
             Toast.makeText(this, "Bulanıklık efekti ${if (isChecked) "açık" else "kapalı"} olarak ayarlandı.", Toast.LENGTH_SHORT).show()
             recreate()
+        }
+
+        lifecycleScope.launch {
+            (application as SecuAsistApplication).syncProgress.collect { status ->
+                withContext(Dispatchers.Main) {
+                    binding.labelSyncStatus.text = status.step
+
+                    if (status.total > 0) {
+                        val percent = (status.current * 100 / status.total)
+                        binding.progressSync.progress = percent
+                        //binding.labelPercentage.text = "$percent%"
+                    }
+
+                    if (status.isDone) {
+                        Toast.makeText(this@SettingsActivity, "Senkronizasyon tamamlandı!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
 
         observeConnectionStatus()

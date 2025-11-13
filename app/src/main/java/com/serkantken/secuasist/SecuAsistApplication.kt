@@ -13,6 +13,7 @@ import com.serkantken.secuasist.models.*
 import com.serkantken.secuasist.network.WebSocketClient
 import com.serkantken.secuasist.utils.VillaContactDeserializer
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -32,6 +33,15 @@ class SecuAsistApplication : Application() {
     lateinit var wsClient: WebSocketClient
 
     private var debounceJob: Job? = null
+
+    val syncProgress = MutableStateFlow(SyncProgress())
+
+    data class SyncProgress(
+        val step: String = "",
+        val current: Int = 0,
+        val total: Int = 0,
+        val isDone: Boolean = false
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -190,8 +200,13 @@ class SecuAsistApplication : Application() {
         villaContacts: JsonArray,
         cargoCompanies: JsonArray
     ) {
+        val app = this // Application context
+        var total = villas.size() + contacts.size() + cargoCompanies.size() + villaContacts.size()
+        var current = 0
+
         db.withTransaction {
             // 1. VILLAS
+            app.updateSyncProgress("Villalar işleniyor...", current, total)
             for (item in villas) {
                 try {
                     val villa = gson.fromJson(item, Villa::class.java)
@@ -199,12 +214,15 @@ class SecuAsistApplication : Application() {
                         db.villaDao().update(villa)
                     else
                         db.villaDao().insert(villa)
+                    current++
+                    app.updateSyncProgress("Villalar (${current}/${total})", current, total)
                 } catch (e: Exception) {
                     Log.e("SYNC", "❌ Villa parse hatası: $item", e)
                 }
             }
 
             // 2. CONTACTS
+            app.updateSyncProgress("Kişiler işleniyor...", current, total)
             for (item in contacts) {
                 try {
                     val contact = gson.fromJson(item, Contact::class.java)
@@ -212,6 +230,8 @@ class SecuAsistApplication : Application() {
                         db.contactDao().update(contact)
                     else
                         db.contactDao().insert(contact)
+                    current++
+                    app.updateSyncProgress("Kişiler (${current}/${total})", current, total)
                 } catch (e: Exception) {
                     Log.e("SYNC", "❌ Contact parse hatası: $item", e)
                 }
@@ -225,6 +245,8 @@ class SecuAsistApplication : Application() {
                         db.cargoCompanyDao().update(company)
                     else
                         db.cargoCompanyDao().insert(company)
+                    current++
+                    app.updateSyncProgress("Kargo Şirketleri (${current}/${total})", current, total)
                 } catch (e: Exception) {
                     Log.e("SYNC", "❌ CargoCompany parse hatası: $item", e)
                 }
@@ -238,15 +260,17 @@ class SecuAsistApplication : Application() {
                     val villaExists = db.villaDao().getVillaById(vc.villaId) != null
                     val contactExists = db.contactDao().getContactById(vc.contactId) != null
 
-                    if (villaExists && contactExists) {
+                    if (villaExists && contactExists)
                         db.villaContactDao().insert(vc)
-                    } else {
+                    else
                         Log.w("SYNC", "⚠️ Atlandı (FK yok): $vc")
-                    }
+                    current++
+                    app.updateSyncProgress("Villa-Kişi Bağlantıları (${current}/${total})", current, total)
                 } catch (e: Exception) {
                     Log.e("SYNC", "❌ VillaContact parse hatası: $item", e)
                 }
             }
+            app.updateSyncProgress("Tamamlandı ✅", total, total, true)
         }
 
         Log.d("SYNC", "✅ Senkronizasyon başarıyla tamamlandı.")
@@ -264,6 +288,10 @@ class SecuAsistApplication : Application() {
             Log.i("WSProcessing", "🔄 Veri değişti, broadcast gönderiliyor.")
             sendBroadcast(Intent("com.serkantiken.secuasist.DATA_UPDATED"))
         }
+    }
+
+    suspend fun updateSyncProgress(step: String, current: Int, total: Int, done: Boolean = false) {
+        syncProgress.emit(SyncProgress(step, current, total, done))
     }
 
     // ============================================================
