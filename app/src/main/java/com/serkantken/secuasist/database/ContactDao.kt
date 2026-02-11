@@ -8,7 +8,6 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.serkantken.secuasist.models.Contact
-import com.serkantken.secuasist.models.Villa
 import kotlinx.coroutines.flow.Flow // Flow için import eklendi
 
 @Dao
@@ -26,7 +25,7 @@ interface ContactDao {
     suspend fun delete(contact: Contact)
 
     @Query("DELETE FROM Contacts WHERE contactId = :id")
-    suspend fun deleteById(id: Int)
+    suspend fun deleteById(id: String)
 
     @Query("DELETE FROM Contacts")
     suspend fun deleteAll()
@@ -35,19 +34,19 @@ interface ContactDao {
     fun getAllContacts(): LiveData<List<Contact>>
 
     @Query("SELECT * FROM Contacts WHERE contactId IN (:contactIds)")
-    suspend fun getContactsByIds(contactIds: List<Int>): List<Contact>
+    suspend fun getContactsByIds(contactIds: List<String>): List<Contact>
 
     @Query("SELECT * FROM Contacts WHERE contactId IN (:contactIds)")
-    fun getContactsByIdsAsFlow(contactIds: List<Int>): Flow<List<Contact>>
+    fun getContactsByIdsAsFlow(contactIds: List<String>): Flow<List<Contact>>
 
     @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
-    fun getAllContactsAsList(): List<Contact>
+    suspend fun getAllContactsAsList(): List<Contact>
 
     @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
     fun getAllContactsAsFlow(): Flow<List<Contact>>
 
     @Query("SELECT * FROM Contacts WHERE contactId = :contactId")
-    suspend fun getContactById(contactId: Int): Contact?
+    suspend fun getContactById(contactId: String): Contact?
 
     @Query("SELECT * FROM Contacts WHERE contactPhone = :phoneNumber")
     suspend fun getContactByPhoneNumber(phoneNumber: String): Contact?

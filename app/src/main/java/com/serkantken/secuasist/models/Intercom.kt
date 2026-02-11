@@ -4,13 +4,12 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.UUID
 
-@Entity(tableName = "Cameras")
-data class Camera(
+@Entity(tableName = "Intercoms")
+data class Intercom(
     @PrimaryKey
-    val cameraId: String = UUID.randomUUID().toString(),
-    // villaId removed - Many-to-Many relation now
-    val cameraName: String,
-    val cameraIp: String,
+    val intercomId: String = UUID.randomUUID().toString(),
+    val villaId: Int,
+    val intercomName: String, // e.g., "Bahçe Kapısı", "Bina Girişi"
     val isWorking: Boolean = true,
     val lastChecked: Long = System.currentTimeMillis(),
     val notes: String? = null,

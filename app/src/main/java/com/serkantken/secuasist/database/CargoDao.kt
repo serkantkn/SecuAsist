@@ -43,9 +43,10 @@ interface CargoDao {
     @Query("SELECT * FROM Cargos WHERE villaId = :villaId ORDER BY date DESC")
     fun getCargosForVilla(villaId: Int): Flow<List<Cargo>>
 
-    // Teslim edilmemiş kargoları çekmek için
+    // Teslim edilmemiş kargoları çekmek için (Relation ile)
+    @androidx.room.Transaction
     @Query("SELECT * FROM Cargos WHERE isCalled = 0 OR isMissed = 1 ORDER BY date ASC")
-    fun getPendingCargos(): Flow<List<Cargo>>
+    fun getPendingCargosWithDetails(): Flow<List<com.serkantken.secuasist.models.CargoWithDetails>>
 
     @Query("SELECT * FROM cargos WHERE isCalled = 0 OR isMissed = 1 ORDER BY date ASC")
     suspend fun getPendingCargosAsList(): List<Cargo>
@@ -61,7 +62,7 @@ interface CargoDao {
     fun hasAnyUncalledCargosFlow(): Flow<Boolean>
 
     @Query("UPDATE Cargos SET isCalled = :isCalled, isMissed = :isMissed, callDate = :callDate, callAttemptCount = :callAttemptCount, whoCalled = :whoCalledId WHERE cargoId = :cargoId")
-    suspend fun updateCargoCallStatus(cargoId: Int, isCalled: Int, isMissed: Int, callDate: String?, callAttemptCount: Int, whoCalledId: Int?)
+    suspend fun updateCargoCallStatus(cargoId: Int, isCalled: Int, isMissed: Int, callDate: String?, callAttemptCount: Int, whoCalledId: String?)
 
     // YENİ METOD: Belirli bir şirkete ait, aranmamış (isCalled = 0) kargoları liste olarak döndürür.
     @Query("SELECT * FROM cargos WHERE companyId = :companyId AND isCalled = 0 ORDER BY date ASC")

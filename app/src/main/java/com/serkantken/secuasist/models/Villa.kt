@@ -17,7 +17,7 @@ data class Villa(
     var isVillaSpecial: Int = 0,
     var isVillaRental: Int = 0,
     var isVillaCallFromHome: Int = 0,
-    var isVillaCallForCargo: Int = 0,
+    var isVillaCallForCargo: Int = 1,
     var isVillaEmpty: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
     var deviceId: String? = "Bilinmiyor"

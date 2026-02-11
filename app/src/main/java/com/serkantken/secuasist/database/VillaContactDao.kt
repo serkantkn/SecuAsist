@@ -22,7 +22,10 @@ interface VillaContactDao {
     suspend fun delete(villaContact: VillaContact)
 
     @Query("DELETE FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId")
-    suspend fun deleteByVillaIdAndContactId(villaId: Int, contactId: Int)
+    suspend fun deleteByVillaIdAndContactId(villaId: Int, contactId: String)
+
+    @Query("SELECT COUNT(*) FROM VillaContacts WHERE villaId = :villaId")
+    suspend fun getContactCountForVilla(villaId: Int): Int
 
     @Query("DELETE FROM VillaContacts")
     suspend fun deleteAll()
@@ -53,9 +56,13 @@ interface VillaContactDao {
 
     // Bir bağlantının varlığını kontrol etmek için (örneğin UNIQUE kısıtlaması nedeniyle)
     @Query("SELECT * FROM VillaContacts WHERE villaId = :villaId AND contactId = :contactId AND contactType = :contactType")
-    suspend fun getVillaContact(villaId: Int, contactId: Int, contactType: String): VillaContact?
+    suspend fun getVillaContact(villaId: Int, contactId: String, contactType: String): VillaContact?
 
     // Belirli bir contactId'nin kaç tane villa ilişkisi olduğunu sayar
     @Query("SELECT COUNT(*) FROM VillaContacts WHERE contactId = :contactId")
-    suspend fun getVillaAssociationsCount(contactId: Int): Int
+    suspend fun getVillaAssociationsCount(contactId: String): Int
+    
+    // Belirli bir contactId'ye bağlı villaları getirir
+    @Query("SELECT V.* FROM Villas V JOIN VillaContacts VC ON V.villaId = VC.villaId WHERE VC.contactId = :contactId")
+    suspend fun getVillasForContact(contactId: String): List<com.serkantken.secuasist.models.Villa>
 }

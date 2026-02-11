@@ -1,21 +1,27 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    id("kotlin-kapt")
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    // id("kotlin-kapt") // REMOVED
+    // id("com.google.dagger.hilt.android") // Manual DI requested, skipping Hilt
 }
 
 android {
     namespace = "com.serkantken.secuasist"
-    compileSdk = 36
+    compileSdk = 35 // Stuck to stable for now
 
     defaultConfig {
         applicationId = "com.serkantken.secuasist"
-        minSdk = 30
+        minSdk = 26 // Compose requires min 21, but 26 is safer for modern APIs
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.18.0-beta5"
+        versionCode = 2
+        versionName = "2.0.0-compose"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
@@ -35,32 +41,53 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
-        viewBinding = true
+        compose = true
+        viewBinding = false // No need for ViewBinding anymore
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(libs.androidx.activity)
-    implementation(libs.androidx.constraintlayout)
-    implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.material3)
+    
+    // Navigation
+    implementation(libs.androidx.navigation.compose)
+    
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    
+    // Networking
+    implementation(libs.okhttp)
+    implementation(libs.gson)
+    
+    // Image Loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    
+    // ML Kit
+    implementation(libs.mlkit.text.recognition)
+
+    // Icons
+    implementation(libs.androidx.material.icons.extended)
+
+    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation(libs.androidx.room.runtime)
-    kapt(libs.androidx.room.compiler)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.roundedimageview)
-    implementation(libs.imagepicker)
-    implementation(libs.hawk)
-    implementation(libs.balloon)
-    implementation(libs.timeago)
-
-    implementation(libs.okhttp)
-    implementation(libs.gson)
-    implementation(libs.blurview)
-    implementation(libs.swipelayout)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }

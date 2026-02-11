@@ -20,7 +20,7 @@ import androidx.room.PrimaryKey
 data class VillaContact(
     // val id: Int = 0, // Eğer composite primary key kullanıyorsak bu alana gerek kalmaz
     val villaId: Int,
-    val contactId: Int,
+    val contactId: String,
     val isRealOwner: Boolean = false,
     val contactType: String?,
     val notes: String?,

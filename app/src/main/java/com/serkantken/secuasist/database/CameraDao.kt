@@ -1,35 +1,50 @@
 package com.serkantken.secuasist.database
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.Query
-import androidx.room.Update
 import androidx.room.Delete
+import androidx.room.Insert
 import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
 import com.serkantken.secuasist.models.Camera
+import com.serkantken.secuasist.models.CameraVisibleVillaCrossRef
+import com.serkantken.secuasist.models.CameraWithVillas
 import kotlinx.coroutines.flow.Flow
-import java.util.Date
 
 @Dao
 interface CameraDao {
-    @Query("SELECT * FROM cameras ORDER BY name ASC")
-    fun getAllCameras(): Flow<List<Camera>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(camera: Camera)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(cameras: List<Camera>)
+    suspend fun insert(camera: Camera): Long
 
     @Update
     suspend fun update(camera: Camera)
 
-    @Query("DELETE FROM cameras WHERE id = :cameraId")
-    suspend fun deleteById(cameraId: Int)
+    @Delete
+    suspend fun delete(camera: Camera)
+    
+    @Query("DELETE FROM Cameras WHERE cameraId = :id")
+    suspend fun deleteById(id: String)
+    
+    @Query("SELECT * FROM Cameras WHERE cameraId = :id")
+    suspend fun getCameraById(id: String): Camera?
 
-    @Query("UPDATE cameras SET isFaulty = :isFaulty, faultDate = :faultDate WHERE id = :cameraId")
-    suspend fun updateFaultStatus(cameraId: Int, isFaulty: Boolean, faultDate: Date?)
+    // --- Relations ---
 
-    @Query("SELECT * FROM cameras WHERE isFaulty = 1 ORDER BY name ASC")
-    fun getFaulty(): Flow<List<Camera>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCrossRef(crossRef: CameraVisibleVillaCrossRef)
+    
+    @Query("DELETE FROM CameraVisibleVillas WHERE cameraId = :cameraId")
+    suspend fun deleteCrossRefsForCamera(cameraId: String)
+
+    @Query("DELETE FROM CameraVisibleVillas WHERE cameraId = :cameraId AND villaId = :villaId")
+    suspend fun deleteCrossRef(cameraId: String, villaId: Int)
+
+    @Transaction
+    @Query("SELECT * FROM Cameras")
+    fun getAllCamerasWithVillas(): Flow<List<CameraWithVillas>>
+    
+    @Transaction
+    @Query("SELECT * FROM Cameras WHERE cameraId IN (SELECT cameraId FROM CameraVisibleVillas WHERE villaId = :villaId)")
+    fun getCamerasForVilla(villaId: Int): Flow<List<Camera>>
 }

@@ -18,7 +18,8 @@ enum class ConnectionState {
 
 class WebSocketClient(
     private val serverIp: String,
-    private val port: Int,
+    // Emulator: 10.0.2.2, Physical: Actual IP
+    private val port: Int = 8765,
     private val reconnectDelay: Long = 30000L
 ) {
     private val client: OkHttpClient by lazy {
@@ -58,6 +59,11 @@ class WebSocketClient(
                     override fun onOpen(ws: WebSocket, response: Response) {
                         isConnected = true
                         Log.i("WebSocketClient", "✅ Bağlantı kuruldu → $serverIp:$port")
+
+                        // Send AUTH
+                        // Ideally use unique Android ID or GUID. For now, random or specific.
+                        val deviceId = java.util.UUID.randomUUID().toString()
+                        sendMessage("AUTH $deviceId")
 
                         coroutineScope.launch { _connectionState.emit(ConnectionState.CONNECTED) }
                     }
@@ -135,6 +141,22 @@ class WebSocketClient(
         }
     }
 
+
+    fun sendData(type: String, payload: Any) {
+        if (!isConnected) return
+        try {
+            val jsonMap = mapOf("type" to type, "payload" to payload)
+            // Need Gson here or manual JSON creation.
+            // Since we don't have global Gson ref here easily, let's use a simple approach or pass it in.
+            // For now, assume payload is a JSON string or we construct it.
+            // actually, let's use the Gson instance from Application if possible, or just add Gson dependency here.
+            // To keep it simple without DI:
+            val json = com.google.gson.Gson().toJson(jsonMap)
+            sendMessage(json)
+        } catch (e: Exception) {
+            Log.e("WebSocketClient", "JSON Send Error: ${e.message}")
+        }
+    }
 
     fun sendMessage(message: String) {
         if (isConnected) {

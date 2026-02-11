@@ -5,12 +5,9 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.serkantken.secuasist.models.Camera
 import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.CargoCompany
-import com.serkantken.secuasist.models.CompanyContact
 import com.serkantken.secuasist.models.CompanyDelivererCrossRef
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.Villa
@@ -22,12 +19,14 @@ import com.serkantken.secuasist.models.VillaContact
         Contact::class,
         VillaContact::class,
         CargoCompany::class,
-        CompanyContact::class,
+        // CompanyContact removed
         Cargo::class,
         Camera::class,
-        CompanyDelivererCrossRef::class
+        CompanyDelivererCrossRef::class,
+        com.serkantken.secuasist.models.Intercom::class,
+        com.serkantken.secuasist.models.CameraVisibleVillaCrossRef::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -38,9 +37,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun villaContactDao(): VillaContactDao
     abstract fun cargoCompanyDao(): CargoCompanyDao
-    abstract fun companyContactDao(): CompanyContactDao
+    // abstract fun companyContactDao(): CompanyContactDao
     abstract fun cargoDao(): CargoDao
     abstract fun cameraDao(): CameraDao
+    abstract fun intercomDao(): IntercomDao
     abstract fun companyDelivererDao(): CompanyDelivererDao
 
     companion object {
@@ -54,6 +54,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "secuasist_database"
                 )
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

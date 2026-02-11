@@ -56,6 +56,10 @@ interface VillaDao {
     @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
     fun getAllVillasWithContacts(): Flow<List<VillaWithContacts>>
 
+    @Transaction
+    @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
+    suspend fun getAllVillasWithContactsAsList(): List<VillaWithContacts>
+
     // Belirli bir villayı, ilgili iletişim kişileriyle birlikte getiren metod
     @Transaction
     @Query("SELECT * FROM Villas WHERE villaId = :villaId")

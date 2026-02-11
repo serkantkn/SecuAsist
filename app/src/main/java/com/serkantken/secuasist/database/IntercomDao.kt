@@ -1,0 +1,31 @@
+package com.serkantken.secuasist.database
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import com.serkantken.secuasist.models.Intercom
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface IntercomDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(intercom: Intercom): Long
+
+    @Update
+    suspend fun update(intercom: Intercom)
+
+    @Delete
+    suspend fun delete(intercom: Intercom)
+
+    @Query("SELECT * FROM Intercoms WHERE villaId = :villaId")
+    fun getIntercomsForVilla(villaId: Int): Flow<List<Intercom>>
+    
+    @Query("SELECT * FROM Intercoms WHERE intercomId = :id")
+    suspend fun getIntercomById(id: String): Intercom?
+
+    @Query("DELETE FROM Intercoms WHERE intercomId = :id")
+    suspend fun deleteById(id: String)
+}

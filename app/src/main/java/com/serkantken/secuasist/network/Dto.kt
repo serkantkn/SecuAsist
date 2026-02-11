@@ -34,7 +34,7 @@ data class VillaDto(
 
 // Contacts tablosu için JSON modeli (Python tarafındaki Kisiler tablosuyla uyumlu)
 data class ContactDto(
-    val contactId: Int? = null,
+    val contactId: String? = null,
     val contactName: String?,
     val contactPhone: String?
 )
@@ -42,19 +42,53 @@ data class ContactDto(
 // VillaContacts için JSON modeli (Sadece bağlantı oluşturmak için kullanılacak)
 data class VillaContactDto(
     val villaId: Int,
-    val contactId: Int,
+    val contactId: String,
     val isRealOwner: Boolean = false,
     val contactType: String?,
     val notes: String? = null
 )
 
 // Cameras tablosu için JSON modeli
+// Cameras tablosu için JSON modeli
 data class CameraDto(
-    val villaId: Int,
-    val cameraIpAddress: String,
-    val cameraNotes: String? = null,
-    val isActive: Int = 1
+    val cameraId: String? = null,
+    val cameraName: String,
+    val cameraIp: String,
+    val isWorking: Boolean = true,
+    val lastChecked: Long? = null,
+    val notes: String? = null
 )
+
+data class IntercomDto(
+    val intercomId: String? = null,
+    val villaId: Int,
+    val intercomName: String,
+    val isWorking: Boolean = true,
+    val lastChecked: Long? = null,
+    val notes: String? = null
+)
+
+fun CameraDto.toCamera(): com.serkantken.secuasist.models.Camera {
+    return com.serkantken.secuasist.models.Camera(
+        cameraId = this.cameraId ?: java.util.UUID.randomUUID().toString(),
+        cameraName = this.cameraName,
+        cameraIp = this.cameraIp,
+        isWorking = this.isWorking,
+        lastChecked = this.lastChecked ?: System.currentTimeMillis(),
+        notes = this.notes
+    )
+}
+
+fun IntercomDto.toIntercom(): com.serkantken.secuasist.models.Intercom {
+    return com.serkantken.secuasist.models.Intercom(
+        intercomId = this.intercomId ?: java.util.UUID.randomUUID().toString(),
+        villaId = this.villaId,
+        intercomName = this.intercomName,
+        isWorking = this.isWorking,
+        lastChecked = this.lastChecked ?: System.currentTimeMillis(),
+        notes = this.notes
+    )
+}
 
 // CargoCompanies tablosu için JSON modeli
 data class CargoCompanyDto(
@@ -67,7 +101,7 @@ data class CargoCompanyDto(
 // CompanyContacts için JSON modeli (Sadece bağlantı oluşturmak için kullanılacak)
 data class CompanyContactDto(
     val companyId: Int,
-    val contactId: Int,
+    val contactId: String,
     val role: String? = null,
     val isPrimaryContact: Int = 0
 )
@@ -76,7 +110,7 @@ data class CompanyContactDto(
 data class CargoDto(
     val companyId: Int,
     val villaId: Int,
-    val whoCalled: Int?, // ContactId olacak
+    val whoCalled: Int?, // ContactId olacak (Eğer bu artık String ise güncellenmeli. DB şemada Int kalmıştı, server.py'de güncelledim mi? Evet server.py Text değil hala Integer görünüyor whoCalled için. DİKKAT)
     val isCalled: Int = 0,
     val isMissed: Int = 0,
     val date: String, // ISO 8601 formatı
@@ -86,7 +120,7 @@ data class CargoDto(
 
 data class VillaContactDeleteDto(
     val villaId: Int,
-    val contactId: Int
+    val contactId: String
 )
 
 fun VillaDto.toVilla(): Villa {
@@ -108,7 +142,7 @@ fun VillaDto.toVilla(): Villa {
 
 fun ContactDto.toContact(): Contact {
     return Contact(
-        contactId = this.contactId ?: 0,
+        contactId = this.contactId ?: java.util.UUID.randomUUID().toString(),
         contactName = this.contactName,
         contactPhone = this.contactPhone,
     )

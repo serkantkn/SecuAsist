@@ -5,8 +5,8 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "Contacts")
 data class Contact(
-    @PrimaryKey(autoGenerate = true)
-    val contactId: Int = 0,
+    @PrimaryKey
+    val contactId: String = java.util.UUID.randomUUID().toString(),
     val contactName: String?,
     val contactPhone: String?,
     var lastCallTimestamp: Long? = null,
