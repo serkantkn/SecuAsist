@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -75,6 +76,30 @@ fun ScreenHeader(
                      tint = MaterialTheme.colorScheme.onPrimaryContainer
                  )
             }
+        }
+    }
+}
+
+
+
+@Composable
+fun ScrollToTopButton(
+    visible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.fadeOut(),
+        modifier = modifier
+    ) {
+        FloatingActionButton(
+            onClick = onClick,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        ) {
+            Icon(androidx.compose.material.icons.Icons.Default.ArrowUpward, contentDescription = "Yukarı Çık")
         }
     }
 }

@@ -44,6 +44,8 @@ class WebSocketClient(
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState = _connectionState.asStateFlow()
 
+    fun isConnected() = isConnected
+
     fun connect() {
         if (isConnected) return
         coroutineScope.launch {

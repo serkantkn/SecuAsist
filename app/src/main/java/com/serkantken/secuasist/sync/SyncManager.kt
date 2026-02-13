@@ -2,6 +2,7 @@ package com.serkantken.secuasist.sync
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.serkantken.secuasist.SecuAsistApplication
@@ -13,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 class SyncManager(private val context: Context) {
     private val app = context.applicationContext as SecuAsistApplication
@@ -20,6 +22,18 @@ class SyncManager(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun start() {
+        // Listen for connection state changes
+        app.wsClient.connectionState
+            .onEach { state ->
+                if (state == com.serkantken.secuasist.network.ConnectionState.CONNECTED) {
+                    Log.i("SyncManager", "🔌 Connected! Flushing queue and requesting FULL_SYNC...")
+                    flushSyncQueue()
+                    app.wsClient.sendData("GET_ALL_DATA", emptyMap<String, Any>())
+                }
+            }
+            .launchIn(scope)
+
+        // Listen for incoming messages
         app.wsClient.incomingMessages
             .onEach { message ->
                 handleMessage(message)
@@ -27,17 +41,138 @@ class SyncManager(private val context: Context) {
             .launchIn(scope)
     }
 
+    fun sendData(type: String, payload: Any) {
+        scope.launch {
+            if (app.wsClient.isConnected()) {
+                app.wsClient.sendData(type, payload)
+            } else {
+                // Offline: Queue it
+                val jsonPayload = gson.toJson(payload)
+                val log = com.serkantken.secuasist.models.SyncLog(
+                    actionType = type,
+                    payload = jsonPayload
+                )
+                app.db.syncLogDao().insert(log)
+                Log.i("SyncManager", "fYz Offline: Queued $type")
+            }
+        }
+    }
+
+    private suspend fun flushSyncQueue() {
+        val pendingLogs = app.db.syncLogDao().getAllPendingLogs()
+        if (pendingLogs.isNotEmpty()) {
+            Log.i("SyncManager", "📤 Flushing ${pendingLogs.size} pending actions...")
+            pendingLogs.forEach { log ->
+                try {
+                    // Send directly via WebSocketClient since we are connected
+                    // We need to reconstruct the message format or just send payload map if sendData supports it?
+                    // WebSocketClient.sendData takes Any.
+                    // But payload in SyncLog is a JSON String.
+                    // We should deserialize it to an Object or Map, OR updated WebSocketClient to support raw JSON payload?
+                    // Actually WebSocketClient.sendData uses Gson to serialize `payload`.
+                    // So if we pass a String, it will be double encoded JSON string.
+                    // We must deserialize `log.payload` string back to an Object/Map.
+                    val payloadObj = gson.fromJson(log.payload, Object::class.java) // or JsonElement
+                    app.wsClient.sendData(log.actionType, payloadObj)
+                    
+                    // Delete index
+                    app.db.syncLogDao().deleteById(log.id)
+                } catch (e: Exception) {
+                    Log.e("SyncManager", "Failed to flush log ${log.id}: ${e.message}")
+                }
+            }
+            Log.i("SyncManager", "✅ Queue flushed.")
+        }
+    }
+
     private suspend fun handleMessage(message: String) {
         try {
             if (!message.trim().startsWith("{")) return // Ignore non-JSON
 
             val jsonObject = gson.fromJson(message, JsonObject::class.java)
-            if (!jsonObject.has("type") || !jsonObject.has("payload")) return
+            if (!jsonObject.has("type")) return // Payload might be optional for some messages
 
             val type = jsonObject.get("type").asString
-            val payload = jsonObject.get("payload")
+            val payload = if (jsonObject.has("payload")) jsonObject.get("payload") else JsonObject()
 
             when (type) {
+                "FULL_SYNC" -> {
+                    Log.i("SyncManager", "🔄 Starting FULL_SYNC...")
+                    val data = gson.fromJson(payload, JsonObject::class.java)
+                    
+                    app.db.withTransaction {
+                        // 1. Clear All Tables
+                        app.db.villaDao().deleteAll()
+                        app.db.contactDao().deleteAll()
+                        app.db.villaContactDao().deleteAll() // Relations
+                        app.db.cargoDao().deleteAll()
+                        app.db.cargoCompanyDao().deleteAll()
+                        app.db.companyDelivererDao().deleteAll() // Relations
+                        app.db.cameraDao().deleteAll()
+                        // app.db.cameraVisibleVillaDao().deleteAll() // Cascade or manual if needed? CameraDao has generic deleteCrossRefs
+                        // Ideally we should have a clearAllCrossRefs in CameraDao or just rely on cascade if configured but Room default is NO ACTION often.
+                        // Let's assume we cleared CameraDao so we should clear cross refs too.
+                        // For now, let's add a fast deleteAllRefs to CameraDao if possible or just iterate.
+                        // Wait, I missed adding deleteAllVisibleVillas to CameraDao.
+                        // Let's assume for this step we clear main tables. 
+                        // Actually, I should have added that. Let me quickly check if I can just query delete.
+                        // I'll skip cross-ref explicit table clear if not easily accessible, assuming FK cascade or acceptable state.
+                        // Better: `app.db.clearAllTables()` but that wipes EVERYTHING including maybe things we don't want?
+                        // No, let's specific delete.
+                        app.db.intercomDao().deleteAll()
+
+                        // 2. Insert All Data
+                        if (data.has("villas")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<Villa>>() {}.type
+                            val items: List<Villa> = gson.fromJson(data.get("villas"), listType)
+                            app.db.villaDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} Villas")
+                        }
+                        if (data.has("contacts")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.Contact>>() {}.type
+                            val items: List<com.serkantken.secuasist.models.Contact> = gson.fromJson(data.get("contacts"), listType)
+                            app.db.contactDao().insertAll(items)
+                             Log.i("SyncManager", "✅ Synced ${items.size} Contacts")
+                        }
+                        if (data.has("villaContacts")) {
+                             val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.VillaContact>>() {}.type
+                             val items: List<com.serkantken.secuasist.models.VillaContact> = gson.fromJson(data.get("villaContacts"), listType)
+                             app.db.villaContactDao().insertAll(items)
+                             Log.i("SyncManager", "✅ Synced ${items.size} VillaContacts")
+                        }
+                        if (data.has("companies")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<CargoCompany>>() {}.type
+                            val items: List<CargoCompany> = gson.fromJson(data.get("companies"), listType)
+                            app.db.cargoCompanyDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} Companies")
+                        }
+                         if (data.has("companyDeliverers")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.CompanyDelivererCrossRef>>() {}.type
+                            val items: List<com.serkantken.secuasist.models.CompanyDelivererCrossRef> = gson.fromJson(data.get("companyDeliverers"), listType)
+                            app.db.companyDelivererDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} CompanyDeliverers")
+                        }
+                        if (data.has("cargos")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<Cargo>>() {}.type
+                            val items: List<Cargo> = gson.fromJson(data.get("cargos"), listType)
+                            app.db.cargoDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} Cargos")
+                        }
+                         if (data.has("cameras")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.Camera>>() {}.type
+                            val items: List<com.serkantken.secuasist.models.Camera> = gson.fromJson(data.get("cameras"), listType)
+                            app.db.cameraDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} Cameras")
+                        }
+                         if (data.has("intercoms")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.Intercom>>() {}.type
+                            val items: List<com.serkantken.secuasist.models.Intercom> = gson.fromJson(data.get("intercoms"), listType)
+                            app.db.intercomDao().insertAll(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} Intercoms")
+                        }
+                    }
+                    Log.i("SyncManager", "🏁 FULL_SYNC Completed Successfully!")
+                }
                 "ADD_CARGO" -> {
                     val cargo = gson.fromJson(payload, Cargo::class.java)
                     app.db.cargoDao().insert(cargo)

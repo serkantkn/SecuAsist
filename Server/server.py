@@ -203,7 +203,49 @@ async def handler(websocket):
                     msg_type = data.get("type")
                     payload = data.get("payload")
                     
-                    if msg_type == "ADD_VILLA":
+                    if msg_type == "GET_ALL_DATA":
+                        try:
+                            logger.info(f"🔄 Client {client_id} requested FULL_SYNC")
+                            
+                            # Fetch all data
+                            villas = query_db("SELECT * FROM villas")
+                            contacts = query_db("SELECT * FROM contacts")
+                            companies = query_db("SELECT * FROM companies")
+                            cargos = query_db("SELECT * FROM cargos")
+                            cameras = query_db("SELECT * FROM cameras")
+                            intercoms = query_db("SELECT * FROM intercoms")
+                            
+                            # Relations
+                            villa_contacts = query_db("SELECT * FROM villa_contacts")
+                            company_contacts = query_db("SELECT * FROM company_contacts")
+                            camera_villas = query_db("SELECT * FROM camera_visible_villas")
+                            
+                            # Convert rows to dicts
+                            response_payload = {
+                                "villas": [dict(row) for row in villas] if villas else [],
+                                "contacts": [dict(row) for row in contacts] if contacts else [],
+                                "companies": [dict(row) for row in companies] if companies else [],
+                                "cargos": [dict(row) for row in cargos] if cargos else [],
+                                "cameras": [dict(row) for row in cameras] if cameras else [],
+                                "intercoms": [dict(row) for row in intercoms] if intercoms else [],
+                                # Relations
+                                "villaContacts": [dict(row) for row in villa_contacts] if villa_contacts else [],
+                                "companyDeliverers": [dict(row) for row in company_contacts] if company_contacts else [],
+                                "cameraVisibleVillas": [dict(row) for row in camera_villas] if camera_villas else []
+                            }
+                            
+                            sync_msg = json.dumps({
+                                "type": "FULL_SYNC",
+                                "payload": response_payload
+                            })
+                            
+                            await websocket.send(sync_msg)
+                            logger.info(f"✅ Sent FULL_SYNC data to {client_id}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error handling GET_ALL_DATA: {e}")
+
+                    elif msg_type == "ADD_VILLA":
                         try:
                             insert_db('''INSERT OR REPLACE INTO villas (
                                 villaId, villaNo, villaStreet, villaNotes, 

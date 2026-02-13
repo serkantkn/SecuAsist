@@ -17,11 +17,17 @@ interface CameraDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(camera: Camera): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(cameras: List<Camera>): List<Long>
+
     @Update
     suspend fun update(camera: Camera)
 
     @Delete
     suspend fun delete(camera: Camera)
+    
+    @Query("DELETE FROM Cameras")
+    suspend fun deleteAll()
     
     @Query("DELETE FROM Cameras WHERE cameraId = :id")
     suspend fun deleteById(id: String)

@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -54,10 +58,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +75,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.CameraWithVillas
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.ui.viewmodels.FaultViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,7 +99,8 @@ fun FaultScreen(
                     }
                 }
             }
-        }
+        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             when (selectedTabIndex) {
@@ -121,64 +129,81 @@ fun CamerasTab(viewModel: FaultViewModel) {
         val matchesSearch = cameraWithVillas.camera.cameraIp.contains(searchQuery, ignoreCase = true)
         matchesFault && matchesSearch
     }
+    
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Search Box
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("IP ile Kamera Ara") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp),
-            leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Ara") },
-            singleLine = true
-        )
-
-        // Filter Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 0.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = showOnlyFaulty,
-                onClick = { showOnlyFaulty = !showOnlyFaulty },
-                label = { Text("Sadece Arızalılar") },
-                leadingIcon = if (showOnlyFaulty) {
-                    { Icon(Icons.Default.Check, contentDescription = null) }
-                } else null
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Search Box
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("IP ile Kamera Ara") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp),
+                leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Ara") },
+                singleLine = true
             )
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
-            if (filteredCameras.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (showOnlyFaulty) "Arızalı kamera yok." else "Henüz kamera eklenmemiş.",
-                        color = Color.Gray
-                    )
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredCameras) { cameraWithVillas ->
-                        CameraCard(
-                            cameraWithVillas = cameraWithVillas,
-                            onDelete = { viewModel.deleteCamera(cameraWithVillas.camera) },
-                            onStatusChange = { viewModel.updateCameraStatus(cameraWithVillas.camera, it) }
+    
+            // Filter Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 0.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = showOnlyFaulty,
+                    onClick = { showOnlyFaulty = !showOnlyFaulty },
+                    label = { Text("Sadece Arızalılar") },
+                    leadingIcon = if (showOnlyFaulty) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null
+                )
+            }
+    
+            Box(modifier = Modifier.weight(1f)) {
+                if (filteredCameras.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (showOnlyFaulty) "Arızalı kamera yok." else "Henüz kamera eklenmemiş.",
+                            color = Color.Gray
                         )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredCameras) { cameraWithVillas ->
+                            CameraCard(
+                                cameraWithVillas = cameraWithVillas,
+                                onDelete = { viewModel.deleteCamera(cameraWithVillas.camera) },
+                                onStatusChange = { viewModel.updateCameraStatus(cameraWithVillas.camera, it) }
+                            )
+                        }
                     }
                 }
             }
         }
-    }
+    
+        // Scroll To Top Button (Above FAB)
+        com.serkantken.secuasist.ui.components.ScrollToTopButton(
+            visible = showScrollToTop,
+            onClick = {
+                scope.launch {
+                    listState.animateScrollToItem(0)
+                }
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 88.dp, end = 16.dp)
+        )
 
-    Box(modifier = Modifier.fillMaxSize()) {
         FloatingActionButton(
             onClick = { showAddDialog = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
@@ -342,6 +367,11 @@ fun AddCameraDialog(
 fun IntercomsTab(viewModel: FaultViewModel) {
     val villas by viewModel.allVillas.collectAsState(initial = emptyList())
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }
+    
+    // Scroll To Top Logic
+    val gridState = androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { gridState.firstVisibleItemIndex > 0 } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (villas.isEmpty()) {
@@ -350,6 +380,7 @@ fun IntercomsTab(viewModel: FaultViewModel) {
             }
         } else {
             LazyVerticalStaggeredGrid(
+                state = gridState,
                 columns = StaggeredGridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -364,6 +395,16 @@ fun IntercomsTab(viewModel: FaultViewModel) {
                     )
                 }
             }
+            
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        gridState.animateScrollToItem(0)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            )
         }
     }
     

@@ -37,12 +37,12 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
             // Camera Primary Key is String (UUID). Room insert returning Long is just rowid, irrelevant for us.
             // We use the object's ID.
             
-            app.wsClient.sendData("ADD_CAMERA", camera)
+            app.syncManager.sendData("ADD_CAMERA", camera)
             
             visibleVillaIds.forEach { vid ->
                 val crossRef = CameraVisibleVillaCrossRef(camera.cameraId, vid)
                 cameraDao.insertCrossRef(crossRef)
-                app.wsClient.sendData("ADD_CAMERA_VISIBLE_VILLA", mapOf("cameraId" to camera.cameraId, "villaId" to vid, "updatedAt" to System.currentTimeMillis()))
+                app.syncManager.sendData("ADD_CAMERA_VISIBLE_VILLA", mapOf("cameraId" to camera.cameraId, "villaId" to vid, "updatedAt" to System.currentTimeMillis()))
             }
         }
     }
@@ -55,14 +55,14 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
                 updatedAt = System.currentTimeMillis()
             )
             cameraDao.update(updated)
-            app.wsClient.sendData("UPDATE_CAMERA_STATUS", updated)
+            app.syncManager.sendData("UPDATE_CAMERA_STATUS", updated)
         }
     }
     
     fun deleteCamera(camera: Camera) {
         viewModelScope.launch {
             cameraDao.delete(camera)
-            app.wsClient.sendData("DELETE_CAMERA", mapOf("cameraId" to camera.cameraId))
+            app.syncManager.sendData("DELETE_CAMERA", mapOf("cameraId" to camera.cameraId))
         }
     }
 
@@ -77,7 +77,7 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
                 intercomName = name
             )
             intercomDao.insert(intercom)
-            app.wsClient.sendData("ADD_INTERCOM", intercom)
+            app.syncManager.sendData("ADD_INTERCOM", intercom)
         }
     }
 
@@ -89,14 +89,14 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
                 updatedAt = System.currentTimeMillis()
             )
             intercomDao.update(updated)
-            app.wsClient.sendData("UPDATE_INTERCOM_STATUS", updated)
+            app.syncManager.sendData("UPDATE_INTERCOM_STATUS", updated)
         }
     }
 
     fun deleteIntercom(intercom: Intercom) {
         viewModelScope.launch {
             intercomDao.delete(intercom)
-            app.wsClient.sendData("DELETE_INTERCOM", mapOf("intercomId" to intercom.intercomId))
+            app.syncManager.sendData("DELETE_INTERCOM", mapOf("intercomId" to intercom.intercomId))
         }
     }
 }

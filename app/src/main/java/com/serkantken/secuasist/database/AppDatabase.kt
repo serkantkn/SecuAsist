@@ -24,9 +24,10 @@ import com.serkantken.secuasist.models.VillaContact
         Camera::class,
         CompanyDelivererCrossRef::class,
         com.serkantken.secuasist.models.Intercom::class,
-        com.serkantken.secuasist.models.CameraVisibleVillaCrossRef::class
+        com.serkantken.secuasist.models.CameraVisibleVillaCrossRef::class,
+        com.serkantken.secuasist.models.SyncLog::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -42,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cameraDao(): CameraDao
     abstract fun intercomDao(): IntercomDao
     abstract fun companyDelivererDao(): CompanyDelivererDao
+    abstract fun syncLogDao(): SyncLogDao
 
     companion object {
         @Volatile

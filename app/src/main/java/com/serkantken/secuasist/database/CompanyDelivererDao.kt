@@ -15,6 +15,12 @@ interface CompanyDelivererDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addDelivererToCompany(crossRef: CompanyDelivererCrossRef)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(crossRefs: List<CompanyDelivererCrossRef>): List<Long>
+
+    @Query("DELETE FROM CompanyContacts")
+    suspend fun deleteAll()
+
     @Query("DELETE FROM CompanyContacts WHERE companyId = :companyId AND contactId = :contactId")
     suspend fun removeDelivererFromCompany(companyId: Int, contactId: String)
 

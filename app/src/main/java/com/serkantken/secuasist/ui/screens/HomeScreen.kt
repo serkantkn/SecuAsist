@@ -24,14 +24,23 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.network.ConnectionState
 import com.serkantken.secuasist.ui.viewmodels.HomeViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(
+    viewModel: HomeViewModel = viewModel(),
+    onSettingsClick: () -> Unit
+) {
     val villas by viewModel.filteredVillas.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+
     // State for detailing
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
@@ -61,9 +70,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         selectedVilla = newVilla
                         showBottomSheet = true
                     },
-                    onSettingsClick = {
-                        context.startActivity(android.content.Intent(context, com.serkantken.secuasist.ui.activities.SettingsActivity::class.java))
-                    },
+                    onSettingsClick = onSettingsClick,
                     connectionState = connectionState
                 )
                 
@@ -107,8 +114,18 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                 ) {}
             }
-        }
-        // FAB Removed
+        },
+        floatingActionButton = {
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                }
+            )
+        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
     ) { paddingValues ->
         Box(modifier = Modifier
             .fillMaxSize()
@@ -120,6 +137,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 }
             } else {
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    state = listState,
                     columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),

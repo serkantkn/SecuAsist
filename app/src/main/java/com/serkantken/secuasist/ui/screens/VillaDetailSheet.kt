@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.serkantken.secuasist.models.Villa
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,6 +37,16 @@ fun VillaDetailSheet(
     onUnlinkContact: (com.serkantken.secuasist.models.Contact) -> Unit
 ) {
     val context = LocalContext.current
+    
+    // Call Permission Launcher
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+             // Permission granted, user can try calling again
+        }
+    }
+
     // Mode State: Read-Only (default) vs Editing
     // If villaId is 0 (new villa), start in editing mode
     var isEditing by remember { mutableStateOf(villa.villaId == 0) }
@@ -52,9 +64,6 @@ fun VillaDetailSheet(
     var isUnderConstruction by remember { mutableStateOf(villa.isVillaUnderConstruction == 1) }
     var isSpecial by remember { mutableStateOf(villa.isVillaSpecial == 1) }
     var callFromHome by remember { mutableStateOf(villa.isVillaCallFromHome == 1) }
-
-    // Logic Inversion: DB contains "Call For Cargo" (1=Call, 0=Don't Call).
-    // UI Label: "Don't Call For Cargo" (True implies DB=0, False implies DB=1).
     var dontCallForCargo by remember { mutableStateOf(villa.isVillaCallForCargo == 0) }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -162,10 +171,22 @@ fun VillaDetailSheet(
                                 // Call Button
                                 if (!contact.contactPhone.isNullOrEmpty()) {
                                     IconButton(onClick = {
-                                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                                            data = Uri.parse("tel:${contact.contactPhone}")
+                                        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                                context,
+                                                android.Manifest.permission.CALL_PHONE
+                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_CALL).apply {
+                                                    data = Uri.parse("tel:${contact.contactPhone}")
+                                                }
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
+                                        } else {
+                                            callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
                                         }
-                                        context.startActivity(intent)
                                     }) {
                                         Icon(Icons.Default.Call, contentDescription = "Ara", tint = MaterialTheme.colorScheme.primary)
                                     }

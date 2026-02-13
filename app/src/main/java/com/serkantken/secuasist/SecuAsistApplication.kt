@@ -34,6 +34,8 @@ class SecuAsistApplication : Application() {
     lateinit var wsClient: WebSocketClient
     private lateinit var prefs: SharedPreferences
 
+    lateinit var syncManager: com.serkantken.secuasist.sync.SyncManager
+    
     override fun onCreate() {
         super.onCreate()
         
@@ -47,7 +49,8 @@ class SecuAsistApplication : Application() {
         wsClient.connect()
         
         // Start SyncManager
-        com.serkantken.secuasist.sync.SyncManager(this).start()
+        syncManager = com.serkantken.secuasist.sync.SyncManager(this)
+        syncManager.start()
         
         Log.i("SecuAsistApp", "✅ Uygulama (v2) başlatıldı ve Sync Manager aktif.")
     }

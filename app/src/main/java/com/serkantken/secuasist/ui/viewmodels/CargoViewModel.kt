@@ -49,21 +49,21 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
             val id = cargoCompanyDao.insert(newCompany)
             // 2. Sync (Assuming local ID is temporary or syncing by name if ID=0, but here let's assume simple sync)
             // If ID is autogen, we send it.
-            app.wsClient.sendData("ADD_COMPANY", newCompany.copy(companyId = id.toInt()))
+            app.syncManager.sendData("ADD_COMPANY", newCompany.copy(companyId = id.toInt()))
         }
     }
 
     fun updateCompany(company: CargoCompany) {
         viewModelScope.launch {
             cargoCompanyDao.update(company)
-            app.wsClient.sendData("UPDATE_COMPANY", company)
+            app.syncManager.sendData("UPDATE_COMPANY", company)
         }
     }
 
     fun deleteCompany(company: CargoCompany) {
         viewModelScope.launch {
             cargoCompanyDao.delete(company)
-            app.wsClient.sendData("DELETE_COMPANY", mapOf("companyId" to company.companyId))
+            app.syncManager.sendData("DELETE_COMPANY", mapOf("companyId" to company.companyId))
         }
     }
     
@@ -80,7 +80,7 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
                 isPrimaryContact = if (isPrimary) 1 else 0
             )
             companyDelivererDao.addDelivererToCompany(crossRef)
-            app.wsClient.sendData("ADD_COMPANY_CONTACT", mapOf(
+            app.syncManager.sendData("ADD_COMPANY_CONTACT", mapOf(
                 "companyId" to companyId,
                 "contactId" to contact.contactId,
                 "isPrimaryContact" to (if (isPrimary) 1 else 0)
@@ -92,7 +92,7 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
     fun removeDelivererFromCompany(companyId: Int, contactId: String) {
         viewModelScope.launch {
             companyDelivererDao.removeDelivererFromCompany(companyId, contactId)
-            app.wsClient.sendData("DELETE_COMPANY_CONTACT", mapOf(
+            app.syncManager.sendData("DELETE_COMPANY_CONTACT", mapOf(
                 "companyId" to companyId,
                 "contactId" to contactId
             ))
@@ -143,7 +143,7 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
             // We can iterate and send.
             ids.forEachIndexed { index, id ->
                 val cargoToSend = newCargos[index].copy(cargoId = id.toInt())
-                app.wsClient.sendData("ADD_CARGO", cargoToSend)
+                app.syncManager.sendData("ADD_CARGO", cargoToSend)
             }
 
             clearSelection() // Reset UI
@@ -267,7 +267,7 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
             
             
             // 2. Sync Update
-            app.wsClient.sendData("UPDATE_CARGO_STATUS", updatedCargo)
+            app.syncManager.sendData("UPDATE_CARGO_STATUS", updatedCargo)
         }
     }
 

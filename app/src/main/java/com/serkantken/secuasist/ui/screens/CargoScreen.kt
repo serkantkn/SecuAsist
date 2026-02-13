@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Collections // Use Collections instead
 import androidx.compose.material.icons.filled.Search
 
 import androidx.compose.material3.*
@@ -100,7 +100,8 @@ fun CargoScreen(viewModel: CargoViewModel = viewModel()) {
                         }
                     }
                 }
-            }
+            },
+            contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 if (selectedTabIndex == 0) {
@@ -315,9 +316,9 @@ fun NewCargoEntryScreen(viewModel: CargoViewModel) {
                 enabled = selectedCompany != null,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
             ) {
-                 Icon(Icons.Filled.CameraAlt, contentDescription = null)
+                 Icon(Icons.Default.Collections, contentDescription = null) // Use Collections (Gallery)
                  Spacer(modifier = Modifier.width(8.dp))
-                 Text("Fotoğraftan Tara (Deneysel)")
+                 Text("Galeriden Yükle (OCR)")
             }
         }
         
@@ -400,6 +401,11 @@ fun VillaPickerSheet(
     val villasToPick by viewModel.filteredVillasToPick.collectAsState()
     val searchQuery by viewModel.villaSearchQuery.collectAsState()
     
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    
     // When opening, maybe clear query?
     LaunchedEffect(Unit) {
         viewModel.updateVillaSearchQuery("")
@@ -409,60 +415,66 @@ fun VillaPickerSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Villa Seç", style = MaterialTheme.typography.headlineSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateVillaSearchQuery(it) },
-                label = { Text("Villa Ara (No veya Sokak)") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(villasToPick, key = { it.villaId }) { villa ->
-                    ListItem(
-                        headlineContent = { Text("Villa ${villa.villaNo}") },
-                        supportingContent = if (villa.isVillaCallForCargo == 0) {
-                            { Text("⚠️ Kargo için aranmak istemiyor", color = MaterialTheme.colorScheme.error) }
-                        } else null,
-                         modifier = Modifier.clickable { 
-                              // Warning Logic
-                              CoroutineScope(Dispatchers.Main).launch {
-                                  val hasContacts = viewModel.hasContacts(villa.villaId)
-                                  if (villa.isVillaCallForCargo == 0) {
-                                      // Existing Alert logic handles this via onVillaSelected callback if we pass status
-                                      // But we moved logic here?
-                                      // Let's pass villa to parent and let parent handle alerts via State
-                                      onVillaSelected(villa)
-                                  } else if (villa.isVillaEmpty == 1) {
-                                      // Empty Warning
-                                       onVillaSelected(villa) // Parent handles specific warnings?
-                                       // Parent only had logic for "Don't Call".
-                                       // We need to update parent to handle multiple warning types.
-                                  } else if (!hasContacts) {
-                                      // No Contact Warning
-                                      onVillaSelected(villa)
-                                  } else {
-                                      onVillaSelected(villa)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Villa Seç", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateVillaSearchQuery(it) },
+                    label = { Text("Villa Ara (No veya Sokak)") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(villasToPick, key = { it.villaId }) { villa ->
+                        ListItem(
+                            headlineContent = { Text("Villa ${villa.villaNo}") },
+                            supportingContent = if (villa.isVillaCallForCargo == 0) {
+                                { Text("⚠️ Kargo için aranmak istemiyor", color = MaterialTheme.colorScheme.error) }
+                            } else null,
+                             modifier = Modifier.clickable { 
+                                  // Warning Logic
+                                  CoroutineScope(Dispatchers.Main).launch {
+                                      val hasContacts = viewModel.hasContacts(villa.villaId)
+                                      if (villa.isVillaCallForCargo == 0) {
+                                          onVillaSelected(villa)
+                                      } else if (villa.isVillaEmpty == 1) {
+                                           onVillaSelected(villa) 
+                                      } else if (!hasContacts) {
+                                          onVillaSelected(villa)
+                                      } else {
+                                          onVillaSelected(villa)
+                                      }
                                   }
-                              }
-                         },
-                        trailingContent = {
-                            Icon(Icons.Default.Add, contentDescription = "Ekle")
-                        }
-                    )
-                    Divider()
+                             },
+                            trailingContent = {
+                                Icon(Icons.Default.Add, contentDescription = "Ekle")
+                            }
+                        )
+                        Divider()
+                    }
                 }
+                Spacer(modifier = Modifier.height(32.dp))
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            )
         }
     }
 }
@@ -625,32 +637,50 @@ fun ContactPickerDialog(
             it.contactPhone?.contains(searchQuery) == true 
         }
     }
+    
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Rehberden Kişi Seç", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Ara...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false)
-            ) {
-                items(filteredContacts, key = { it.contactId }) { contact ->
-                    ListItem(
-                        headlineContent = { Text(contact.contactName ?: "İsimsiz") },
-                        supportingContent = { Text(contact.contactPhone ?: "") },
-                        modifier = Modifier.clickable { onContactSelected(contact) }
-                    )
-                    Divider()
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Rehberden Kişi Seç", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Ara...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth().weight(1f, fill = false)
+                ) {
+                    items(filteredContacts, key = { it.contactId }) { contact ->
+                        ListItem(
+                            headlineContent = { Text(contact.contactName ?: "İsimsiz") },
+                            supportingContent = { Text(contact.contactPhone ?: "") },
+                            modifier = Modifier.clickable { onContactSelected(contact) }
+                        )
+                        Divider()
+                    }
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            )
         }
     }
 }
@@ -667,42 +697,60 @@ fun CargoDistributionScreen(viewModel: CargoViewModel) {
     val groupedCargos = remember(pendingCargos) {
         pendingCargos.groupBy { it.company }
     }
+    
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     // Handle Back Press to clear selection if needed (not implemented here but good to have)
 
     if (selectedCompany == null) {
-        // 1. Company List View
-        if (groupedCargos.isEmpty()) {
-             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Dağıtılacak kargo yok.", style = MaterialTheme.typography.bodyLarge)
-             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(groupedCargos.keys.toList(), key = { it.companyId }) { company ->
-                    val count = groupedCargos[company]?.size ?: 0
-                    Card(
-                        onClick = { selectedCompany = company },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 1. Company List View
+            if (groupedCargos.isEmpty()) {
+                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Dağıtılacak kargo yok.", style = MaterialTheme.typography.bodyLarge)
+                 }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(groupedCargos.keys.toList(), key = { it.companyId }) { company ->
+                        val count = groupedCargos[company]?.size ?: 0
+                        Card(
+                            onClick = { selectedCompany = company },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Text(
-                                text = company.companyName ?: "Bilinmeyen Firma",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Badge { Text(count.toString()) }
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = company.companyName ?: "Bilinmeyen Firma",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Badge { Text(count.toString()) }
+                            }
                         }
                     }
                 }
             }
+            
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            )
         }
     } else {
         // 2. Company Detail View
@@ -719,6 +767,7 @@ fun CargoDistributionScreen(viewModel: CargoViewModel) {
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompanyDetailScreen(
@@ -728,6 +777,11 @@ fun CompanyDetailScreen(
     onBack: () -> Unit
 ) {
     val nextCargo = cargos.firstOrNull()
+    
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     Scaffold(
         topBar = {
@@ -756,11 +810,23 @@ fun CompanyDetailScreen(
                      Text("Tüm teslimatlar tamamlandı!")
                  }
             }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        },
+        floatingActionButton = {
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                }
+            )
+        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             // List of Villas
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

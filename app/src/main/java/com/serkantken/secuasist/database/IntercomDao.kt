@@ -14,11 +14,17 @@ interface IntercomDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(intercom: Intercom): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(intercoms: List<Intercom>): List<Long>
+
     @Update
     suspend fun update(intercom: Intercom)
 
     @Delete
     suspend fun delete(intercom: Intercom)
+    
+    @Query("DELETE FROM Intercoms")
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM Intercoms WHERE villaId = :villaId")
     fun getIntercomsForVilla(villaId: Int): Flow<List<Intercom>>

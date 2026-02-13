@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.ui.viewmodels.CargoViewModel
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +44,11 @@ fun CargoReportScreen(
         viewModel.setReportFilters(start, end, selectedCompany?.companyId, null)
     }
 
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -50,6 +56,16 @@ fun CargoReportScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
                     }
                 }
             )
@@ -117,6 +133,7 @@ fun CargoReportScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

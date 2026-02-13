@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class ContactsViewModel(application: Application) : AndroidViewModel(application) {
@@ -46,7 +47,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
             )
             contactDao.insert(newContact)
             // contactId is already generated in newContact
-            app.wsClient.sendData("ADD_CONTACT", newContact)
+            app.syncManager.sendData("ADD_CONTACT", newContact)
         }
     }
     
@@ -54,7 +55,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             contactDao.delete(contact)
             val payload = mapOf("contactId" to contact.contactId)
-            app.wsClient.sendData("DELETE_CONTACT", payload)
+            app.syncManager.sendData("DELETE_CONTACT", payload)
         }
     }
 
@@ -62,7 +63,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val updatedContact = contact.copy(updatedAt = System.currentTimeMillis())
             contactDao.update(updatedContact)
-            app.wsClient.sendData("UPDATE_CONTACT", updatedContact)
+            app.syncManager.sendData("UPDATE_CONTACT", updatedContact)
         }
     }
 
@@ -90,7 +91,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                         contactDao.insert(newContact)
                         
                         // Sync with Server
-                        app.wsClient.sendData("ADD_CONTACT", newContact)
+                        app.syncManager.sendData("ADD_CONTACT", newContact)
                         
                         newContact.contactId
                     }
@@ -111,7 +112,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                                     notes = "Otomatik İçe Aktarıldı"
                                 )
                                 villaContactDao.insert(link)
-                                app.wsClient.sendData("ADD_VILLA_CONTACT", link)
+                                app.syncManager.sendData("ADD_VILLA_CONTACT", link)
                             }
                         }
                     }
@@ -126,11 +127,41 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         return villaContactDao.getVillasForContact(contactId)
     }
 
+    suspend fun getAllVillas(): List<Villa> {
+        val villasFlow = villaDao.getAllVillas()
+        return try {
+            villasFlow.first()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    // Helper to get villas as Flow if needed for UI state
+    val allVillasFlow = villaDao.getAllVillas()
+
+    fun linkContactToVilla(contactId: String, villaId: Int, isOwner: Boolean, type: String) {
+        viewModelScope.launch {
+            // Check if already linked
+            val existingLinks = villaContactDao.getContactsForVillaNonFlow(villaId)
+            if (existingLinks.none { it.contactId == contactId }) {
+                val link = com.serkantken.secuasist.models.VillaContact(
+                    villaId = villaId,
+                    contactId = contactId,
+                    isRealOwner = isOwner,
+                    contactType = type,
+                    notes = null
+                )
+                villaContactDao.insert(link)
+                app.syncManager.sendData("ADD_VILLA_CONTACT", link)
+            }
+        }
+    }
+
     fun updateLastCall(contact: Contact) {
         viewModelScope.launch {
             val updated = contact.copy(lastCallTimestamp = System.currentTimeMillis())
             contactDao.update(updated)
-            app.wsClient.sendData("UPDATE_CONTACT", updated)
+            app.syncManager.sendData("UPDATE_CONTACT", updated)
         }
     }
 }

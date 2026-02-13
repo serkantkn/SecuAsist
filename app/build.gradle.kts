@@ -15,8 +15,8 @@ android {
         applicationId = "com.serkantken.secuasist"
         minSdk = 26 // Compose requires min 21, but 26 is safer for modern APIs
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0-compose"
+        versionCode = 1
+        versionName = "0.1.0-beta1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -61,6 +61,9 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     
+    // DataStore
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
     

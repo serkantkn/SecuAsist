@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -19,11 +20,12 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.ui.viewmodels.ContactsViewModel
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.launch
 
 import kotlin.random.Random
 
@@ -50,6 +52,11 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     ) { isGranted ->
         // Trigger UI refresh if needed
     }
+
+    // Scroll To Top Logic
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     Scaffold(
         topBar = {
@@ -117,7 +124,18 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                 ) {}
             }
-        }
+        },
+        floatingActionButton = {
+            com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                visible = showScrollToTop,
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                    }
+                }
+            )
+        },
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
     ) { paddingValues ->
         Box(modifier = Modifier
             .fillMaxSize()
@@ -130,6 +148,7 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
             } else {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -379,10 +398,16 @@ fun ContactItem(
                 }
             }
 
+            // Animate Background Color
+            val backgroundColor by androidx.compose.animation.animateColorAsState(
+                targetValue = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                label = "cardBackground"
+            )
+
             Card(
                 onClick = { isExpanded = !isExpanded },
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded) 8.dp else 2.dp),
+                colors = CardDefaults.cardColors(containerColor = backgroundColor),
                 modifier = Modifier.animateContentSize()
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -481,6 +506,30 @@ fun ContactItem(
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Link Villa Button
+                            var showLinkDialog by remember { mutableStateOf(false) }
+                            OutlinedButton(
+                                onClick = { showLinkDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Villaya Bağla")
+                            }
+                            
+                            if (showLinkDialog) {
+                                LinkVillaDialog(
+                                    viewModel = viewModel,
+                                    onDismiss = { showLinkDialog = false },
+                                    onConfirm = { villa, isOwner, type ->
+                                        viewModel.linkContactToVilla(contact.contactId, villa.villaId, isOwner, type)
+                                        showLinkDialog = false
+                                    }
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(12.dp))
 
@@ -550,6 +599,112 @@ fun AddContactDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit)
                 }
             ) {
                 Text("Kaydet")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("İptal")
+            }
+        }
+    )
+}
+
+@Composable
+fun LinkVillaDialog(
+    viewModel: ContactsViewModel,
+    onDismiss: () -> Unit,
+    onConfirm: (com.serkantken.secuasist.models.Villa, Boolean, String) -> Unit
+) {
+    var villas by remember { mutableStateOf<List<com.serkantken.secuasist.models.Villa>>(emptyList()) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedVilla by remember { mutableStateOf<com.serkantken.secuasist.models.Villa?>(null) }
+    var isOwner by remember { mutableStateOf(false) }
+    
+    // Default type
+    val contactType = "Resident" 
+
+    LaunchedEffect(Unit) {
+        villas = viewModel.getAllVillas()
+    }
+
+    val filteredVillas = if (searchQuery.isEmpty()) {
+        villas.sortedBy { it.villaNo }
+    } else {
+        villas.filter { it.villaNo.toString().contains(searchQuery) }.sortedBy { it.villaNo }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Villaya Bağla") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Villa Ara (No)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true
+                )
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(filteredVillas) { villa ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedVilla = villa }
+                                .background(
+                                    if (selectedVilla?.villaId == villa.villaId) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                                    shape = MaterialTheme.shapes.small
+                                )
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Villa ${villa.villaNo}", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    if (filteredVillas.isEmpty()) {
+                        item {
+                            Text("Villa bulunamadı", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+                
+                if (selectedVilla != null) {
+                    Divider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isOwner,
+                            onCheckedChange = { isOwner = it }
+                        )
+                        Text("Ev Sahibi")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (selectedVilla != null) {
+                        onConfirm(selectedVilla!!, isOwner, contactType)
+                    }
+                },
+                enabled = selectedVilla != null
+            ) {
+                Text("Bağla")
             }
         },
         dismissButton = {
