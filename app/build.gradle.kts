@@ -16,7 +16,7 @@ android {
         minSdk = 26 // Compose requires min 21, but 26 is safer for modern APIs
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-beta1"
+        versionName = "0.2.0-beta2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -63,6 +63,9 @@ dependencies {
     
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Lifecycle Service (For Compose WindowManager)
+    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

@@ -11,9 +11,29 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.serkantken.secuasist.ui.SecuAsistApp
+import com.serkantken.secuasist.ui.SecuAsistApp
 import com.serkantken.secuasist.ui.theme.SecuAsistTheme
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+
+object NavigationEventBus {
+    private val _homeEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val homeEvents = _homeEvents.asSharedFlow()
+
+    fun triggerHomeEvent() {
+        _homeEvents.tryEmit(Unit)
+    }
+}
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == android.content.Intent.ACTION_MAIN && 
+            intent.categories?.contains(android.content.Intent.CATEGORY_HOME) == true) {
+            // Physical Home button was pressed while app is default launcher
+            NavigationEventBus.triggerHomeEvent()
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

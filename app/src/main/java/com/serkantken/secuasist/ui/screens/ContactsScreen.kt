@@ -37,11 +37,11 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     var contactToEdit by remember { mutableStateOf<Contact?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // Launcher for Call Permission
+    // Launcher for Call Permissions
     val callPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[android.Manifest.permission.CALL_PHONE] == true) {
             // Permission granted, user can try calling again
         }
     }
@@ -163,19 +163,54 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                                 if (androidx.core.content.ContextCompat.checkSelfPermission(
                                         context,
                                         android.Manifest.permission.CALL_PHONE
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.READ_PHONE_STATE
                                     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                                 ) {
-                                    // Direct Call
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
-                                        data = android.net.Uri.parse("tel:${contact.contactPhone}")
-                                    }
-                                    try {
+                                    if (android.provider.Settings.canDrawOverlays(context)) {
+                                        scope.launch {
+                                            // Fetch linked villas for the contact
+                                            val villas = viewModel.getLinkedVillas(contact.contactId)
+                                            val street = if (villas.isNotEmpty()) villas.joinToString(", ") { it.villaStreet ?: "" } else "Villa Bilgisi Yok"
+                                            val directions = if (villas.isNotEmpty()) villas.firstOrNull()?.villaNavigationA ?: "" else ""
+                                            
+                                            try {
+                                                // 1. Start Floating Widget Service FIRST (while app is in foreground)
+                                                val serviceIntent = android.content.Intent(context, com.serkantken.secuasist.services.FloatingWidgetService::class.java).apply {
+                                                    putExtra("VILLA_STREET", street)
+                                                    putExtra("VILLA_DIRECTIONS", directions)
+                                                }
+                                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                                    context.startForegroundService(serviceIntent)
+                                                } else {
+                                                    context.startService(serviceIntent)
+                                                }
+
+                                                // 2. Start Phone Call Activity
+                                                val callIntent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
+                                                    data = android.net.Uri.parse("tel:${contact.contactPhone}")
+                                                }
+                                                context.startActivity(callIntent)
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
+                                        }
+                                    } else {
+                                        val intent = android.content.Intent(
+                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            android.net.Uri.parse("package:${context.packageName}")
+                                        )
                                         context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
                                     }
                                 } else {
-                                    callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
+                                    callPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.CALL_PHONE,
+                                            android.Manifest.permission.READ_PHONE_STATE
+                                        )
+                                    )
                                 }
                             },
                             // Pass permission checkers/launchers to expand logic

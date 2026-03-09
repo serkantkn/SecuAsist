@@ -220,6 +220,8 @@ async def handler(websocket):
                             company_contacts = query_db("SELECT * FROM company_contacts")
                             camera_villas = query_db("SELECT * FROM camera_visible_villas")
                             
+                            logger.info(f"Fetched: {len(villas)} villas, {len(contacts)} contacts, {len(cargos)} cargos")
+                            
                             # Convert rows to dicts
                             response_payload = {
                                 "villas": [dict(row) for row in villas] if villas else [],

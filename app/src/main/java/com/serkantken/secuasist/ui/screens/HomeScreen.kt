@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    isDefaultLauncher: Boolean = false,
     viewModel: HomeViewModel = viewModel(),
     onSettingsClick: () -> Unit
 ) {
@@ -40,6 +41,18 @@ fun HomeScreen(
     val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    
+    // 1. Intercept Back Press to scroll to top if not at top
+    androidx.activity.compose.BackHandler(enabled = showScrollToTop) {
+        scope.launch {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // 2. Intercept Back Press to DO NOTHING if at top AND is default launcher (Kiosk mode)
+    androidx.activity.compose.BackHandler(enabled = !showScrollToTop && isDefaultLauncher) {
+        // Do absolutely nothing to prevent exiting the app and redrawing
+    }
 
     // State for detailing
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }

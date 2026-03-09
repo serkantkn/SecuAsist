@@ -133,6 +133,15 @@ fun SettingsScreen(
                 Text("İzinleri ve Başlangıç Ekranını Gör")
             }
             
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            OutlinedButton(
+                onClick = { viewModel.openDefaultAppsSettings(context) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Varsayılan Ana Ekran (Kiosk) Olarak Ayarla")
+            }
+            
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             // --- Theme Settings ---

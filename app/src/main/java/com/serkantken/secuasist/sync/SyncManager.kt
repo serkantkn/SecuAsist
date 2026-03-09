@@ -26,9 +26,9 @@ class SyncManager(private val context: Context) {
         app.wsClient.connectionState
             .onEach { state ->
                 if (state == com.serkantken.secuasist.network.ConnectionState.CONNECTED) {
-                    Log.i("SyncManager", "🔌 Connected! Flushing queue and requesting FULL_SYNC...")
+                    Log.i("SyncManager", "🔌 Connected! Flushing queue...")
                     flushSyncQueue()
-                    app.wsClient.sendData("GET_ALL_DATA", emptyMap<String, Any>())
+                    // app.wsClient.sendData("GET_ALL_DATA", emptyMap<String, Any>()) // Temporarily disabled per user request
                 }
             }
             .launchIn(scope)
@@ -98,28 +98,25 @@ class SyncManager(private val context: Context) {
             when (type) {
                 "FULL_SYNC" -> {
                     Log.i("SyncManager", "🔄 Starting FULL_SYNC...")
+                    Log.i("SyncManager", "Payload size: ${payload.toString().length} chars")
                     val data = gson.fromJson(payload, JsonObject::class.java)
                     
                     app.db.withTransaction {
-                        // 1. Clear All Tables
-                        app.db.villaDao().deleteAll()
-                        app.db.contactDao().deleteAll()
-                        app.db.villaContactDao().deleteAll() // Relations
-                        app.db.cargoDao().deleteAll()
-                        app.db.cargoCompanyDao().deleteAll()
-                        app.db.companyDelivererDao().deleteAll() // Relations
-                        app.db.cameraDao().deleteAll()
-                        // app.db.cameraVisibleVillaDao().deleteAll() // Cascade or manual if needed? CameraDao has generic deleteCrossRefs
-                        // Ideally we should have a clearAllCrossRefs in CameraDao or just rely on cascade if configured but Room default is NO ACTION often.
-                        // Let's assume we cleared CameraDao so we should clear cross refs too.
-                        // For now, let's add a fast deleteAllRefs to CameraDao if possible or just iterate.
-                        // Wait, I missed adding deleteAllVisibleVillas to CameraDao.
-                        // Let's assume for this step we clear main tables. 
-                        // Actually, I should have added that. Let me quickly check if I can just query delete.
-                        // I'll skip cross-ref explicit table clear if not easily accessible, assuming FK cascade or acceptable state.
-                        // Better: `app.db.clearAllTables()` but that wipes EVERYTHING including maybe things we don't want?
-                        // No, let's specific delete.
-                        app.db.intercomDao().deleteAll()
+                        // 1. Clear All Tables (Reverse Order of Dependencies)
+                        app.db.companyDelivererDao().deleteAll() // Child of Company & Contact
+                        app.db.villaContactDao().deleteAll() // Child of Villa & Contact
+                        // app.db.cameraVisibleVillaDao().deleteAll() // Child of Camera & Villa
+                        // Since we don't have a DAO for this yet, let's assume CameraDao handles it or we need to add it.
+                        // I added insertAllCrossRefs to CameraDao. I should add deleteAllCrossRefs too.
+                        app.db.cameraDao().deleteAllCrossRefs() 
+
+                        app.db.cargoDao().deleteAll() // Depends on Company & Villa
+                        
+                        app.db.intercomDao().deleteAll() // Depends on Villa
+                        app.db.cameraDao().deleteAll() // Parent
+                        app.db.cargoCompanyDao().deleteAll() // Parent
+                        app.db.contactDao().deleteAll() // Parent
+                        app.db.villaDao().deleteAll() // Parent
 
                         // 2. Insert All Data
                         if (data.has("villas")) {
@@ -164,11 +161,17 @@ class SyncManager(private val context: Context) {
                             app.db.cameraDao().insertAll(items)
                             Log.i("SyncManager", "✅ Synced ${items.size} Cameras")
                         }
-                         if (data.has("intercoms")) {
+                        if (data.has("intercoms")) {
                             val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.Intercom>>() {}.type
                             val items: List<com.serkantken.secuasist.models.Intercom> = gson.fromJson(data.get("intercoms"), listType)
                             app.db.intercomDao().insertAll(items)
                             Log.i("SyncManager", "✅ Synced ${items.size} Intercoms")
+                        }
+                        if (data.has("cameraVisibleVillas")) {
+                            val listType = object : com.google.gson.reflect.TypeToken<List<com.serkantken.secuasist.models.CameraVisibleVillaCrossRef>>() {}.type
+                            val items: List<com.serkantken.secuasist.models.CameraVisibleVillaCrossRef> = gson.fromJson(data.get("cameraVisibleVillas"), listType)
+                            app.db.cameraDao().insertAllCrossRefs(items)
+                            Log.i("SyncManager", "✅ Synced ${items.size} CameraVisibleVillas")
                         }
                     }
                     Log.i("SyncManager", "🏁 FULL_SYNC Completed Successfully!")

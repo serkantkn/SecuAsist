@@ -39,12 +39,18 @@ interface CameraDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCrossRef(crossRef: CameraVisibleVillaCrossRef)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllCrossRefs(crossRefs: List<CameraVisibleVillaCrossRef>)
     
     @Query("DELETE FROM CameraVisibleVillas WHERE cameraId = :cameraId")
     suspend fun deleteCrossRefsForCamera(cameraId: String)
 
     @Query("DELETE FROM CameraVisibleVillas WHERE cameraId = :cameraId AND villaId = :villaId")
     suspend fun deleteCrossRef(cameraId: String, villaId: Int)
+
+    @Query("DELETE FROM CameraVisibleVillas")
+    suspend fun deleteAllCrossRefs()
 
     @Transaction
     @Query("SELECT * FROM Cameras")

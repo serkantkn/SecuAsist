@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,6 +24,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import com.serkantken.secuasist.ui.screens.CargoScreen
 import com.serkantken.secuasist.ui.screens.ContactsScreen
 import com.serkantken.secuasist.ui.screens.HomeScreen
@@ -37,13 +40,67 @@ fun SecuAsistApp() {
     val navController = rememberNavController()
     var selectedItem by rememberSaveable { mutableStateOf(0) }
     
+    // Check if app is default launcher
+    var isDefaultLauncher by remember { mutableStateOf(false) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                    addCategory(android.content.Intent.CATEGORY_HOME)
+                }
+                val resolveInfo = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                isDefaultLauncher = resolveInfo?.activityInfo?.packageName == context.packageName
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    
     // Track current route to hide bottom bar on onboarding
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val items = listOf("Villalar", "Kişiler", "Kargo", "Arıza")
-    val icons = listOf(Icons.Default.Home, Icons.Default.Person, Icons.Default.LocalShipping, Icons.Default.Build)
-    val routes = listOf("home", "contacts", "cargo", "faults")
+    val baseItems = listOf("Villalar", "Kişiler", "Kargo", "Arıza")
+    val baseIcons = listOf(Icons.Default.Home, Icons.Default.Person, Icons.Default.LocalShipping, Icons.Default.Build)
+    val baseRoutes = listOf("home", "contacts", "cargo", "faults")
+
+    val items = if (isDefaultLauncher) baseItems + "Uygulamalar" else baseItems
+    val icons = if (isDefaultLauncher) baseIcons + Icons.Default.Apps else baseIcons
+    val routes = if (isDefaultLauncher) baseRoutes + "apps" else baseRoutes
+
+    // Intercept Back Press for top-level tabs to return to Home instead of closing
+    androidx.activity.compose.BackHandler(
+        enabled = currentRoute in routes && currentRoute != "home"
+    ) {
+        selectedItem = 0 // Set bottom nav to Home
+        navController.navigate("home") {
+            popUpTo(navController.graph.startDestinationId) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    // Intercept Physical Home Button presses (from MainActivity)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.serkantken.secuasist.NavigationEventBus.homeEvents.collect {
+            if (currentRoute != "home") {
+                selectedItem = 0
+                navController.navigate("home") {
+                    popUpTo(navController.graph.startDestinationId) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        }
+    }
 
     val cargoViewModel: com.serkantken.secuasist.ui.viewmodels.CargoViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val pendingCargos by cargoViewModel.pendingCargos.collectAsState()
@@ -73,7 +130,15 @@ fun SecuAsistApp() {
                                     Icon(icons[index], contentDescription = item)
                                 }
                             },
-                            label = { Text(item) },
+                            label = { 
+                                Text(
+                                    text = item,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    softWrap = false,
+                                    fontSize = 11.sp
+                                )
+                            },
                             selected = currentRoute == routes[index], // Use currentRoute for selection state
                             onClick = {
                                 selectedItem = index
@@ -109,12 +174,21 @@ fun SecuAsistApp() {
             }
             composable("home") { 
                 HomeScreen(
+                    isDefaultLauncher = isDefaultLauncher,
                     onSettingsClick = { navController.navigate("settings") }
                 ) 
             }
             composable("contacts") { ContactsScreen() }
             composable("cargo") { CargoScreen() }
             composable("faults") { FaultScreen() }
+            composable("apps") {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val application = context.applicationContext as android.app.Application
+                val appsViewModel: com.serkantken.secuasist.ui.viewmodels.AppsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    factory = androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+                )
+                com.serkantken.secuasist.ui.screens.AppsScreen(viewModel = appsViewModel)
+            }
             composable("settings") { 
                 // Factory needed for AndroidViewModel to get Application
                 val context = androidx.compose.ui.platform.LocalContext.current

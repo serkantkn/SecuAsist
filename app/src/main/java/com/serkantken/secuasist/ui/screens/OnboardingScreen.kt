@@ -52,6 +52,13 @@ fun OnboardingScreen(
             isEssential = false
         ),
         PermissionItem(
+            permission = Manifest.permission.READ_PHONE_STATE,
+            title = "Telefon Durumu",
+            description = "Arama bittiğinde yüzen kutucuğun otomatik kapanabilmesi için gereklidir.",
+            icon = Icons.Default.Call,
+            isEssential = false
+        ),
+        PermissionItem(
             permission = Manifest.permission.READ_CALL_LOG,
             title = "Arama Kayıtları",
             description = "Kargo teslimatlarında 'son aranan' bilgisini görebilmeniz için gereklidir.",
