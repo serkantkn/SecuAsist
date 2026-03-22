@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.telecom.TelecomManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.serkantken.secuasist.data.AppTheme
@@ -31,6 +32,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
             context.startActivity(fallbackIntent)
         }
+    }
+
+    fun isDefaultDialer(context: Context): Boolean {
+        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+        return telecomManager.defaultDialerPackage == context.packageName
     }
 
     // Legacy Settings State

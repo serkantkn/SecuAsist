@@ -1,38 +1,54 @@
 package com.serkantken.secuasist.ui.screens
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.role.RoleManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.data.AppTheme
 import com.serkantken.secuasist.ui.viewmodels.SettingsViewModel
 
+@RequiresApi(Build.VERSION_CODES.Q)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
-    val currentTheme by viewModel.currentTheme.collectAsState()
-    
-    val ipAddress by viewModel.ipAddress.collectAsState()
-    val serverPort by viewModel.serverPort.collectAsState()
-    val preferredGate by viewModel.preferredGate.collectAsState()
-    
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var showOnboarding by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Genel", "Bağlantı", "Görünüm", "İzinler")
 
     Scaffold(
         topBar = {
@@ -50,18 +66,63 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState())
         ) {
-            // --- Legacy Settings ---
-            Text(
-                text = "Kapı Seçimi (Navigasyon)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title, fontWeight = FontWeight.Bold) }
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (selectedTabIndex) {
+                    0 -> SettingsGeneralTab(viewModel)
+                    1 -> SettingsConnectionTab(viewModel, onBack)
+                    2 -> SettingsAppearanceTab(viewModel)
+                    3 -> SettingsPermissionsTab(viewModel)
+                }
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.Q)
+@Composable
+fun SettingsGeneralTab(viewModel: SettingsViewModel) {
+    val preferredGate by viewModel.preferredGate.collectAsState()
+    val context = LocalContext.current
+
+    // Dialer Role State
+    var isDefaultDialer by remember { mutableStateOf(viewModel.isDefaultDialer(context)) }
+    val dialerRoleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            isDefaultDialer = viewModel.isDefaultDialer(context)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Gate Selection
+        SettingCard(
+            title = "Kapı Seçimi (Navigasyon)",
+            description = "Yol tariflerinin başlangıç kapısını seçin."
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RadioButton(
@@ -72,7 +133,7 @@ fun SettingsScreen(
                     text = "A Kapısı",
                     modifier = Modifier.clickable { viewModel.updatePreferredGate("A") }
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(32.dp))
                 RadioButton(
                     selected = preferredGate == "B",
                     onClick = { viewModel.updatePreferredGate("B") }
@@ -82,102 +143,139 @@ fun SettingsScreen(
                     modifier = Modifier.clickable { viewModel.updatePreferredGate("B") }
                 )
             }
+        }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-            Text(
-                text = "Sunucu Bağlantı Bilgileri",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            OutlinedTextField(
-                value = ipAddress,
-                onValueChange = { viewModel.updateIpAddress(it) },
-                label = { Text("IP Adresi") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = serverPort,
-                onValueChange = { viewModel.updateServerPort(it) },
-                label = { Text("Port") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                singleLine = true
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    if (ipAddress.isNotBlank() && serverPort.toIntOrNull() != null) {
-                        viewModel.saveSettings()
-                        android.widget.Toast.makeText(context, "Ayarlar kaydedildi ve yeniden bağlanılıyor...", android.widget.Toast.LENGTH_SHORT).show()
-                        onBack()
-                    } else {
-                        android.widget.Toast.makeText(context, "Lütfen geçerli değerler giriniz.", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Kaydet ve Bağlan")
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            
-             OutlinedButton(
-                onClick = { showOnboarding = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("İzinleri ve Başlangıç Ekranını Gör")
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
+        // Default Launcher
+        SettingCard(
+            title = "Kiosk Modu (Başlangıç Ekranı)",
+            description = "Uygulamanın cihaz ilk açıldığında doğrudan başlaması için ana ekran olarak ayarlayın."
+        ) {
             OutlinedButton(
                 onClick = { viewModel.openDefaultAppsSettings(context) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
-                Text("Varsayılan Ana Ekran (Kiosk) Olarak Ayarla")
+                Text("Varsayılan Ana Ekran (Kiosk) Yap")
             }
-            
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        }
 
-            // --- Theme Settings ---
-            Text(
-                text = "Görünüm",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            ThemeOption(
-                title = "Sistem Varsayılanı",
-                selected = currentTheme == AppTheme.SYSTEM,
-                onClick = { viewModel.updateTheme(AppTheme.SYSTEM) }
-            )
-            ThemeOption(
-                title = "Açık Tema",
-                selected = currentTheme == AppTheme.LIGHT,
-                onClick = { viewModel.updateTheme(AppTheme.LIGHT) }
-            )
-            ThemeOption(
-                title = "Koyu Tema",
-                selected = currentTheme == AppTheme.DARK,
-                onClick = { viewModel.updateTheme(AppTheme.DARK) }
-            )
+        // Default Dialer
+        val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+        val isRoleAvailable = roleManager?.isRoleAvailable(RoleManager.ROLE_DIALER) == true
+
+        if (isRoleAvailable) {
+            SettingCard(
+                title = "Varsayılan Telefon (Arama)",
+                description = "Çağrıları doğrudan uygulama içerisinden yönetmek için izin verin."
+            ) {
+                Button(
+                    onClick = {
+                        if (!isDefaultDialer && roleManager != null) {
+                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                            dialerRoleLauncher.launch(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDefaultDialer) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(if (isDefaultDialer) "Varsayılan Telefon Uygulaması" else "Varsayılan Telefon Uygulaması Yap")
+                }
+            }
         }
     }
-    
-    if (showOnboarding) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showOnboarding = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+}
+
+@Composable
+fun SettingsConnectionTab(viewModel: SettingsViewModel, onBack: () -> Unit) {
+    val ipAddress by viewModel.ipAddress.collectAsState()
+    val serverPort by viewModel.serverPort.collectAsState()
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingCard(
+            title = "Sunucu Bağlantısı",
+            description = "SecuAsist yönetim sunucusuna bağlanmak için gerekli olan yerel IP adresi ve port bilgilerini girin. Değişiklikler uygulandıktan sonra sistem otomatik olarak yeniden bağlanacaktır."
         ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                com.serkantken.secuasist.ui.screens.OnboardingScreen(
-                    onContinue = { showOnboarding = false }
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                OutlinedTextField(
+                    value = ipAddress,
+                    onValueChange = { viewModel.updateIpAddress(it) },
+                    label = { Text("IP Adresi") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = serverPort,
+                    onValueChange = { viewModel.updateServerPort(it) },
+                    label = { Text("Port") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (ipAddress.isNotBlank() && serverPort.toIntOrNull() != null) {
+                            viewModel.saveSettings()
+                            android.widget.Toast.makeText(context, "Ayarlar kaydedildi ve yeniden bağlanılıyor...", android.widget.Toast.LENGTH_SHORT).show()
+                            onBack()
+                        } else {
+                            android.widget.Toast.makeText(context, "Lütfen geçerli değerler giriniz.", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Kaydet ve Bağlan")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsAppearanceTab(viewModel: SettingsViewModel) {
+    val currentTheme by viewModel.currentTheme.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SettingCard(
+            title = "Tema Ayarları",
+            description = "Uygulamanın genel görünümünü tercihinize göre açık veya koyu mod olarak ayarlayın."
+        ) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                ThemeOptionWithDescription(
+                    title = "Sistem Varsayılanı",
+                    description = "Cihazınızın mevcut temasına otomatik olarak uyum sağlar.",
+                    selected = currentTheme == AppTheme.SYSTEM,
+                    onClick = { viewModel.updateTheme(AppTheme.SYSTEM) }
+                )
+                ThemeOptionWithDescription(
+                    title = "Açık Tema",
+                    description = "Aydınlık ve ferah bir görünüm sunar.",
+                    selected = currentTheme == AppTheme.LIGHT,
+                    onClick = { viewModel.updateTheme(AppTheme.LIGHT) }
+                )
+                ThemeOptionWithDescription(
+                    title = "Koyu Tema",
+                    description = "Göz yormayan karanlık bir arayüz sağlar.",
+                    selected = currentTheme == AppTheme.DARK,
+                    onClick = { viewModel.updateTheme(AppTheme.DARK) }
                 )
             }
         }
@@ -185,23 +283,255 @@ fun SettingsScreen(
 }
 
 @Composable
-fun ThemeOption(
+fun SettingsPermissionsTab(viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    var isIgnoringBatteryOptimizations by remember { 
+        mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) 
+    }
+    
+    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    val permissions = listOf(
+        PermissionItem(
+            permission = Manifest.permission.CALL_PHONE,
+            title = "Telefon Araması",
+            description = "Villa sakinlerini uygulama üzerinden doğrudan arayabilmeniz için gereklidir.",
+            icon = Icons.Default.Call,
+            isEssential = true
+        ),
+        PermissionItem(
+            permission = Manifest.permission.READ_CONTACTS,
+            title = "Kişiler",
+            description = "Telefon rehberinizdeki kişileri kolayca içe aktarabilmeniz için gereklidir.",
+            icon = Icons.Default.Contacts,
+            isEssential = false
+        ),
+        PermissionItem(
+            permission = Manifest.permission.READ_PHONE_STATE,
+            title = "Telefon Durumu",
+            description = "Arama bittiğinde yüzen kutucuğun otomatik kapanabilmesi için gereklidir.",
+            icon = Icons.Default.Call,
+            isEssential = false
+        ),
+        PermissionItem(
+            permission = Manifest.permission.READ_CALL_LOG,
+            title = "Arama Kayıtları",
+            description = "Kargo teslimatlarında 'son aranan' bilgisini görebilmeniz için gereklidir.",
+            icon = Icons.Default.History,
+            isEssential = false
+        ),
+        PermissionItem(
+            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
+                Manifest.permission.READ_MEDIA_IMAGES 
+            else 
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+            title = "Galeri Erişimi",
+            description = "Kargo etiketlerini fotoğraftan tarayıp (OCR) otomatik veri girişi yapabilmeniz için gereklidir.",
+            icon = Icons.Default.Image,
+            isEssential = false
+        )
+    )
+
+    val allPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions + PermissionItem(
+            permission = Manifest.permission.POST_NOTIFICATIONS,
+            title = "Bildirimler",
+            description = "Önemli uyarılar ve arka plan işlemleri hakkında bilgi alabilmeniz için önerilir.",
+            icon = Icons.Default.Notifications,
+            isEssential = false
+        )
+    } else {
+        permissions
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Battery Optimization is handled separately since it's an Intent, not a standard Permission
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (isIgnoringBatteryOptimizations) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                                 else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Arka Plan Çalışması (Pil Tasarrufu)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Uygulamanın aramaları her zaman yakalayabilmesi için pil kısıtlamalarından muaf olması önerilir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        if (!isIgnoringBatteryOptimizations) {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            batteryOptimizationLauncher.launch(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isIgnoringBatteryOptimizations
+                ) {
+                    Text(if (isIgnoringBatteryOptimizations) "Kısıtlamalar Kaldırıldı \u2713" else "Arka Planda Çalışmaya İzin Ver")
+                }
+            }
+        }
+
+        // Standard Permissions
+        allPermissions.forEach { item ->
+            SettingsPermissionRow(item)
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------
+// Helper Composables
+// -------------------------------------------------------------------------------------------
+
+@Composable
+fun SettingCard(
     title: String,
+    description: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+fun ThemeOptionWithDescription(
+    title: String,
+    description: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                else Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsPermissionRow(item: PermissionItem) {
+    val context = LocalContext.current
+    var isGranted by remember { 
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, 
+                item.permission
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        isGranted = granted
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGranted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                             else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = null,
+                tint = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(32.dp)
+            )
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            if (isGranted) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "İzin Verildi",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Button(
+                    onClick = { launcher.launch(item.permission) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("İzin Ver", fontSize = 12.sp)
+                }
+            }
+        }
     }
 }

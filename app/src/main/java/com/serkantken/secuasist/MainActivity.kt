@@ -36,6 +36,11 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Auto-update check
+        val updateManager = com.serkantken.secuasist.utils.UpdateManager(this)
+        updateManager.checkForUpdates()
+
         enableEdgeToEdge()
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current

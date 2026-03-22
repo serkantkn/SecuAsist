@@ -38,12 +38,12 @@ fun VillaDetailSheet(
 ) {
     val context = LocalContext.current
     
-    // Call Permission Launcher
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[android.Manifest.permission.CALL_PHONE] == true) {
-             // Permission granted, user can try calling again
+    // Launcher for Dialer Role Permission
+    val dialerRoleLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            // Permission granted, user can try calling again
         }
     }
 
@@ -171,51 +171,22 @@ fun VillaDetailSheet(
                                 // Call Button
                                 if (!contact.contactPhone.isNullOrEmpty()) {
                                     IconButton(onClick = {
-                                        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                                context,
-                                                android.Manifest.permission.CALL_PHONE
-                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
-                                            androidx.core.content.ContextCompat.checkSelfPermission(
-                                                context,
-                                                android.Manifest.permission.READ_PHONE_STATE
-                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                        ) {
-                                            if (android.provider.Settings.canDrawOverlays(context)) {
-                                                try {
-                                                    // 1. Start Floating Widget Service FIRST (while app is in foreground)
-                                                    val serviceIntent = Intent(context, com.serkantken.secuasist.services.FloatingWidgetService::class.java).apply {
-                                                        putExtra("VILLA_STREET", villa.villaStreet)
-                                                        putExtra("VILLA_DIRECTIONS", villa.villaNavigationA)
-                                                    }
-                                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                                        context.startForegroundService(serviceIntent)
-                                                    } else {
-                                                        context.startService(serviceIntent)
-                                                    }
+                                    val hasCallPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.CALL_PHONE
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-                                                    // 2. Start Phone Call Activity
-                                                    val callIntent = Intent(Intent.ACTION_CALL).apply {
-                                                        data = Uri.parse("tel:${contact.contactPhone}")
-                                                    }
-                                                    context.startActivity(callIntent)
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
-                                                }
-                                            } else {
-                                                val intent = Intent(
-                                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                    Uri.parse("package:${context.packageName}")
-                                                )
-                                                context.startActivity(intent)
-                                            }
-                                        } else {
-                                            callPermissionLauncher.launch(
-                                                arrayOf(
-                                                    android.Manifest.permission.CALL_PHONE,
-                                                    android.Manifest.permission.READ_PHONE_STATE
-                                                )
-                                            )
+                                    try {
+                                        val action = if (hasCallPermission) Intent.ACTION_CALL else Intent.ACTION_DIAL
+                                        val callIntent = Intent(action).apply {
+                                            data = Uri.parse("tel:${contact.contactPhone}")
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                         }
+                                        context.startActivity(callIntent)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                        android.widget.Toast.makeText(context, "Arama başlatılamadı.", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                     }) {
                                         Icon(Icons.Default.Call, contentDescription = "Ara", tint = MaterialTheme.colorScheme.primary)
                                     }

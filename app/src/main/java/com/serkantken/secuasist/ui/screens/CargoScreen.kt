@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.ContentCopy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -68,11 +69,14 @@ fun CargoScreen(viewModel: CargoViewModel = viewModel()) {
         Scaffold(
             topBar = {
                 Column {
-                    // Custom Header with Report Button
-                    TopAppBar(
-                        title = { Text("Kargo Takip") },
-                        actions = {
-                            IconButton(onClick = { showReportScreen = true }) {
+                    // Standardized Header
+                    com.serkantken.secuasist.ui.components.ScreenHeader(
+                        title = "Kargo Takip",
+                        extraActions = {
+                            IconButton(
+                                onClick = { showReportScreen = true },
+                                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, shape = androidx.compose.foundation.shape.CircleShape)
+                            ) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Raporlar")
                             }
                         }
@@ -806,9 +810,19 @@ fun CompanyDetailScreen(
                     viewModel = viewModel
                 )
             } else {
-                 Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                     Text("Tüm teslimatlar tamamlandı!")
-                 }
+                val skippedCount by viewModel.skippedCargosCount.collectAsState()
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Tüm teslimatlar tamamlandı!", style = MaterialTheme.typography.titleMedium)
+                    if (skippedCount > 0) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.resetSkips() }) {
+                            Text("Atlananları Yeniden Dene ($skippedCount)")
+                        }
+                    }
+                }
             }
         },
         floatingActionButton = {
@@ -896,31 +910,54 @@ fun ActiveCallSection(
             if (contacts.isEmpty()) {
                 Text("Bu villaya ait iletişim bilgisi yok.", color = MaterialTheme.colorScheme.error)
             } else {
-                Text("Aranacak Kişi Seçin:", style = MaterialTheme.typography.labelMedium)
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                 ) {
-                    items(contacts) { contact ->
-                        FilterChip(
-                            selected = contact == selectedContact,
+                    contacts.forEach { contact ->
+                        Surface(
                             onClick = { selectedContact = contact },
-                            label = { Text(contact.contactName ?: "İsimsiz") },
-                            leadingIcon = if (contact == selectedContact) {
-                                { Icon(Icons.Default.Check, null) }
-                            } else null
-                        )
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (contact == selectedContact) 
+                                MaterialTheme.colorScheme.primaryContainer 
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = if (contact == selectedContact) 
+                                androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) 
+                                else null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = contact == selectedContact, onClick = { selectedContact = contact })
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(contact.contactName ?: "İsimsiz", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                                    Text(contact.contactPhone ?: "", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
                     }
                 }
                 
                 Button(
                     onClick = {
                         selectedContact?.let { contact ->
-                            // Trigger Call
-                            val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
-                                data = android.net.Uri.parse("tel:${contact.contactPhone}")
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
+                                    data = android.net.Uri.parse("tel:${contact.contactPhone}")
+                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // Fallback to DIAL if CALL fails (e.g. no permission)
+                                val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                    data = android.net.Uri.parse("tel:${contact.contactPhone}")
+                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
                             }
-                            context.startActivity(intent)
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

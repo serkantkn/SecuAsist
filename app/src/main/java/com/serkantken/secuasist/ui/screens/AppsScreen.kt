@@ -20,6 +20,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.serkantken.secuasist.models.AppInfo
 import com.serkantken.secuasist.ui.viewmodels.AppsViewModel
 
@@ -58,14 +67,34 @@ fun AppItem(appInfo: AppInfo, context: Context) {
             .padding(4.dp)
             .fillMaxWidth()
     ) {
-        // Convert Drawable to ImageBitmap
-        val bitmap = appInfo.icon.toBitmap().asImageBitmap()
+        // Lazily fetch the icon in a background thread to prevent OOM
+        var iconBitmap by androidx.compose.runtime.remember { mutableStateOf<ImageBitmap?>(null) }
         
-        Image(
-            bitmap = bitmap,
-            contentDescription = appInfo.name,
-            modifier = Modifier.size(56.dp)
-        )
+        LaunchedEffect(appInfo.packageName) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val drawable = context.packageManager.getApplicationIcon(appInfo.packageName)
+                    // Downscale the bitmap to 144x144 (approx 48dp on 3x density) to prevent OutOfMemoryError
+                    iconBitmap = drawable.toBitmap(width = 144, height = 144).asImageBitmap()
+                } catch (e: Exception) {
+                    // Ignore, fallback will be shown
+                }
+            }
+        }
+        
+        if (iconBitmap != null) {
+            Image(
+                bitmap = iconBitmap!!,
+                contentDescription = appInfo.name,
+                modifier = Modifier.size(56.dp)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(Color.Transparent, shape = CircleShape)
+            )
+        }
         
         Spacer(modifier = Modifier.height(8.dp))
         

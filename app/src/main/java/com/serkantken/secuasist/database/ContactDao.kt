@@ -56,4 +56,13 @@ interface ContactDao {
 
     @Query("SELECT * FROM Contacts WHERE contactPhone = :phone LIMIT 1")
     fun getContactByPhone(phone: String): Contact?
+
+    @Query("SELECT * FROM Contacts WHERE replace(replace(replace(replace(contactPhone, ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || :phone || '%' LIMIT 1")
+    suspend fun findContactByPhoneLike(phone: String): Contact?
+
+    @Query("SELECT * FROM Contacts WHERE contactName LIKE :query OR contactPhone LIKE :query ORDER BY contactName ASC")
+    fun searchContacts(query: String): Flow<List<Contact>>
+
+    @Query("SELECT * FROM Contacts WHERE replace(replace(replace(replace(contactPhone, ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || :query || '%' ORDER BY contactName ASC")
+    fun searchContactsByPhoneDigits(query: String): Flow<List<Contact>>
 }

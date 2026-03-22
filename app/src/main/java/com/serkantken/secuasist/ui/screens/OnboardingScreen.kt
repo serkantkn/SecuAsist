@@ -28,12 +28,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.role.RoleManager
+import android.telecom.TelecomManager
+import android.os.PowerManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.annotation.RequiresApi
+
+@RequiresApi(Build.VERSION_CODES.Q)
 @Composable
 fun OnboardingScreen(
     onContinue: () -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    val telecomManager = context.getSystemService(android.content.Context.TELECOM_SERVICE) as TelecomManager
+    var isDefaultDialer by remember { mutableStateOf(telecomManager.defaultDialerPackage == context.packageName) }
+    
+    val dialerRoleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            isDefaultDialer = telecomManager.defaultDialerPackage == context.packageName
+        }
+    }
 
     // Definition of permissions we need
     val permissions = listOf(
@@ -90,6 +111,17 @@ fun OnboardingScreen(
         permissions
     }
 
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    var isIgnoringBatteryOptimizations by remember { 
+        mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) 
+    }
+    
+    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
     Scaffold(
         bottomBar = {
             Button(
@@ -133,6 +165,72 @@ fun OnboardingScreen(
                 PermissionRow(item)
                 Spacer(modifier = Modifier.height(16.dp))
             }
+            
+            // Default Dialer Request Button
+            val roleManager = context.getSystemService(android.content.Context.ROLE_SERVICE) as? RoleManager
+            val isRoleAvailable = roleManager?.isRoleAvailable(RoleManager.ROLE_DIALER) == true
+            
+            if (isRoleAvailable) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        if (!isDefaultDialer) {
+                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                            dialerRoleLauncher.launch(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDefaultDialer) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        if (isDefaultDialer) "Varsayılan Arama Uygulaması Ayarlandı \u2713" 
+                        else "Varsayılan Arama Uygulaması Yap",
+                        fontSize = 16.sp
+                    )
+                }
+            }
+
+            // Battery Optimization Section
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isIgnoringBatteryOptimizations) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+                                     else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Arka Plan Çalışması (Pil Tasarrufu)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Uygulamanın aramaları her zaman yakalayabilmesi için pil kısıtlamalarından muaf olması önerilir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            if (!isIgnoringBatteryOptimizations) {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                batteryOptimizationLauncher.launch(intent)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isIgnoringBatteryOptimizations
+                    ) {
+                        Text(if (isIgnoringBatteryOptimizations) "Kısıtlamalar Kaldırıldı \u2713" else "Arka Planda Çalışmaya İzin Ver")
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(80.dp)) // Space for bottom bar
         }
     }
 }

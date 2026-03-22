@@ -72,9 +72,17 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
         super.onStartCommand(intent, flags, startId)
         val street = intent?.getStringExtra("VILLA_STREET") ?: "Bilinmeyen Sokak"
         val directions = intent?.getStringExtra("VILLA_DIRECTIONS") ?: "Yol tarifi yok"
+        val villaNo = intent?.getStringExtra("VILLA_NO") ?: "?"
+        val contactName = intent?.getStringExtra("CONTACT_NAME") ?: "Bilinmeyen Kişi"
+        val showCargoWarning = intent?.getStringExtra("SHOW_CARGO_WARNING") ?: ""
         
+        if (telephonyManager.callState == TelephonyManager.CALL_STATE_IDLE) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         if (floatingView == null) {
-            showFloatingWidget(street, directions)
+            showFloatingWidget(street, directions, villaNo, contactName, showCargoWarning)
             listenToCallState()
         }
         
@@ -106,7 +114,10 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun showFloatingWidget(street: String, directions: String) {
+    private fun showFloatingWidget(street: String, directions: String, villaNo: String, contactName: String, showCargoWarning: String) {
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -118,9 +129,9 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 50
-            y = 200
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            x = 0
+            y = screenHeight / 6 // Üst yarının ortasına denk gelecek şekilde
         }
 
         floatingView = ComposeView(this).apply {
@@ -133,6 +144,9 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
                     FloatingWidgetUI(
                         street = street,
                         directions = directions,
+                        villaNo = villaNo,
+                        contactName = contactName,
+                        showCargoWarning = showCargoWarning,
                         onClose = { stopSelf() },
                         onDrag = { dx, dy ->
                             layoutParams.x += dx.roundToInt()
@@ -148,10 +162,18 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
     }
 
     @Composable
-    private fun FloatingWidgetUI(street: String, directions: String, onClose: () -> Unit, onDrag: (Float, Float) -> Unit) {
+    private fun FloatingWidgetUI(
+        street: String, 
+        directions: String, 
+        villaNo: String, 
+        contactName: String,
+        showCargoWarning: String,
+        onClose: () -> Unit, 
+        onDrag: (Float, Float) -> Unit
+    ) {
         Card(
             modifier = Modifier
-                .width(280.dp)
+                .width(320.dp)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
@@ -162,30 +184,60 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Aktif Çağrı Bilgisi", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Villa No: $villaNo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Kapat")
                     }
                 }
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
-                Text(text = "Sokak", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = street, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = street, 
+                    style = MaterialTheme.typography.headlineSmall, 
+                    fontWeight = FontWeight.ExtraBold, 
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (showCargoWarning.isNotBlank()) {
+                    Text(
+                        text = "$showCargoWarning Kargo için arandı, ulaşılamadı",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Red,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    )
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                
+                
+                Text(text = "Yol Tarifi", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                Text(
+                    text = directions, 
+                    style = MaterialTheme.typography.bodyLarge, 
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 
                 Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(text = "Yol Tarifi", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = directions, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

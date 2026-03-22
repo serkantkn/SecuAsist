@@ -16,7 +16,7 @@ android {
         minSdk = 26 // Compose requires min 21, but 26 is safer for modern APIs
         targetSdk = 35
         versionCode = 1
-        versionName = "0.2.0-beta2"
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,6 +43,7 @@ android {
     buildFeatures {
         compose = true
         viewBinding = false // No need for ViewBinding anymore
+        buildConfig = true
     }
     packaging {
         resources {

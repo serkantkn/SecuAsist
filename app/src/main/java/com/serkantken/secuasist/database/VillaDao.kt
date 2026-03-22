@@ -38,8 +38,21 @@ interface VillaDao {
     @Query("SELECT * FROM Villas ORDER BY villaNo ASC") // Villa numarasına göre sıralı
     suspend fun getAllVillasAsList(): List<Villa> // Flow olmayan versiyon
 
+    @Query("SELECT * FROM Villas WHERE CAST(villaNo AS TEXT) LIKE :query OR villaStreet LIKE :query ORDER BY villaNo ASC")
+    fun searchVillas(query: String): Flow<List<Villa>>
+
     @Query("SELECT * FROM Villas WHERE villaId = :villaId")
     suspend fun getVillaById(villaId: Int): Villa?
+
+    @androidx.room.Transaction
+    @Query("""
+        SELECT DISTINCT v.* FROM Villas v
+        INNER JOIN VillaContacts vc ON v.villaId = vc.villaId
+        INNER JOIN Contacts c ON vc.contactId = c.contactId
+        WHERE c.contactName LIKE :contactName
+        ORDER BY v.villaNo ASC
+    """)
+    fun searchVillasByContactName(contactName: String): Flow<List<Villa>>
 
     @Query("SELECT * FROM Villas WHERE villaId IN (:villaIds)")
     suspend fun getVillasByIds(villaIds: List<Int>): List<Villa>

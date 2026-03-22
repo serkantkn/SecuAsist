@@ -13,11 +13,9 @@ data class DeviceContact(
 
 object ContactUtils {
     suspend fun fetchDeviceContacts(context: Context): List<DeviceContact> = withContext(Dispatchers.IO) {
-        val contacts = mutableListOf<DeviceContact>()
+        val contactsMap = mutableMapOf<String, DeviceContact>()
         val contentResolver = context.contentResolver
         
-        // Regex to match "101 Ahmet" -> Group 1: 101, Group 2: Ahmet
-        // Or "Villa 101 Ahmet" -> Handling minimal simple case first: Start with digits
         val villaRegex = Regex("^(\\d+)\\s+(.*)")
 
         val cursor = contentResolver.query(
@@ -39,11 +37,9 @@ object ContactUtils {
                 val name = it.getString(nameIndex) ?: continue
                 val number = it.getString(numberIndex) ?: continue
 
-                // Clean phone number (optional, but good for display consistency)
-                // For now, keep as is or simple trim
                 val cleanNumber = number.trim()
+                val normalized = normalizePhoneNumber(cleanNumber)
 
-                // Parse Villa No
                 var villaNo: Int? = null
                 var parsedName = name
 
@@ -54,10 +50,24 @@ object ContactUtils {
                     parsedName = restOfName.trim()
                 }
 
-                contacts.add(DeviceContact(parsedName, cleanNumber, villaNo))
+                // Deduplicate key: VillaNo + Name + NormalizedNumber
+                // If the same person has multiple variations of the same number, we only keep the first one
+                val key = "${villaNo ?: "none"}_${parsedName.lowercase()}_$normalized"
+                if (!contactsMap.containsKey(key)) {
+                    contactsMap[key] = DeviceContact(parsedName, cleanNumber, villaNo)
+                }
             }
         }
-        return@withContext contacts
+        return@withContext contactsMap.values.toList()
+    }
+
+    fun normalizePhoneNumber(number: String): String {
+        val digits = number.filter { it.isDigit() }
+        return if (digits.length >= 10) {
+            digits.takeLast(10)
+        } else {
+            digits
+        }
     }
 
     suspend fun getLastOutgoingCallDate(context: Context, phoneNumber: String): Long? = withContext(Dispatchers.IO) {

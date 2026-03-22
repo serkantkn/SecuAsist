@@ -43,9 +43,9 @@ interface CargoDao {
     @Query("SELECT * FROM Cargos WHERE villaId = :villaId ORDER BY date DESC")
     fun getCargosForVilla(villaId: Int): Flow<List<Cargo>>
 
-    // Teslim edilmemiş kargoları çekmek için (Relation ile)
+    // Teslim edilmemiş kargoları çekmek için (SADECE isCalled = 0)
     @androidx.room.Transaction
-    @Query("SELECT * FROM Cargos WHERE isCalled = 0 OR isMissed = 1 ORDER BY date ASC")
+    @Query("SELECT * FROM Cargos WHERE isCalled = 0 ORDER BY date ASC")
     fun getPendingCargosWithDetails(): Flow<List<com.serkantken.secuasist.models.CargoWithDetails>>
 
     @Query("SELECT * FROM cargos WHERE isCalled = 0 OR isMissed = 1 ORDER BY date ASC")
@@ -124,4 +124,37 @@ interface CargoDao {
         companyIdFilter: Int?,
         villaIdFilter: Int?
     ): Flow<List<CargoReport>>
+
+    @Query("""
+        SELECT EXISTS (
+            SELECT 1 FROM Cargos 
+            WHERE villaId = :villaId 
+            AND isMissed = 1 
+            AND isCalled = 1
+            AND datetime(callDate) >= datetime('now', '-12 hours', 'localtime')
+            LIMIT 1
+        )
+    """)
+    suspend fun hasMissedCargoToday(villaId: Int): Boolean
+
+    @Query("""
+        SELECT DISTINCT cp.companyName 
+        FROM Cargos c
+        INNER JOIN CargoCompanies cp ON c.companyId = cp.companyId
+        WHERE c.villaId = :villaId 
+        AND c.isMissed = 1 
+        AND c.isCalled = 1
+        AND datetime(c.callDate) >= datetime('now', '-12 hours', 'localtime')
+    """)
+    suspend fun getMissedCargoCompanyNamesToday(villaId: Int): List<String>
+
+    @Query("""
+        UPDATE Cargos 
+        SET isMissed = 0 
+        WHERE villaId = :villaId 
+        AND isMissed = 1 
+        AND isCalled = 1
+        AND datetime(callDate) >= datetime('now', '-12 hours', 'localtime')
+    """)
+    suspend fun clearMissedCargosForVillaToday(villaId: Int)
 }

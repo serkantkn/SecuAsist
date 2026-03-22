@@ -9,14 +9,27 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.serkantken.secuasist.models.Contact
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val villaDao = (application as SecuAsistApplication).db.villaDao()
+    private val contactDao = (application as SecuAsistApplication).db.contactDao()
+    private val villaContactDao = (application as SecuAsistApplication).db.villaContactDao()
     private val app = application as SecuAsistApplication
+    private val intercomDao = app.db.intercomDao()
+
+    suspend fun getVillasForContact(contactId: String) = villaContactDao.getVillasForContact(contactId)
+
+    sealed class HomeSearchResult {
+        data class VillaResult(val villa: Villa) : HomeSearchResult()
+        data class ContactResult(val contact: Contact) : HomeSearchResult()
+    }
 
     // Expose WebSocket Connection State
     val connectionState = app.wsClient.connectionState.stateIn(
@@ -29,18 +42,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
-    // Veritabanından gelen ham liste
-    private val _villas = villaDao.getAllVillas()
-
-    // Filtrelenmiş liste
-    val filteredVillas = combine(_villas, _searchQuery) { villas, query ->
-        if (query.isEmpty()) {
-            villas.sortedBy { it.villaNo }
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val filteredResults = _searchQuery.flatMapLatest { query ->
+        if (query.isEmpty() || !query.any { it.isLetter() }) {
+            val dbFlow = if (query.isEmpty()) villaDao.getAllVillas() else villaDao.searchVillas("%$query%")
+            dbFlow.map { villas -> villas.map { HomeSearchResult.VillaResult(it) } }
         } else {
-            villas.filter {
-                it.villaNo.toString().contains(query) ||
-                (it.villaStreet?.contains(query, ignoreCase = true) == true)
-            }.sortedBy { it.villaNo }
+            contactDao.searchContacts("%$query%").map { contacts ->
+                contacts.map { HomeSearchResult.ContactResult(it) }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -96,10 +106,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Contact Management ---
-    private val contactDao = (application as SecuAsistApplication).db.contactDao()
-    private val villaContactDao = (application as SecuAsistApplication).db.villaContactDao()
-
     // All available contacts for selection
     val allContacts = contactDao.getAllContactsAsFlow().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
@@ -129,9 +135,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val intercomDao = (application as SecuAsistApplication).db.intercomDao()
 
-    // ... (rest of contact dao init)
 
     // ...
 

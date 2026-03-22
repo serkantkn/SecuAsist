@@ -41,8 +41,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
                 
                 try {
                     val name = resolveInfo.loadLabel(packageManager).toString()
-                    val icon = resolveInfo.loadIcon(packageManager)
-                    AppInfo(name, packageName, icon)
+                    AppInfo(name, packageName)
                 } catch (e: Exception) {
                     null
                 }

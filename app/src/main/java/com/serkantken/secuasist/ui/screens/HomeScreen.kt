@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.lazy.grid.items
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Villa
@@ -33,7 +37,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onSettingsClick: () -> Unit
 ) {
-    val villas by viewModel.filteredVillas.collectAsState()
+    val searchResults by viewModel.filteredResults.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     
@@ -58,6 +62,10 @@ fun HomeScreen(
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showDialerSheet by remember { mutableStateOf(false) }
+
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     val csvLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -99,7 +107,11 @@ fun HomeScreen(
                     trailingIcon = {
                         Row {
                             if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                IconButton(onClick = { 
+                                    viewModel.updateSearchQuery("") 
+                                    focusRequester.requestFocus()
+                                    keyboardController?.show()
+                                }) {
                                     Icon(Icons.Default.Close, contentDescription = "Temizle")
                                 }
                             }
@@ -125,18 +137,31 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                        .focusRequester(focusRequester)
                 ) {}
             }
         },
         floatingActionButton = {
-            com.serkantken.secuasist.ui.components.ScrollToTopButton(
-                visible = showScrollToTop,
-                onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(0)
-                    }
+            Column(horizontalAlignment = Alignment.End) {
+                FloatingActionButton(
+                    onClick = { showDialerSheet = true },
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                ) {
+                    Icon(imageVector = Icons.Default.Phone, contentDescription = "Numara Çevir")
                 }
-            )
+                
+                com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                    visible = showScrollToTop,
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    }
+                )
+            }
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
     ) { paddingValues ->
@@ -144,9 +169,9 @@ fun HomeScreen(
             .fillMaxSize()
             .padding(paddingValues)) {
             
-            if (villas.isEmpty()) {
+            if (searchResults.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Kayıtlı villa bulunamadı.", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (searchQuery.any { it.isLetter() }) "Kişi bulunamadı." else "Kayıtlı villa bulunamadı.", style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -158,16 +183,40 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
-                        items = villas,
-                        key = { it.villaId }
-                    ) { villa ->
-                        VillaItem(
-                            villa = villa,
-                            onClick = {
-                                selectedVilla = villa
-                                showBottomSheet = true
+                        items = searchResults,
+                        key = { item ->
+                            when (item) {
+                                is HomeViewModel.HomeSearchResult.VillaResult -> "v_${item.villa.villaId}"
+                                is HomeViewModel.HomeSearchResult.ContactResult -> "c_${item.contact.contactId}"
                             }
-                        )
+                        }
+                    ) { item ->
+                        when (item) {
+                            is HomeViewModel.HomeSearchResult.VillaResult -> {
+                                VillaItem(
+                                    villa = item.villa,
+                                    onClick = {
+                                        selectedVilla = item.villa
+                                        showBottomSheet = true
+                                    }
+                                )
+                            }
+                            is HomeViewModel.HomeSearchResult.ContactResult -> {
+                                ContactSearchResultItem(
+                                    contact = item.contact,
+                                    onClick = {
+                                        // When clicking a contact, open the first linked villa's details
+                                        scope.launch {
+                                            val villasForContact = viewModel.getVillasForContact(item.contact.contactId)
+                                            if (villasForContact.isNotEmpty()) {
+                                                selectedVilla = villasForContact.first()
+                                                showBottomSheet = true
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -180,9 +229,9 @@ fun HomeScreen(
         if (selectedVilla != null && selectedVilla!!.villaId != 0) {
             viewModel.getContactsForVilla(selectedVilla!!.villaId)
         } else {
-            kotlinx.coroutines.flow.flowOf(emptyList())
+            kotlinx.coroutines.flow.flowOf(emptyList<com.serkantken.secuasist.models.Contact>())
         }
-    }.collectAsState(initial = emptyList())
+    }.collectAsState(initial = emptyList<com.serkantken.secuasist.models.Contact>())
 
     if (showBottomSheet && selectedVilla != null) {
         ModalBottomSheet(
@@ -226,6 +275,12 @@ fun HomeScreen(
                 }
             )
         }
+    }
+
+    if (showDialerSheet) {
+        com.serkantken.secuasist.ui.components.DialerSheet(
+            onDismissRequest = { showDialerSheet = false }
+        )
     }
 }
 
@@ -332,3 +387,51 @@ fun StatusBadge(text: String, color: Color) {
 }
 
 
+@Composable
+fun ContactSearchResultItem(contact: com.serkantken.secuasist.models.Contact, onClick: () -> Unit) {
+    Card(
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = contact.contactName ?: "İsimsiz",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    text = contact.contactPhone ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}

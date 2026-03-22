@@ -62,6 +62,9 @@ interface VillaContactDao {
     @Query("SELECT COUNT(*) FROM VillaContacts WHERE contactId = :contactId")
     suspend fun getVillaAssociationsCount(contactId: String): Int
     
+    @Query("SELECT * FROM VillaContacts WHERE contactId = :contactId")
+    suspend fun getRelationshipsByContactId(contactId: String): List<VillaContact>
+    
     // Belirli bir contactId'ye bağlı villaları getirir
     @Query("SELECT V.* FROM Villas V JOIN VillaContacts VC ON V.villaId = VC.villaId WHERE VC.contactId = :contactId")
     suspend fun getVillasForContact(contactId: String): List<com.serkantken.secuasist.models.Villa>

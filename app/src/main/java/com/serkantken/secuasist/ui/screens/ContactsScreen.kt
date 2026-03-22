@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -19,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,12 +39,17 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     var contactToEdit by remember { mutableStateOf<Contact?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showDialerSheet by remember { mutableStateOf(false) }
 
-    // Launcher for Call Permissions
-    val callPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[android.Manifest.permission.CALL_PHONE] == true) {
+    val isImporting by viewModel.isImporting.collectAsState()
+    val importProgress by viewModel.importProgress.collectAsState()
+    val importSummary by viewModel.importSummary.collectAsState()
+
+    // Launcher for Dialer Role Permission
+    val dialerRoleLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
             // Permission granted, user can try calling again
         }
     }
@@ -57,6 +65,9 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = rememberCoroutineScope()
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     Scaffold(
         topBar = {
@@ -77,7 +88,11 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                     trailingIcon = {
                         Row {
                             if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                IconButton(onClick = { 
+                                    viewModel.updateSearchQuery("") 
+                                    focusRequester.requestFocus()
+                                    keyboardController?.show()
+                                }) {
                                     Icon(Icons.Default.Close, contentDescription = "Temizle")
                                 }
                             }
@@ -122,18 +137,31 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                        .focusRequester(focusRequester)
                 ) {}
             }
         },
         floatingActionButton = {
-            com.serkantken.secuasist.ui.components.ScrollToTopButton(
-                visible = showScrollToTop,
-                onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(0)
-                    }
+            Column(horizontalAlignment = Alignment.End) {
+                FloatingActionButton(
+                    onClick = { showDialerSheet = true },
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                ) {
+                    Icon(imageVector = Icons.Default.Phone, contentDescription = "Numara Çevir")
                 }
-            )
+
+                com.serkantken.secuasist.ui.components.ScrollToTopButton(
+                    visible = showScrollToTop,
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    }
+                )
+            }
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars)
     ) { paddingValues ->
@@ -159,58 +187,23 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                             onClick = { /* Expand logic is internal now */ },
                             onEdit = { contactToEdit = contact },
                             onCall = {
-                                // Check Permission
-                                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                        context,
-                                        android.Manifest.permission.CALL_PHONE
-                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
-                                    androidx.core.content.ContextCompat.checkSelfPermission(
-                                        context,
-                                        android.Manifest.permission.READ_PHONE_STATE
-                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    if (android.provider.Settings.canDrawOverlays(context)) {
-                                        scope.launch {
-                                            // Fetch linked villas for the contact
-                                            val villas = viewModel.getLinkedVillas(contact.contactId)
-                                            val street = if (villas.isNotEmpty()) villas.joinToString(", ") { it.villaStreet ?: "" } else "Villa Bilgisi Yok"
-                                            val directions = if (villas.isNotEmpty()) villas.firstOrNull()?.villaNavigationA ?: "" else ""
-                                            
-                                            try {
-                                                // 1. Start Floating Widget Service FIRST (while app is in foreground)
-                                                val serviceIntent = android.content.Intent(context, com.serkantken.secuasist.services.FloatingWidgetService::class.java).apply {
-                                                    putExtra("VILLA_STREET", street)
-                                                    putExtra("VILLA_DIRECTIONS", directions)
-                                                }
-                                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                                    context.startForegroundService(serviceIntent)
-                                                } else {
-                                                    context.startService(serviceIntent)
-                                                }
+                                val hasCallPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.CALL_PHONE
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-                                                // 2. Start Phone Call Activity
-                                                val callIntent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
-                                                    data = android.net.Uri.parse("tel:${contact.contactPhone}")
-                                                }
-                                                context.startActivity(callIntent)
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                            }
+                                scope.launch {
+                                    try {
+                                        val action = if (hasCallPermission) android.content.Intent.ACTION_CALL else android.content.Intent.ACTION_DIAL
+                                        val callIntent = android.content.Intent(action).apply {
+                                            data = android.net.Uri.parse("tel:${contact.contactPhone}")
+                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                                         }
-                                    } else {
-                                        val intent = android.content.Intent(
-                                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                            android.net.Uri.parse("package:${context.packageName}")
-                                        )
-                                        context.startActivity(intent)
+                                        context.startActivity(callIntent)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                        android.widget.Toast.makeText(context, "Arama başlatılamadı.", android.widget.Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    callPermissionLauncher.launch(
-                                        arrayOf(
-                                            android.Manifest.permission.CALL_PHONE,
-                                            android.Manifest.permission.READ_PHONE_STATE
-                                        )
-                                    )
                                 }
                             },
                             // Pass permission checkers/launchers to expand logic
@@ -250,6 +243,114 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                 viewModel.deleteContact(contact)
                 contactToEdit = null
             }
+        )
+    }
+
+    if (isImporting) {
+        ImportProgressDialog(progress = importProgress)
+    }
+
+    importSummary?.let { summary ->
+        ImportSummaryDialog(
+            summary = summary,
+            onDismiss = { viewModel.dismissImportSummary() }
+        )
+    }
+
+    if (showDialerSheet) {
+        com.serkantken.secuasist.ui.components.DialerSheet(
+            onDismissRequest = { showDialerSheet = false }
+        )
+    }
+}
+
+@Composable
+fun ImportProgressDialog(progress: Float) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Rehber İçe Aktarılıyor...") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primaryContainer
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Lütfen bekleyin, veriler işleniyor ve mükerrer kayıtlar temizleniyor...",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+@Composable
+fun ImportSummaryDialog(
+    summary: com.serkantken.secuasist.ui.viewmodels.ImportSummary,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("İşlem Özeti")
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryRow("Toplam İşlenen:", "${summary.totalProcessed}")
+                SummaryRow("Yeni Eklenen:", "${summary.newAdded}", Color(0xFF4CAF50))
+                SummaryRow("Zaten Kayıtlı:", "${summary.alreadyExists}")
+                SummaryRow("Birleştirilen Mükerrer:", "${summary.duplicatesMerged}", MaterialTheme.colorScheme.error)
+                SummaryRow("Villaya Bağlanan:", "${summary.villasLinked}", MaterialTheme.colorScheme.primary)
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Rehberiniz başarıyla güncellendi ve düzenlendi.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Tamam")
+            }
+        }
+    )
+}
+
+@Composable
+fun SummaryRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = valueColor
         )
     }
 }

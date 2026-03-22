@@ -19,13 +19,15 @@ import com.serkantken.secuasist.network.ConnectionState
 @Composable
 fun ScreenHeader(
     title: String,
-    onNewClick: () -> Unit,
+    onNewClick: (() -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null,
-    connectionState: ConnectionState? = null
+    connectionState: ConnectionState? = null,
+    extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -34,12 +36,17 @@ fun ScreenHeader(
             text = title,
             style = MaterialTheme.typography.displaySmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f)
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Extra Actions Slot
+            extraActions()
+            
             // Connection Status (Optional)
             if (connectionState != null) {
+                if (extraActions != {}) Spacer(modifier = Modifier.width(8.dp))
                 val (iconColor, _) = when(connectionState) {
                     ConnectionState.CONNECTED -> Color.Green to "Bağlı"
                     ConnectionState.CONNECTING -> Color.Yellow to "Bağlanıyor"
@@ -66,15 +73,17 @@ fun ScreenHeader(
             }
 
             // "Yeni" Button -> Plus Icon
-            IconButton(
-                onClick = onNewClick,
-                modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.CircleShape)
-            ) {
-                 Icon(
-                     imageVector = Icons.Default.Add,
-                     contentDescription = "Yeni Ekle",
-                     tint = MaterialTheme.colorScheme.onPrimaryContainer
-                 )
+            if (onNewClick != null) {
+                IconButton(
+                    onClick = onNewClick,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.CircleShape)
+                ) {
+                     Icon(
+                         imageVector = Icons.Default.Add,
+                         contentDescription = "Yeni Ekle",
+                         tint = MaterialTheme.colorScheme.onPrimaryContainer
+                     )
+                }
             }
         }
     }

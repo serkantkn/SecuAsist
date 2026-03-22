@@ -158,14 +158,12 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
     val allVillas = villaDao.getAllVillas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     
-    val filteredVillasToPick = combine(allVillas, _villaSearchQuery) { villas, query ->
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val filteredVillasToPick = _villaSearchQuery.flatMapLatest { query ->
         if (query.isEmpty()) {
-            villas
+            villaDao.getAllVillas()
         } else {
-            villas.filter {
-                it.villaNo.toString().contains(query) ||
-                (it.villaStreet?.contains(query, ignoreCase = true) == true)
-            }
+            villaDao.searchVillas("%$query%")
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -243,6 +241,18 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
     ) { cargos, skipped ->
         cargos.filter { it.cargo.cargoId !in skipped }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // New: Count of skipped items to show "Retry" button
+    val skippedCargosCount = combine(
+        cargoDao.getPendingCargosWithDetails(),
+        _skippedCargoIds
+    ) { cargos, skipped ->
+        cargos.count { it.cargo.cargoId in skipped }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun resetSkips() {
+        _skippedCargoIds.value = emptySet()
+    }
 
     fun updateCargoStatus(cargo: Cargo, isCalled: Boolean, isMissed: Boolean, whoCalledId: String?) {
         viewModelScope.launch {

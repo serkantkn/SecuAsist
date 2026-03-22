@@ -88,7 +88,7 @@ fun FaultScreen(
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(title = { Text("Arıza Takibi") })
+                com.serkantken.secuasist.ui.components.ScreenHeader(title = "Arıza Takibi")
                 TabRow(selectedTabIndex = selectedTabIndex) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
