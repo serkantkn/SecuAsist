@@ -7,13 +7,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.network.ConnectionState
 import com.serkantken.secuasist.ui.viewmodels.HomeViewModel
+import com.serkantken.secuasist.SecuAsistApplication
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +46,10 @@ fun HomeScreen(
     val searchResults by viewModel.filteredResults.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as SecuAsistApplication
+    val isAdmin = true
     
     // Scroll To Top Logic
     val listState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -62,16 +72,17 @@ fun HomeScreen(
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    
+    var selectedContact by remember { mutableStateOf<com.serkantken.secuasist.models.Contact?>(null) }
+    var showContactBottomSheet by remember { mutableStateOf(false) }
+    val contactSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     var showDialerSheet by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
-    val csvLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { viewModel.importVillasFromCsv(it) }
-    }
+    // CSV Launcher removed
 
     Scaffold(
         topBar = {
@@ -80,19 +91,30 @@ fun HomeScreen(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 com.serkantken.secuasist.ui.components.ScreenHeader(
                     title = "Villalar",
-                    onNewClick = {
-                        val newVilla = Villa(
-                            villaNo = 0,
-                            villaStreet = null,
-                            villaNotes = null,
-                            villaNavigationA = null,
-                            villaNavigationB = null
-                        )
-                        selectedVilla = newVilla
-                        showBottomSheet = true
-                    },
+                    onNewClick = if (isAdmin) {
+                        {
+                            val newVilla = Villa(
+                                villaNo = 0,
+                                villaStreet = null,
+                                villaNotes = null,
+                                villaNavigationA = null,
+                                villaNavigationB = null
+                            )
+                            selectedVilla = newVilla
+                            showBottomSheet = true
+                        }
+                    } else null,
                     onSettingsClick = onSettingsClick,
-                    connectionState = connectionState
+                    connectionState = connectionState,
+                    extraActions = {
+                        IconButton(onClick = { viewModel.refresh() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Yenile",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
                 )
                 
                 // 2. Search Bar (Customized to look integrated)
@@ -115,23 +137,7 @@ fun HomeScreen(
                                     Icon(Icons.Default.Close, contentDescription = "Temizle")
                                 }
                             }
-                            // CSV Import Menu
-                            var showMenu by remember { mutableStateOf(false) }
-                            IconButton(onClick = { showMenu = !showMenu }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Daha")
-                            }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Dışarıdan Al (CSV)") },
-                                    onClick = {
-                                        showMenu = false
-                                        csvLauncher.launch(arrayOf("*/*")) 
-                                    }
-                                )
-                            }
+
                         }
                     },
                     modifier = Modifier
@@ -205,14 +211,8 @@ fun HomeScreen(
                                 ContactSearchResultItem(
                                     contact = item.contact,
                                     onClick = {
-                                        // When clicking a contact, open the first linked villa's details
-                                        scope.launch {
-                                            val villasForContact = viewModel.getVillasForContact(item.contact.contactId)
-                                            if (villasForContact.isNotEmpty()) {
-                                                selectedVilla = villasForContact.first()
-                                                showBottomSheet = true
-                                            }
-                                        }
+                                        selectedContact = item.contact
+                                        showContactBottomSheet = true
                                     }
                                 )
                             }
@@ -245,6 +245,7 @@ fun HomeScreen(
                 villa = selectedVilla!!,
                 linkedContacts = linkedContacts,
                 allContacts = allContacts,
+                isAdmin = isAdmin,
                 onDismiss = {
                     showBottomSheet = false
                     selectedVilla = null
@@ -272,6 +273,39 @@ fun HomeScreen(
                      if (selectedVilla!!.villaId != 0) {
                         viewModel.removeContactFromVilla(selectedVilla!!.villaId, contact.contactId)
                      }
+                }
+            )
+        }
+    }
+
+    var linkedVillasForContact by remember { mutableStateOf<List<Villa>>(emptyList()) }
+    LaunchedEffect(selectedContact) {
+        if (selectedContact != null) {
+            linkedVillasForContact = viewModel.getVillasForContact(selectedContact!!.contactId)
+        } else {
+            linkedVillasForContact = emptyList()
+        }
+    }
+
+    if (showContactBottomSheet && selectedContact != null) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showContactBottomSheet = false
+                selectedContact = null
+            },
+            sheetState = contactSheetState
+        ) {
+            ContactDetailSheet(
+                contact = selectedContact!!,
+                linkedVillas = linkedVillasForContact,
+                isAdmin = isAdmin,
+                onDismiss = {
+                    showContactBottomSheet = false
+                    selectedContact = null
+                },
+                onSave = { updatedContact ->
+                    viewModel.updateContact(updatedContact)
+                    selectedContact = updatedContact
                 }
             )
         }
@@ -332,37 +366,33 @@ fun VillaItem(villa: Villa, onClick: () -> Unit) {
                     )
                 }
 
-                // Badges
-                val badges = mutableListOf<Pair<String, Color>>()
-                if (villa.isVillaUnderConstruction == 1) badges.add("Tadilatta" to Color(0xFFFFA500))
-                if (villa.isVillaEmpty == 1) badges.add("Boş" to Color.Red)
-                if (villa.isVillaRental == 1) badges.add("Kiracı" to Color.Blue)
+                // Icons Badges (Fixed Height Row to maintain consistent Card Size)
+                val statusIcons = mutableListOf<Triple<androidx.compose.ui.graphics.vector.ImageVector, Color, String>>()
+                if (villa.isVillaUnderConstruction == 1) statusIcons.add(Triple(Icons.Default.Build, Color(0xFFFFA500), "Tedilatta"))
+                if (villa.isVillaEmpty == 1) statusIcons.add(Triple(Icons.Default.Home, Color.Red, "Boş"))
+                if (villa.isVillaRental == 1) statusIcons.add(Triple(Icons.Default.VpnKey, Color.Blue, "Kiracı"))
+                if (villa.isVillaSpecial == 1) statusIcons.add(Triple(Icons.Default.Star, Color(0xFFFFD700), "VIP"))
+                if (villa.isVillaCallFromHome == 1) statusIcons.add(Triple(Icons.Default.Phone, Color(0xFF4CAF50), "Evden Ara"))
+                if (villa.isVillaCallForCargo == 0) statusIcons.add(Triple(Icons.Default.Inventory2, Color.Red, "Kargo Red"))
+                if (villa.isCallOnlyMobile == 1) statusIcons.add(Triple(Icons.Default.Smartphone, Color(0xFFC2185B), "Sadece Cep"))
 
-                if (badges.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        badges.take(2).forEach { (text, color) ->
-                            Surface(
-                                color = color.copy(alpha = 0.1f),
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = text,
-                                    color = color,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                    fontSize = 9.sp,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
-                                    softWrap = false
-                                )
-                            }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().height(16.dp), // Fixed height row
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (statusIcons.isNotEmpty()) {
+                        statusIcons.take(4).forEach { (icon, color, _) ->
+                             Icon(
+                                 imageVector = icon,
+                                 contentDescription = null,
+                                 tint = color,
+                                 modifier = Modifier.size(16.dp)
+                             )
                         }
-                        if (badges.size > 2) {
-                             Text("..", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (statusIcons.size > 4) {
+                             Text("..", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

@@ -58,6 +58,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _searchQuery.value = query
     }
 
+    fun refresh() {
+        app.syncManager.refreshAllData()
+    }
+
     fun addVilla(villaNo: Int, street: String) {
         // Legacy support or can be removed if unused
         // But better to redirect to saveNewVilla
@@ -97,6 +101,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateContact(contact: Contact) {
+        viewModelScope.launch {
+            contactDao.update(contact)
+            val updatedContact = contact.copy(updatedAt = System.currentTimeMillis())
+            app.wsClient.sendData("UPDATE_CONTACT", updatedContact)
+        }
+    }
+
     fun deleteVilla(villa: Villa) {
         viewModelScope.launch {
             villaDao.delete(villa)
@@ -118,7 +130,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val link = com.serkantken.secuasist.models.VillaContact(
                 villaId = villaId,
                 contactId = contact.contactId,
-                isRealOwner = isOwner,
+                isRealOwner = if (isOwner) 1 else 0,
                 contactType = type,
                 notes = null
             )
@@ -139,46 +151,5 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // ...
 
-    fun importVillasFromCsv(uri: android.net.Uri) {
-        viewModelScope.launch {
-            try {
-                app.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val villas = com.serkantken.secuasist.utils.CsvUtils.parseVillasFromCsv(inputStream)
-                    if (villas.isNotEmpty()) {
-                        val ids = villaDao.insertAll(villas)
-                        // Sync each imported villa
-                        villas.forEachIndexed { index, villa ->
-                            val villaId = ids[index].toInt()
-                            // 1. Sync Villa
-                            val villaToSend = villa.copy(villaId = villaId)
-                            app.wsClient.sendData("ADD_VILLA", villaToSend)
-                            
-                            // 2. Add Default Intercom Fault Item
-                            val intercom = com.serkantken.secuasist.models.Intercom(
-                                villaId = villaId,
-                                intercomName = "Dış Kapı" // Default name
-                            )
-                            intercomDao.insert(intercom)
-                            app.wsClient.sendData("ADD_INTERCOM", intercom)
-                        }
-                        
-                        // Show success message
-                        withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            android.widget.Toast.makeText(app, "${villas.size} villa başarıyla eklendi.", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        // Empty or parse error
-                        withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            android.widget.Toast.makeText(app, "CSV dosyasından villa okunamadı veya dosya boş.", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    android.widget.Toast.makeText(app, "Hata oluştu: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
+
 }

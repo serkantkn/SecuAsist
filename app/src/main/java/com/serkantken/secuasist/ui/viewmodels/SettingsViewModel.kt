@@ -43,8 +43,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ipAddress = MutableStateFlow(prefs.getString("server_ip", "10.0.2.2") ?: "10.0.2.2")
     val ipAddress: StateFlow<String> = _ipAddress
 
-    private val _serverPort = MutableStateFlow(prefs.getInt("server_port", 8765).toString())
+    private val _serverPort = MutableStateFlow(
+        try {
+            prefs.getString("server_port", "8765") ?: "8765"
+        } catch (e: Exception) {
+            prefs.getInt("server_port", 8765).toString()
+        }
+    )
     val serverPort: StateFlow<String> = _serverPort
+    
+    private val _deviceName = MutableStateFlow(prefs.getString("device_name", "") ?: "")
+    val deviceName: StateFlow<String> = _deviceName
     
     private val _preferredGate = MutableStateFlow(prefs.getString("preferred_gate", "A") ?: "A")
     val preferredGate: StateFlow<String> = _preferredGate
@@ -74,18 +83,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     
     fun updatePreferredGate(gate: String) {
         _preferredGate.value = gate
+        prefs.edit().putString("preferred_gate", gate).apply()
+    }
+    
+    fun updateDeviceName(name: String) {
+        _deviceName.value = name
     }
     
     fun saveSettings() {
         val ip = _ipAddress.value
         val port = _serverPort.value.toIntOrNull()
         val gate = _preferredGate.value
+        val devName = _deviceName.value
         
-        if (ip.isNotBlank() && port != null) {
+        if (ip.isNotBlank() && port != null && devName.isNotBlank()) {
             prefs.edit()
                 .putString("server_ip", ip)
-                .putInt("server_port", port)
+                .putString("server_port", port.toString())
                 .putString("preferred_gate", gate)
+                .putString("device_name", devName)
                 .apply()
                 
             // Reconnect logic

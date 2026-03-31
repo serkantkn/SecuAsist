@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecuAsist — Gizlilik Politikası / Privacy Policy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #cbd5e1;
+            line-height: 1.8;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #f1f5f9;
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            color: #60a5fa;
+            font-size: 1.3em;
+            margin: 32px 0 12px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 8px;
+        }
+
+        h3 {
+            color: #94a3b8;
+            font-size: 1.1em;
+            margin: 20px 0 8px;
+        }
+
+        p,
+        li {
+            margin-bottom: 8px;
+        }
+
+        ul {
+            padding-left: 24px;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 0.9em;
+            margin-bottom: 32px;
+        }
+
+        .lang-switch {
+            text-align: right;
+            margin-bottom: 24px;
+        }
+
+        .lang-switch a {
+            color: #60a5fa;
+            text-decoration: none;
+            padding: 6px 16px;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            font-size: 0.85em;
+        }
+
+        .lang-switch a:hover {
+            background: #1e293b;
+        }
+
+        .section {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .highlight {
+            color: #34d399;
+            font-weight: bold;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #1e3a5f;
+            color: #60a5fa;
+            padding: 2px 10px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            margin-right: 6px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #1e293b;
+            margin: 48px 0;
+        }
+
+        a {
+            color: #60a5fa;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- TÜRKÇE -->
+        <div id="tr">
+            <div class="lang-switch"><a href="#en">🇬🇧 English Version</a></div>
+
+            <h1>🛡️ SecuAsist — Gizlilik Politikası</h1>
+            <p class="subtitle">Son güncelleme: 31 Mart 2026</p>
+
+            <div class="section">
+                <p>SecuAsist, site güvenlik personeli için geliştirilmiş <span class="highlight">yerel ağ tabanlı</span>
+                    bir güvenlik yönetim uygulamasıdır. Kullanıcı verilerinin gizliliğine büyük önem veriyoruz.</p>
+            </div>
+
+            <h2>1. Toplanan Veriler</h2>
+            <p>SecuAsist aşağıdaki verileri toplar ve işler:</p>
+            <ul>
+                <li><strong>Villa/Konut Bilgileri:</strong> Villa numarası, sokak adı, notlar ve durum bilgileri</li>
+                <li><strong>İletişim Bilgileri:</strong> Sakin adları ve telefon numaraları</li>
+                <li><strong>Kargo Kayıtları:</strong> Teslimat bilgileri ve durumu</li>
+                <li><strong>Cihaz Bilgisi:</strong> Kullanıcının belirlediği cihaz adı (örn: "A Kapısı Tableti")</li>
+            </ul>
+
+            <h2>2. Veri Depolama ve İletim</h2>
+            <div class="section">
+                <p><span class="highlight">⚠️ Önemli:</span> SecuAsist hiçbir veriyi internet üzerinden dış sunuculara
+                    göndermez.</p>
+                <ul>
+                    <li>Tüm veriler <strong>yerel ağdaki (LAN)</strong> merkezi sunucuda saklanır</li>
+                    <li>Cihazlar arası iletişim <strong>WebSocket</strong> protokolü ile yerel ağ üzerinden gerçekleşir
+                    </li>
+                    <li>Veriler cihazın kendi veritabanında (SQLite) yerel olarak da tutulur</li>
+                    <li><strong>Hiçbir veri üçüncü taraflarla paylaşılmaz</strong></li>
+                    <li><strong>Hiçbir analitik veya izleme aracı kullanılmaz</strong></li>
+                </ul>
+            </div>
+
+            <h2>3. Uygulama İzinleri</h2>
+            <p>SecuAsist aşağıdaki Android izinlerini kullanır:</p>
+
+            <h3><span class="badge">TELEFON</span> Arama ve Çağrı Bilgisi</h3>
+            <p><code>READ_PHONE_STATE</code>, <code>READ_CALL_LOG</code>, <code>CALL_PHONE</code> — Gelen aramayı tespit
+                edip arayanın villa bilgilerini göstermek ve hızlı arama yapmak için kullanılır. Çağrı verileri dışarıya
+                gönderilmez.</p>
+
+            <h3><span class="badge">EKRAN ÜSTÜ</span> Yüzen Pencere</h3>
+            <p><code>SYSTEM_ALERT_WINDOW</code> — Çağrı sırasında villa bilgilerini içeren yüzen asistan penceresini
+                göstermek için kullanılır.</p>
+
+            <h3><span class="badge">AĞ</span> Yerel Ağ Erişimi</h3>
+            <p><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code>, <code>ACCESS_WIFI_STATE</code> — Yerel ağdaki
+                merkezi sunucu ile iletişim kurmak için kullanılır. İnternet erişimi gerekmez.</p>
+
+            <h3><span class="badge">BİLDİRİM</span> Bildirimler</h3>
+            <p><code>POST_NOTIFICATIONS</code> — Kargo bildirimleri ve bağlantı durumu için kullanılır.</p>
+
+            <h2>4. Üçüncü Taraf Hizmetler</h2>
+            <p>SecuAsist hiçbir üçüncü taraf analitik, reklam veya izleme hizmeti kullanmaz. Uygulama tamamen çevrimdışı
+                (yerel ağ) çalışacak şekilde tasarlanmıştır.</p>
+
+            <h2>5. Çocukların Gizliliği</h2>
+            <p>Bu uygulama çocuklara yönelik değildir ve 13 yaşın altındaki kişilerden bilerek veri toplamaz.</p>
+
+            <h2>6. Değişiklikler</h2>
+            <p>Bu gizlilik politikası zaman zaman güncellenebilir. Değişiklikler bu sayfada yayınlanacaktır.</p>
+
+            <h2>7. İletişim</h2>
+            <p>Sorularınız için: <strong>serkantkn5@gmail.com</strong></p>
+        </div>
+
+        <hr>
+
+        <!-- ENGLISH -->
+        <div id="en">
+            <div class="lang-switch"><a href="#tr">🇹🇷 Türkçe Versiyon</a></div>
+
+            <h1>🛡️ SecuAsist — Privacy Policy</h1>
+            <p class="subtitle">Last updated: March 31, 2026</p>
+
+            <div class="section">
+                <p>SecuAsist is a <span class="highlight">local network-based</span> security management application
+                    designed for site security personnel. We take user data privacy seriously.</p>
+            </div>
+
+            <h2>1. Data Collected</h2>
+            <p>SecuAsist collects and processes the following data:</p>
+            <ul>
+                <li><strong>Property Information:</strong> Villa numbers, street names, notes, and status flags</li>
+                <li><strong>Contact Information:</strong> Resident names and phone numbers</li>
+                <li><strong>Cargo Records:</strong> Delivery information and status</li>
+                <li><strong>Device Information:</strong> User-defined device name (e.g., "Gate A Tablet")</li>
+            </ul>
+
+            <h2>2. Data Storage and Transmission</h2>
+            <div class="section">
+                <p><span class="highlight">⚠️ Important:</span> SecuAsist does NOT send any data to external servers
+                    over the internet.</p>
+                <ul>
+                    <li>All data is stored on a <strong>local network (LAN)</strong> central server</li>
+                    <li>Device communication occurs via <strong>WebSocket</strong> protocol over the local network only
+                    </li>
+                    <li>Data is also stored locally on the device (SQLite database)</li>
+                    <li><strong>No data is shared with third parties</strong></li>
+                    <li><strong>No analytics or tracking tools are used</strong></li>
+                </ul>
+            </div>
+
+            <h2>3. App Permissions</h2>
+            <p>SecuAsist uses the following Android permissions:</p>
+
+            <h3><span class="badge">PHONE</span> Call and Phone State</h3>
+            <p><code>READ_PHONE_STATE</code>, <code>READ_CALL_LOG</code>, <code>CALL_PHONE</code> — Used to detect
+                incoming calls and display the caller's property information. Call data is never transmitted externally.
+            </p>
+
+            <h3><span class="badge">OVERLAY</span> Floating Window</h3>
+            <p><code>SYSTEM_ALERT_WINDOW</code> — Used to display a floating assistant window showing property details
+                during calls.</p>
+
+            <h3><span class="badge">NETWORK</span> Local Network Access</h3>
+            <p><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code>, <code>ACCESS_WIFI_STATE</code> — Used to
+                communicate with the local central server. No internet access is required.</p>
+
+            <h3><span class="badge">NOTIFICATION</span> Notifications</h3>
+            <p><code>POST_NOTIFICATIONS</code> — Used for cargo notifications and connection status updates.</p>
+
+            <h2>4. Third-Party Services</h2>
+            <p>SecuAsist does not use any third-party analytics, advertising, or tracking services. The application is
+                designed to work entirely offline (local network).</p>
+
+            <h2>5. Children's Privacy</h2>
+            <p>This application is not intended for children and does not knowingly collect data from individuals under
+                the age of 13.</p>
+
+            <h2>6. Changes</h2>
+            <p>This privacy policy may be updated from time to time. Changes will be published on this page.</p>
+
+            <h2>7. Contact</h2>
+            <p>For questions: <strong>serkantkn5@gmail.com</strong></p>
+        </div>
+    </div>
+</body>
+
+</html>

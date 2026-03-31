@@ -32,7 +32,7 @@ interface VillaDao {
     @Query("DELETE FROM villas")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM Villas")
+    @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
     fun getAllVillas(): Flow<List<Villa>> // Tüm villaları gözlemlenebilir bir şekilde döndürür
 
     @Query("SELECT * FROM Villas ORDER BY villaNo ASC") // Villa numarasına göre sıralı

@@ -18,6 +18,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -117,21 +118,22 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
     private fun showFloatingWidget(street: String, directions: String, villaNo: String, contactName: String, showCargoWarning: String) {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
+        val targetHeight = (screenHeight * 0.6).toInt() // Ekranın %60'ı (3/5)
 
         val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT, 
+            targetHeight, // 60% Height
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
                 WindowManager.LayoutParams.TYPE_PHONE
             },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.TOP
             x = 0
-            y = screenHeight / 6 // Üst yarının ortasına denk gelecek şekilde
+            y = 0 // En tepeye daya
         }
 
         floatingView = ComposeView(this).apply {
@@ -148,8 +150,7 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
                         contactName = contactName,
                         showCargoWarning = showCargoWarning,
                         onClose = { stopSelf() },
-                        onDrag = { dx, dy ->
-                            layoutParams.x += dx.roundToInt()
+                        onDrag = { _, dy ->
                             layoutParams.y += dy.roundToInt()
                             windowManager.updateViewLayout(this, layoutParams)
                         }
@@ -173,71 +174,110 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
     ) {
         Card(
             modifier = Modifier
-                .width(320.dp)
+                .fillMaxWidth()
+                .fillMaxHeight() // Fill 60% Screen Height
+                .padding(horizontal = 4.dp)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         onDrag(dragAmount.x, dragAmount.y)
                     }
                 },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(12.dp)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center // İçeriği dikeyde ORTALA
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Villa No: $villaNo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Kapat")
+                // Header (Close Button at Top)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    IconButton(
+                        onClick = onClose, 
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(40.dp)
+                    ) {
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)) {
+                            Icon(Icons.Default.Close, contentDescription = "Kapat", tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(6.dp))
+                        }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.weight(0.2f))
                 
+                // --- VİLLA NO ---
+                Text(
+                    text = "VİLLA: $villaNo", 
+                    style = MaterialTheme.typography.displaySmall, 
+                    fontWeight = FontWeight.Black, 
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // --- İSİM ---
+                Text(
+                    text = contactName.uppercase(), 
+                    style = MaterialTheme.typography.displaySmall, 
+                    fontWeight = FontWeight.ExtraBold, 
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // --- SOKAK ---
                 Text(
                     text = street, 
-                    style = MaterialTheme.typography.headlineSmall, 
-                    fontWeight = FontWeight.ExtraBold, 
+                    style = MaterialTheme.typography.headlineMedium, 
+                    fontWeight = FontWeight.Bold, 
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 if (showCargoWarning.isNotBlank()) {
+                    Surface(
+                        color = Color.Red.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(top = 24.dp)
+                    ) {
+                        Text(
+                            text = "⚠ $showCargoWarning KARGO UYARISI",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Red,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(0.3f))
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                
+                // Yol Tarifi
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "YOL TARİFİ / VARDIYA", style = MaterialTheme.typography.labelMedium, color = Color.Gray, letterSpacing = 3.sp)
                     Text(
-                        text = "$showCargoWarning Kargo için arandı, ulaşılamadı",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Red,
-                        fontWeight = FontWeight.Bold,
+                        text = directions, 
+                        style = MaterialTheme.typography.headlineSmall, 
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                     )
                 }
                 
-                Divider(modifier = Modifier.padding(vertical = 16.dp))
-                
-                
-                Text(text = "Yol Tarifi", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                Text(
-                    text = directions, 
-                    style = MaterialTheme.typography.bodyLarge, 
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.weight(0.1f))
             }
         }
     }

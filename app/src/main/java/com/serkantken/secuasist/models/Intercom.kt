@@ -10,7 +10,7 @@ data class Intercom(
     val intercomId: String = UUID.randomUUID().toString(),
     val villaId: Int,
     val intercomName: String, // e.g., "Bahçe Kapısı", "Bina Girişi"
-    val isWorking: Boolean = true,
+    val isWorking: Int = 1,
     val lastChecked: Long = System.currentTimeMillis(),
     val notes: String? = null,
     val updatedAt: Long = System.currentTimeMillis(),

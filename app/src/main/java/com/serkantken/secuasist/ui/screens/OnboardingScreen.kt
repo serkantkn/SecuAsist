@@ -40,10 +40,13 @@ import androidx.annotation.RequiresApi
 @RequiresApi(Build.VERSION_CODES.Q)
 @Composable
 fun OnboardingScreen(
-    onContinue: () -> Unit
+    onContinue: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    var deviceName by remember { mutableStateOf("") }
+    var deviceNameError by remember { mutableStateOf(false) }
 
     val telecomManager = context.getSystemService(android.content.Context.TELECOM_SERVICE) as TelecomManager
     var isDefaultDialer by remember { mutableStateOf(telecomManager.defaultDialerPackage == context.packageName) }
@@ -125,7 +128,13 @@ fun OnboardingScreen(
     Scaffold(
         bottomBar = {
             Button(
-                onClick = onContinue,
+                onClick = {
+                    if (deviceName.isBlank()) {
+                        deviceNameError = true
+                    } else {
+                        onContinue(deviceName)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -150,7 +159,22 @@ fun OnboardingScreen(
                 textAlign = TextAlign.Center
             )
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = { 
+                    deviceName = it
+                    if (it.isNotBlank()) deviceNameError = false 
+                },
+                label = { Text("Cihaz İsmi (Zorunlu)") },
+                isError = deviceNameError,
+                supportingText = if (deviceNameError) { { Text("Lütfen cihaza bir isim verin (Örn: A Kapısı Tableti)") } } else null,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
             
             Text(
                 text = "Uygulamanın tam performansla çalışabilmesi için aşağıdaki izinleri vermenizi öneririz.",

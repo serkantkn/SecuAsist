@@ -16,7 +16,7 @@ android {
         minSdk = 26 // Compose requires min 21, but 26 is safer for modern APIs
         targetSdk = 35
         versionCode = 1
-        versionName = "0.5.0"
+        versionName = "0.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

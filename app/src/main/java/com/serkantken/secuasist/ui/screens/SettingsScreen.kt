@@ -39,14 +39,21 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.data.AppTheme
 import com.serkantken.secuasist.ui.viewmodels.SettingsViewModel
+import com.serkantken.secuasist.SecuAsistApplication
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Logout
+import kotlinx.coroutines.launch
 
 @RequiresApi(Build.VERSION_CODES.Q)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onUserManagementClick: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as SecuAsistApplication
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Genel", "Bağlantı", "Görünüm", "İzinler")
 
@@ -83,8 +90,8 @@ fun SettingsScreen(
                     .fillMaxWidth()
             ) {
                 when (selectedTabIndex) {
-                    0 -> SettingsGeneralTab(viewModel)
-                    1 -> SettingsConnectionTab(viewModel, onBack)
+                    0 -> SettingsGeneralTab(viewModel, onUserManagementClick)
+                    1 -> SettingsConnectionTab(viewModel, onBack, app)
                     2 -> SettingsAppearanceTab(viewModel)
                     3 -> SettingsPermissionsTab(viewModel)
                 }
@@ -95,9 +102,13 @@ fun SettingsScreen(
 
 @RequiresApi(Build.VERSION_CODES.Q)
 @Composable
-fun SettingsGeneralTab(viewModel: SettingsViewModel) {
+fun SettingsGeneralTab(
+    viewModel: SettingsViewModel,
+    onUserManagementClick: () -> Unit
+) {
     val preferredGate by viewModel.preferredGate.collectAsState()
     val context = LocalContext.current
+    val app = context.applicationContext as com.serkantken.secuasist.SecuAsistApplication
 
     // Dialer Role State
     var isDefaultDialer by remember { mutableStateOf(viewModel.isDefaultDialer(context)) }
@@ -183,14 +194,23 @@ fun SettingsGeneralTab(viewModel: SettingsViewModel) {
                 }
             }
         }
+
     }
 }
 
 @Composable
-fun SettingsConnectionTab(viewModel: SettingsViewModel, onBack: () -> Unit) {
+fun SettingsConnectionTab(
+    viewModel: SettingsViewModel, 
+    onBack: () -> Unit, 
+    app: com.serkantken.secuasist.SecuAsistApplication
+) {
     val ipAddress by viewModel.ipAddress.collectAsState()
     val serverPort by viewModel.serverPort.collectAsState()
+    val deviceName by viewModel.deviceName.collectAsState()
     val context = LocalContext.current
+    val connectionState by app.wsClient.connectionState.collectAsState(initial = com.serkantken.secuasist.network.ConnectionState.DISCONNECTED)
+    val coroutineScope = rememberCoroutineScope()
+    var showWipeWarning by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -199,6 +219,31 @@ fun SettingsConnectionTab(viewModel: SettingsViewModel, onBack: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        SettingCard(
+            title = "Cihaz Kimliği / İsmi",
+            description = "Bu cihazın sistemdeki görünen adı. (Örn: A Kapısı Tableti)"
+        ) {
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = { viewModel.updateDeviceName(it) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                enabled = true,
+                singleLine = true,
+                trailingIcon = {
+                    Button(
+                        onClick = { 
+                            viewModel.saveSettings()
+                            android.widget.Toast.makeText(context, "Cihaz ismi kaydedildi", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.padding(end = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Kaydet", fontSize = 12.sp)
+                    }
+                }
+            )
+        }
+
         SettingCard(
             title = "Sunucu Bağlantısı",
             description = "SecuAsist yönetim sunucusuna bağlanmak için gerekli olan yerel IP adresi ve port bilgilerini girin. Değişiklikler uygulandıktan sonra sistem otomatik olarak yeniden bağlanacaktır."
@@ -224,12 +269,45 @@ fun SettingsConnectionTab(viewModel: SettingsViewModel, onBack: () -> Unit) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                if (showWipeWarning) {
+                    AlertDialog(
+                        onDismissRequest = { showWipeWarning = false },
+                        title = { Text("Veri Sıfırlama Uyarısı") },
+                        text = { Text("Bu işlem cihazınızdaki tüm yerel kayıtları ve verileri tamamen temizleyecek ve yalnızca sunucudaki güncel verilerle eşitlenmenizi sağlayacaktır. İşlemi onaylıyor musunuz?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showWipeWarning = false
+                                    viewModel.saveSettings()
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        app.db.clearAllTables()
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            android.widget.Toast.makeText(context, "Veriler temizlendi ve sunucuya bağlanılıyor...", android.widget.Toast.LENGTH_LONG).show()
+                                            onBack()
+                                        }
+                                    }
+                                }
+                            ) { Text("Evet, Sil ve Bağlan", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showWipeWarning = false }) { Text("Vazgeç") }
+                        }
+                    )
+                }
+
                 Button(
                     onClick = {
                         if (ipAddress.isNotBlank() && serverPort.toIntOrNull() != null) {
-                            viewModel.saveSettings()
-                            android.widget.Toast.makeText(context, "Ayarlar kaydedildi ve yeniden bağlanılıyor...", android.widget.Toast.LENGTH_SHORT).show()
-                            onBack()
+                            val currentIp = context.getSharedPreferences("secuasist_prefs", Context.MODE_PRIVATE).getString("server_ip", "")
+                            if (currentIp == ipAddress) {
+                                // Sadece aynı IP'ye bağlanılıyorsa uyarı vermeden bağlan
+                                viewModel.saveSettings()
+                                android.widget.Toast.makeText(context, "Mevcut ayarlarla bağlanılıyor...", android.widget.Toast.LENGTH_SHORT).show()
+                                onBack()
+                            } else {
+                                // Yeni bir IP adresi girildiyse tüm verilerin silineceği uyarısını çıkar
+                                showWipeWarning = true
+                            }
                         } else {
                             android.widget.Toast.makeText(context, "Lütfen geçerli değerler giriniz.", android.widget.Toast.LENGTH_SHORT).show()
                         }

@@ -94,4 +94,53 @@ object ContactUtils {
         }
         return@withContext null
     }
+
+    fun saveContactToDevice(context: Context, name: String, phone: String, saveToGoogle: Boolean) {
+        var accountName: String? = null
+        var accountType: String? = null
+
+        if (saveToGoogle) {
+            try {
+                val uri = ContactsContract.RawContacts.CONTENT_URI
+                val projection = arrayOf(ContactsContract.RawContacts.ACCOUNT_NAME, ContactsContract.RawContacts.ACCOUNT_TYPE)
+                val selection = "${ContactsContract.RawContacts.ACCOUNT_TYPE} = ?"
+                val selectionArgs = arrayOf("com.google")
+                
+                context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        accountName = cursor.getString(0)
+                        accountType = cursor.getString(1)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        val ops = ArrayList<android.content.ContentProviderOperation>()
+
+        ops.add(android.content.ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, accountType)
+            .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, accountName)
+            .build())
+
+        ops.add(android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+            .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+            .withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+            .build())
+
+        ops.add(android.content.ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+            .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+            .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
+            .withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+            .build())
+
+        try {
+            context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

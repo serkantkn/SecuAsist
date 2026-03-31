@@ -27,6 +27,8 @@ import androidx.compose.foundation.clickable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.ui.viewmodels.ContactsViewModel
+import com.serkantken.secuasist.SecuAsistApplication
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.animateContentSize
 import kotlinx.coroutines.launch
 
@@ -37,6 +39,10 @@ import kotlin.random.Random
 fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     val contacts by viewModel.filteredContacts.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    
+    val context = LocalContext.current
+    val app = context.applicationContext as SecuAsistApplication
+    val isAdmin = true
     var contactToEdit by remember { mutableStateOf<Contact?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showDialerSheet by remember { mutableStateOf(false) }
@@ -74,7 +80,7 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
             Column {
                 com.serkantken.secuasist.ui.components.ScreenHeader(
                     title = "Rehber",
-                    onNewClick = { showAddDialog = true }
+                    onNewClick = if (isAdmin) { { showAddDialog = true } } else null
                 )
                 
                 SearchBar(
@@ -109,8 +115,10 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                                 }
                             }
 
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Daha Fazla")
+                            if (isAdmin) {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Daha Fazla")
+                                }
                             }
                             DropdownMenu(
                                 expanded = showMenu,
@@ -185,7 +193,7 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                         ContactItem(
                             contact = contact, 
                             onClick = { /* Expand logic is internal now */ },
-                            onEdit = { contactToEdit = contact },
+                            onEdit = { if (isAdmin) contactToEdit = contact },
                             onCall = {
                                 val hasCallPermission = androidx.core.content.ContextCompat.checkSelfPermission(
                                     context,
@@ -213,7 +221,8 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                             ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
                             onRequestCallLogPermission = {
                                 callLogPermissionLauncher.launch(android.Manifest.permission.READ_CALL_LOG)
-                            }
+                            },
+                            isAdmin = isAdmin
                         )
                     }
                 }
@@ -222,10 +231,11 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     }
 
     if (showAddDialog) {
+        val context = androidx.compose.ui.platform.LocalContext.current
         AddContactDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, phone ->
-                viewModel.addContact(name, phone)
+            onConfirm = { name, phone, saveToDevice, saveToGoogle ->
+                viewModel.addContact(name, phone, context, saveToDevice, saveToGoogle)
                 showAddDialog = false
             }
         )
@@ -440,6 +450,7 @@ fun ContactItem(
     onEdit: () -> Unit,
     hasCallLogPermission: Boolean,
     onRequestCallLogPermission: () -> Unit,
+    isAdmin: Boolean = false,
     viewModel: ContactsViewModel = viewModel()
 ) {
     // ... Avatar Color Logic (Same) ...
@@ -478,7 +489,7 @@ fun ContactItem(
                     false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    onEdit()
+                    if (isAdmin) onEdit()
                     false
                 }
                 else -> false
@@ -501,7 +512,7 @@ fun ContactItem(
             }
             val icon = when (dismissState.dismissDirection) {
                 SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Call
-                SwipeToDismissBoxValue.EndToStart -> Icons.Default.MoreVert
+                SwipeToDismissBoxValue.EndToStart -> if (isAdmin) Icons.Default.MoreVert else Icons.Default.Person
                 else -> Icons.Default.Person
             }
 
@@ -643,28 +654,30 @@ fun ContactItem(
                                 )
                             }
                             
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Link Villa Button
-                            var showLinkDialog by remember { mutableStateOf(false) }
-                            OutlinedButton(
-                                onClick = { showLinkDialog = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Villaya Bağla")
-                            }
-                            
-                            if (showLinkDialog) {
-                                LinkVillaDialog(
-                                    viewModel = viewModel,
-                                    onDismiss = { showLinkDialog = false },
-                                    onConfirm = { villa, isOwner, type ->
-                                        viewModel.linkContactToVilla(contact.contactId, villa.villaId, isOwner, type)
-                                        showLinkDialog = false
-                                    }
-                                )
+                            if (isAdmin) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Link Villa Button
+                                var showLinkDialog by remember { mutableStateOf(false) }
+                                OutlinedButton(
+                                    onClick = { showLinkDialog = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Villaya Bağla")
+                                }
+                                
+                                if (showLinkDialog) {
+                                    LinkVillaDialog(
+                                        viewModel = viewModel,
+                                        onDismiss = { showLinkDialog = false },
+                                        onConfirm = { villa, isOwner, type ->
+                                            viewModel.linkContactToVilla(contact.contactId, villa.villaId, isOwner, type)
+                                            showLinkDialog = false
+                                        }
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -701,9 +714,35 @@ fun ContactItem(
 }
 
 @Composable
-fun AddContactDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
+fun AddContactDialog(onDismiss: () -> Unit, onConfirm: (String, String, Boolean, Boolean) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    
+    var saveToDevice by remember { mutableStateOf(false) }
+    var saveToGoogle by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            saveToDevice = false
+            saveToGoogle = false
+        }
+    }
+    
+    fun checkPermissionAndToggle(isGoogle: Boolean, currentValue: Boolean) {
+        if (!currentValue) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(android.Manifest.permission.WRITE_CONTACTS)
+                if (isGoogle) saveToGoogle = true else saveToDevice = true
+            } else {
+                if (isGoogle) saveToGoogle = true else saveToDevice = true
+            }
+        } else {
+            if (isGoogle) saveToGoogle = false else saveToDevice = false
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -724,13 +763,37 @@ fun AddContactDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit)
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) }
                 )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { checkPermissionAndToggle(false, saveToDevice) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = saveToDevice,
+                        onCheckedChange = { checkPermissionAndToggle(false, saveToDevice) }
+                    )
+                    Text("Cihaz hafızasına kaydet", style = MaterialTheme.typography.bodyMedium)
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { checkPermissionAndToggle(true, saveToGoogle) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = saveToGoogle,
+                        onCheckedChange = { checkPermissionAndToggle(true, saveToGoogle) }
+                    )
+                    Text("Google hesabına kaydet", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     if (name.isNotEmpty() && phone.isNotEmpty()) {
-                        onConfirm(name, phone)
+                        onConfirm(name, phone, saveToDevice, saveToGoogle)
                     }
                 }
             ) {

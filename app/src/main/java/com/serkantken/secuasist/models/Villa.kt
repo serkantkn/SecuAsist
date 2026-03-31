@@ -19,6 +19,7 @@ data class Villa(
     var isVillaCallFromHome: Int = 0,
     var isVillaCallForCargo: Int = 1,
     var isVillaEmpty: Int = 0,
+    var isCallOnlyMobile: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
     var deviceId: String? = "Bilinmiyor"
 ) : SearchableItem, Serializable {

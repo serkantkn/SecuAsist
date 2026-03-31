@@ -43,14 +43,19 @@ class SecuAsistApplication : Application() {
         db = AppDatabase.getDatabase(this)
 
         val savedIp = prefs.getString("server_ip", "10.0.2.2") ?: "10.0.2.2"
-        wsClient = WebSocketClient(savedIp, 8765)
+        val savedPort = try {
+            prefs.getString("server_port", "8765")?.toIntOrNull() ?: 8765
+        } catch (e: Exception) {
+            prefs.getInt("server_port", 8765)
+        }
+        wsClient = WebSocketClient(this, savedIp, savedPort)
 
-        // initWebSocketListener() 
-        wsClient.connect()
-        
-        // Start SyncManager
+        // 1. Initialize SyncManager first
         syncManager = com.serkantken.secuasist.sync.SyncManager(this)
         syncManager.start()
+
+        // 2. Then Connect
+        wsClient.connect()
         
         Log.i("SecuAsistApp", "✅ Uygulama (v2) başlatıldı ve Sync Manager aktif.")
     }
