@@ -21,7 +21,7 @@ data class VillaContact(
     // val id: Int = 0, // Eğer composite primary key kullanıyorsak bu alana gerek kalmaz
     val villaId: Int,
     val contactId: String,
-    val isRealOwner: Boolean = false,
+    val isRealOwner: Int = 0,
     val contactType: String?,
     val notes: String?,
     var orderIndex: Int = 0,

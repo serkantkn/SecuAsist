@@ -43,7 +43,7 @@ data class ContactDto(
 data class VillaContactDto(
     val villaId: Int,
     val contactId: String,
-    val isRealOwner: Boolean = false,
+    val isRealOwner: Int = 0,
     val contactType: String?,
     val notes: String? = null
 )
@@ -54,7 +54,7 @@ data class CameraDto(
     val cameraId: String? = null,
     val cameraName: String,
     val cameraIp: String,
-    val isWorking: Boolean = true,
+    val isWorking: Int = 1,
     val lastChecked: Long? = null,
     val notes: String? = null
 )
@@ -63,7 +63,7 @@ data class IntercomDto(
     val intercomId: String? = null,
     val villaId: Int,
     val intercomName: String,
-    val isWorking: Boolean = true,
+    val isWorking: Int = 1,
     val lastChecked: Long? = null,
     val notes: String? = null
 )

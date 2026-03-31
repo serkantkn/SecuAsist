@@ -57,7 +57,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         _searchQuery.value = query
     }
 
-    fun addContact(name: String, phone: String) {
+    fun addContact(name: String, phone: String, context: android.content.Context? = null, saveToDevice: Boolean = false, saveToGoogle: Boolean = false) {
         viewModelScope.launch {
             val newContact = Contact(
                 contactName = name,
@@ -66,6 +66,10 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
             contactDao.insert(newContact)
             // contactId is already generated in newContact
             app.syncManager.sendData("ADD_CONTACT", newContact)
+            
+            if (context != null && (saveToDevice || saveToGoogle)) {
+                com.serkantken.secuasist.utils.ContactUtils.saveContactToDevice(context, name, phone, saveToGoogle)
+            }
         }
     }
     
@@ -136,7 +140,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                                 val link = com.serkantken.secuasist.models.VillaContact(
                                     villaId = villa.villaId,
                                     contactId = contactId,
-                                    isRealOwner = false,
+                                    isRealOwner = 0,
                                     contactType = "Tenant",
                                     notes = "Otomatik İçe Aktarıldı"
                                 )
@@ -192,7 +196,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                 val link = com.serkantken.secuasist.models.VillaContact(
                     villaId = villaId,
                     contactId = contactId,
-                    isRealOwner = isOwner,
+                    isRealOwner = if (isOwner) 1 else 0,
                     contactType = type,
                     notes = null
                 )

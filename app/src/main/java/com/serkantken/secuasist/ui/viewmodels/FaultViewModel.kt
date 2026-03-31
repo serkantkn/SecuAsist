@@ -50,7 +50,7 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
     fun updateCameraStatus(camera: Camera, isWorking: Boolean) {
         viewModelScope.launch {
             val updated = camera.copy(
-                isWorking = isWorking,
+                isWorking = if (isWorking) 1 else 0,
                 lastChecked = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()
             )
@@ -84,7 +84,7 @@ class FaultViewModel(application: Application) : AndroidViewModel(application) {
     fun updateIntercomStatus(intercom: Intercom, isWorking: Boolean) {
         viewModelScope.launch {
             val updated = intercom.copy(
-                isWorking = isWorking,
+                isWorking = if (isWorking) 1 else 0,
                 lastChecked = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()
             )

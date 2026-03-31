@@ -15,6 +15,7 @@ import com.serkantken.secuasist.ui.SecuAsistApp
 import com.serkantken.secuasist.ui.theme.SecuAsistTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.*
 
 object NavigationEventBus {
     private val _homeEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -26,6 +27,15 @@ object NavigationEventBus {
 }
 
 class MainActivity : ComponentActivity() {
+    private var lastInteractionTime = System.currentTimeMillis()
+    private val inactivityTimeout = 2 * 60 * 1000L // 2 minutes
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        lastInteractionTime = System.currentTimeMillis()
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (intent.action == android.content.Intent.ACTION_MAIN && 
@@ -40,6 +50,8 @@ class MainActivity : ComponentActivity() {
         // Auto-update check
         val updateManager = com.serkantken.secuasist.utils.UpdateManager(this)
         updateManager.checkForUpdates()
+
+        startInactivityTimer()
 
         enableEdgeToEdge()
         setContent {
@@ -63,5 +75,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun startInactivityTimer() {
+        scope.launch {
+            while (isActive) {
+                delay(1000)
+                if (System.currentTimeMillis() - lastInteractionTime > inactivityTimeout) {
+                    // Reset to prevent repeated triggers until interaction
+                    lastInteractionTime = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
     }
 }

@@ -42,8 +42,11 @@ interface ContactDao {
     @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
     suspend fun getAllContactsAsList(): List<Contact>
 
-    @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
+    @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
     fun getAllContactsAsFlow(): Flow<List<Contact>>
+    
+    @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
+    fun getAllContactsByRecentAsFlow(): Flow<List<Contact>>
 
     @Query("SELECT * FROM Contacts WHERE contactId = :contactId")
     suspend fun getContactById(contactId: String): Contact?

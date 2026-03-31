@@ -1,5 +1,6 @@
 package com.serkantken.secuasist.network
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.*
 import okio.ByteString
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
 
 enum class ConnectionState {
     CONNECTING,
@@ -17,6 +19,7 @@ enum class ConnectionState {
 }
 
 class WebSocketClient(
+    private val context: Context,
     private val serverIp: String,
     // Emulator: 10.0.2.2, Physical: Actual IP
     private val port: Int = 8765,
@@ -31,7 +34,7 @@ class WebSocketClient(
     }
 
     private var webSocket: WebSocket? = null
-    private var isConnected = false
+    @Volatile private var isConnected = false
     private var reconnectJob: Job? = null
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -62,10 +65,29 @@ class WebSocketClient(
                         isConnected = true
                         Log.i("WebSocketClient", "✅ Bağlantı kuruldu → $serverIp:$port")
 
-                        // Send AUTH
-                        // Ideally use unique Android ID or GUID. For now, random or specific.
-                        val deviceId = java.util.UUID.randomUUID().toString()
-                        sendMessage("AUTH $deviceId")
+                        // Persistent Device ID
+                        val prefs = context.getSharedPreferences("secuasist_prefs", Context.MODE_PRIVATE)
+                        var deviceId = prefs.getString("permanent_device_id", null)
+                        if (deviceId == null) {
+                            deviceId = java.util.UUID.randomUUID().toString()
+                            prefs.edit().putString("permanent_device_id", deviceId).apply()
+                        }
+                        
+                        val deviceName = prefs.getString("device_name", "Bilinmeyen Cihaz") ?: "Bilinmeyen Cihaz"
+                        
+                        try {
+                            val authPayload = JSONObject().apply {
+                                put("deviceId", deviceId)
+                                put("deviceName", deviceName)
+                            }
+                            val authMsg = JSONObject().apply {
+                                put("type", "AUTH")
+                                put("payload", authPayload)
+                            }.toString()
+                            sendMessage(authMsg)
+                        } catch (e: Exception) {
+                            Log.e("WebSocketClient", "Auth Error: ${e.message}")
+                        }
 
                         coroutineScope.launch { _connectionState.emit(ConnectionState.CONNECTED) }
                     }
@@ -145,15 +167,14 @@ class WebSocketClient(
 
 
     fun sendData(type: String, payload: Any) {
-        if (!isConnected) return
+        if (!isConnected) {
+            Log.w("WebSocketClient", "⚠️ Cannot send $type: Not connected")
+            return
+        }
         try {
             val jsonMap = mapOf("type" to type, "payload" to payload)
-            // Need Gson here or manual JSON creation.
-            // Since we don't have global Gson ref here easily, let's use a simple approach or pass it in.
-            // For now, assume payload is a JSON string or we construct it.
-            // actually, let's use the Gson instance from Application if possible, or just add Gson dependency here.
-            // To keep it simple without DI:
             val json = com.google.gson.Gson().toJson(jsonMap)
+            Log.i("WebSocketClient", "📤 Sending $type...")
             sendMessage(json)
         } catch (e: Exception) {
             Log.e("WebSocketClient", "JSON Send Error: ${e.message}")

@@ -11,7 +11,7 @@ data class Camera(
     // villaId removed - Many-to-Many relation now
     val cameraName: String,
     val cameraIp: String,
-    val isWorking: Boolean = true,
+    val isWorking: Int = 1,
     val lastChecked: Long = System.currentTimeMillis(),
     val notes: String? = null,
     val updatedAt: Long = System.currentTimeMillis(),

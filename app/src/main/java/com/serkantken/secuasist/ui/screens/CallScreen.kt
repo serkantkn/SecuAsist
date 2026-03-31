@@ -124,108 +124,102 @@ fun CallScreen(
         ) {
             Spacer(modifier = Modifier.height(60.dp))
             
-            // Number / Name
-            Text(
-                text = displayName,
-                color = Color.White,
-                fontSize = if (uiState.contact != null) 36.sp else 32.sp,
-                fontWeight = if (uiState.contact != null) FontWeight.Medium else FontWeight.Light,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            
-            if (uiState.contact != null) {
+            // --- UNIFIED CALL INFO (Matches Floating Widget Design) ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (uiState.villa != null) {
+                    // VİLLA NO
+                    Text(
+                        text = "VİLLA: ${uiState.villa!!.villaNo}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+
+                // İSİM / NUMARA
                 Text(
-                    text = uiState.phoneNumber,
-                    color = Color.LightGray,
-                    fontSize = 18.sp
+                    text = displayName.uppercase(),
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                if (uiState.villa != null) {
+                    // SOKAK
+                    Text(
+                        text = uiState.villa!!.villaStreet ?: "Bilinmeyen Sokak",
+                        color = Color.White.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+
+                // Eyalet / Zamanlayıcı
+                Text(
+                    text = stateText,
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
             if (uiState.missedCargoCompanies.isNotEmpty()) {
                 val companiesStr = uiState.missedCargoCompanies.joinToString(", ")
-                Text(
-                    text = "$companiesStr Kargo için arandı, ulaşılamadı",
-                    color = Color.Red,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+                Surface(
+                    color = Color.White.copy(alpha = 0.2f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                     modifier = Modifier.padding(top = 8.dp)
-                )
+                ) {
+                    Text(
+                        text = "⚠ $companiesStr KARGO UYARISI",
+                        color = Color.Red,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             
-            // State / Timer
-            Text(
-                text = stateText,
-                color = Color.LightGray,
-                fontSize = 18.sp
-            )
-            
-            // --- Center Content (Villa Card or Loading) ---
+            // --- Navigation / Bottom Details ---
             if (uiState.villa != null && !showKeypad) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
                         .padding(horizontal = 16.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Title Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Villa No: ${uiState.villa!!.villaNo}", 
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Street
                         Text(
-                            text = uiState.villa!!.villaStreet ?: "Bilinmeyen Sokak", 
-                            style = MaterialTheme.typography.headlineSmall, 
-                            fontWeight = FontWeight.ExtraBold, 
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            text = "VARDIYA / YOL TARİFİ", 
+                            style = MaterialTheme.typography.labelSmall, 
+                            color = Color.White.copy(alpha = 0.6f),
+                            letterSpacing = 2.sp
                         )
-                        
-                        if (uiState.contact != null && uiState.contactType != null) {
-                            Text(
-                                text = "Kişi Tipi: ${uiState.contactType}", 
-                                style = MaterialTheme.typography.bodyMedium, 
-                                color = Color.Gray,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.padding(top = 4.dp).fillMaxWidth()
-                            )
-                        }
-                        
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                        
-                        // Navigation
-                        Text(text = "Yol Tarifi", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
                         Text(
-                            text = uiState.villa!!.villaNavigationA.takeIf { !it.isNullOrBlank() } ?: "Yol tarifi yok", 
+                            text = uiState.villa!!.villaNavigationA.takeIf { !it.isNullOrBlank() } ?: "Yol tarifi belirtilmemiş.", 
                             style = MaterialTheme.typography.bodyLarge, 
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = Color.White,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             } else if (uiState.isSearching) {

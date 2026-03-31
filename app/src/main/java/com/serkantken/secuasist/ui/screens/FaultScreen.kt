@@ -75,6 +75,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.CameraWithVillas
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.ui.viewmodels.FaultViewModel
+import com.serkantken.secuasist.SecuAsistApplication
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +84,9 @@ import kotlinx.coroutines.launch
 fun FaultScreen(
     viewModel: FaultViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as SecuAsistApplication
+    val isAdmin = true
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Kameralar", "İnterkomlar")
 
@@ -104,8 +109,8 @@ fun FaultScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             when (selectedTabIndex) {
-                0 -> CamerasTab(viewModel)
-                1 -> IntercomsTab(viewModel)
+                0 -> CamerasTab(viewModel, isAdmin)
+                1 -> IntercomsTab(viewModel, isAdmin)
             }
         }
     }
@@ -114,7 +119,7 @@ fun FaultScreen(
 // --- CAMERAS TAB ---
 
 @Composable
-fun CamerasTab(viewModel: FaultViewModel) {
+fun CamerasTab(viewModel: FaultViewModel, isAdmin: Boolean) {
     val cameras by viewModel.allCameras.collectAsState(initial = emptyList())
     val villas by viewModel.allVillas.collectAsState(initial = emptyList())
     var showAddDialog by remember { mutableStateOf(false) }
@@ -125,7 +130,7 @@ fun CamerasTab(viewModel: FaultViewModel) {
 
     // Filter Logic
     val filteredCameras = cameras.filter { cameraWithVillas ->
-        val matchesFault = !showOnlyFaulty || !cameraWithVillas.camera.isWorking
+        val matchesFault = !showOnlyFaulty || (cameraWithVillas.camera.isWorking == 0)
         val matchesSearch = cameraWithVillas.camera.cameraIp.contains(searchQuery, ignoreCase = true)
         matchesFault && matchesSearch
     }
@@ -184,6 +189,7 @@ fun CamerasTab(viewModel: FaultViewModel) {
                         items(filteredCameras) { cameraWithVillas ->
                             CameraCard(
                                 cameraWithVillas = cameraWithVillas,
+                                isAdmin = isAdmin,
                                 onDelete = { viewModel.deleteCamera(cameraWithVillas.camera) },
                                 onStatusChange = { viewModel.updateCameraStatus(cameraWithVillas.camera, it) }
                             )
@@ -204,11 +210,13 @@ fun CamerasTab(viewModel: FaultViewModel) {
             modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 88.dp, end = 16.dp)
         )
 
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Kamera Ekle")
+        if (isAdmin) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Kamera Ekle")
+            }
         }
     }
 
@@ -227,6 +235,7 @@ fun CamerasTab(viewModel: FaultViewModel) {
 @Composable
 fun CameraCard(
     cameraWithVillas: CameraWithVillas,
+    isAdmin: Boolean,
     onDelete: () -> Unit,
     onStatusChange: (Boolean) -> Unit
 ) {
@@ -236,7 +245,7 @@ fun CameraCard(
     
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (camera.isWorking) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
+            containerColor = if (camera.isWorking == 1) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
         ),
         modifier = Modifier.fillMaxWidth().animateContentSize()
     ) {
@@ -263,7 +272,7 @@ fun CameraCard(
                 }
                 
                 // Switch always visible and separate from expand click
-                Switch(checked = camera.isWorking, onCheckedChange = onStatusChange)
+                Switch(checked = camera.isWorking == 1, onCheckedChange = onStatusChange)
             }
             
             // Expanded Content
@@ -286,15 +295,17 @@ fun CameraCard(
                     )
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Button(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Kamerayı Sil")
+                if (expanded && isAdmin) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Button(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Kamerayı Sil")
+                        }
                     }
                 }
             }
@@ -364,7 +375,7 @@ fun AddCameraDialog(
 // --- INTERCOMS TAB ---
 
 @Composable
-fun IntercomsTab(viewModel: FaultViewModel) {
+fun IntercomsTab(viewModel: FaultViewModel, isAdmin: Boolean) {
     val villas by viewModel.allVillas.collectAsState(initial = emptyList())
     var selectedVilla by remember { mutableStateOf<Villa?>(null) }
     
@@ -409,11 +420,12 @@ fun IntercomsTab(viewModel: FaultViewModel) {
     }
     
     if (selectedVilla != null) {
-        IntercomDetailSheet(
-            villa = selectedVilla!!,
-            viewModel = viewModel,
-            onDismiss = { selectedVilla = null }
-        )
+            IntercomDetailSheet(
+                villa = selectedVilla!!,
+                viewModel = viewModel,
+                isAdmin = isAdmin,
+                onDismiss = { selectedVilla = null }
+            )
     }
 }
 
@@ -424,7 +436,7 @@ fun IntercomVillaCard(
     onClick: () -> Unit
 ) {
     val intercoms by viewModel.getIntercomsForVilla(villa.villaId).collectAsState(initial = emptyList())
-    val faultyIntercoms = intercoms.count { !it.isWorking }
+    val faultyIntercoms = intercoms.count { it.isWorking == 0 }
     val totalIntercoms = intercoms.size
     
     Card(
@@ -468,6 +480,7 @@ fun IntercomVillaCard(
 fun IntercomDetailSheet(
     villa: Villa,
     viewModel: FaultViewModel,
+    isAdmin: Boolean,
     onDismiss: () -> Unit
 ) {
     val intercoms by viewModel.getIntercomsForVilla(villa.villaId).collectAsState(initial = emptyList())
@@ -486,8 +499,10 @@ fun IntercomDetailSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("İnterkomlar - Villa ${villa.villaNo}", style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Ekle")
+                if (isAdmin) {
+                    IconButton(onClick = { showAddDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Ekle")
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -499,7 +514,8 @@ fun IntercomDetailSheet(
                     DeviceRow(
                         name = intercom.intercomName,
                         detail = "",
-                        isWorking = intercom.isWorking,
+                        isWorking = intercom.isWorking == 1,
+                        isAdmin = isAdmin,
                         onDelete = { viewModel.deleteIntercom(intercom) },
                         onStatusChange = { viewModel.updateIntercomStatus(intercom, it) },
                         icon = Icons.Default.Call
@@ -530,6 +546,7 @@ fun DeviceRow(
     name: String,
     detail: String,
     isWorking: Boolean,
+    isAdmin: Boolean,
     onStatusChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
     icon: ImageVector
@@ -567,8 +584,10 @@ fun DeviceRow(
                     checked = isWorking,
                     onCheckedChange = onStatusChange
                 )
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isAdmin) {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

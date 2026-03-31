@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ fun VillaDetailSheet(
     onDismiss: () -> Unit,
     onSave: (Villa) -> Unit,
     onDelete: (Villa) -> Unit,
+    isAdmin: Boolean = false,
     onLinkContact: (com.serkantken.secuasist.models.Contact, Boolean, String) -> Unit,
     onUnlinkContact: (com.serkantken.secuasist.models.Contact) -> Unit
 ) {
@@ -65,6 +67,7 @@ fun VillaDetailSheet(
     var isSpecial by remember { mutableStateOf(villa.isVillaSpecial == 1) }
     var callFromHome by remember { mutableStateOf(villa.isVillaCallFromHome == 1) }
     var dontCallForCargo by remember { mutableStateOf(villa.isVillaCallForCargo == 0) }
+    var callOnlyMobile by remember { mutableStateOf(villa.isCallOnlyMobile == 1) }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
@@ -84,12 +87,12 @@ fun VillaDetailSheet(
                     }
                 },
                 actions = {
-                    if (!isEditing) {
+                    if (!isEditing && isAdmin) {
                         // Read-Only Actions
                         IconButton(onClick = { isEditing = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Düzenle")
                         }
-                    } else {
+                    } else if (isEditing) {
                         // Editing Actions
                         if (villa.villaId != 0) { // Only show delete for existing villas
                             IconButton(onClick = { showDeleteConfirmation = true }) {
@@ -115,6 +118,7 @@ fun VillaDetailSheet(
                                     isVillaSpecial = if (isSpecial) 1 else 0,
                                     isVillaCallFromHome = if (callFromHome) 1 else 0,
                                     isVillaCallForCargo = if (dontCallForCargo) 0 else 1,
+                                    isCallOnlyMobile = if (callOnlyMobile) 1 else 0,
                                     updatedAt = System.currentTimeMillis()
                                 )
                                 onSave(updatedVilla)
@@ -214,24 +218,41 @@ fun VillaDetailSheet(
                 }
 
                 if (showContactSelection) {
+                    var contactSearchQuery by remember { mutableStateOf("") }
+                    val filteredAllContacts = allContacts.filter { 
+                        contactSearchQuery.isEmpty() || 
+                        (it.contactName?.contains(contactSearchQuery, ignoreCase = true) == true) ||
+                        (it.contactPhone?.contains(contactSearchQuery, ignoreCase = true) == true)
+                    }
+
                     AlertDialog(
                         onDismissRequest = { showContactSelection = false },
                         title = { Text("Kişi Seçin") },
                         text = {
-                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                                allContacts.forEach { contact ->
-                                    if (linkedContacts.none { it.contactId == contact.contactId }) {
-                                        TextButton(
-                                            onClick = {
-                                                onLinkContact(contact, false, "Tenant")
-                                                showContactSelection = false
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = "${contact.contactName} (${contact.contactPhone})",
-                                                modifier = Modifier.weight(1f)
-                                            )
+                            Column {
+                                OutlinedTextField(
+                                    value = contactSearchQuery,
+                                    onValueChange = { contactSearchQuery = it },
+                                    label = { Text("Kişi Ara (İsim veya Tel)") },
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                    singleLine = true
+                                )
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    filteredAllContacts.forEach { contact ->
+                                        if (linkedContacts.none { it.contactId == contact.contactId }) {
+                                            TextButton(
+                                                onClick = {
+                                                    onLinkContact(contact, false, "Tenant")
+                                                    showContactSelection = false
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(
+                                                    text = "${contact.contactName} (${contact.contactPhone})",
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -366,6 +387,14 @@ fun VillaDetailSheet(
                         enabled = isEditing,
                         isDestructive = true,
                         onSelectedChange = { dontCallForCargo = it }
+                    )
+                }
+                if (isEditing || callOnlyMobile) {
+                    StatusChip(
+                        label = "Sadece Cepten Ara",
+                        selected = callOnlyMobile,
+                        enabled = isEditing,
+                        onSelectedChange = { callOnlyMobile = it }
                     )
                 }
             }
