@@ -224,13 +224,12 @@ def init_db():
     logger.info("✅ Database initialized successfully.")
 
 # Initialize on Import
-init_db()
+try:
+    init_db()
+except Exception as e:
+    logger.critical(f"FATAL: Database initialization failed: {e}")
+    sys.exit(1)
 
-connected_clients = {} # DeviceId -> WebSocket
-web_log_clients = set() # Set of FastAPI WebSocket objects
-system_logs = [] # In-memory log buffer (last 500)
-START_TIME = time.time() # Server start time
-MAX_LOG_BUFFER = 500
 VERSION = "1.0.1"
 REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
 
@@ -772,6 +771,13 @@ async def startup_event():
     logger.info(f"⚡ SecuAsist Server v{VERSION} Initialized.")
 
 if __name__ == "__main__":
-    import uvicorn
-    logger.info("⚡ Web Dashboard starting on port 8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    try:
+        import uvicorn
+        logger.info(f"🚀 SecuAsist Server v{VERSION} Starting...")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except Exception as e:
+        logger.critical(f"❌ CRITICAL SERVER CRASH: {e}")
+        import traceback
+        traceback.print_exc()
+        input("\n[HATA] Sunucu baslatilamadi. Hatayi okuduktan sonra pencereyi kapatmak icin Enter'a basin...")
+        sys.exit(1)
