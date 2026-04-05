@@ -38,6 +38,7 @@ echo.
 echo 3. Web Arayüzü Tarayıcıda Açılıyor...
 start http://localhost:8000
 
+:loop
 echo.
 echo 4. Sunucu Aktif!
 echo ------------------------------------------
@@ -48,4 +49,8 @@ echo ------------------------------------------
 echo.
 
 python server_web.py
-pause
+echo.
+echo [BILGI] Sunucu kapandı veya güncellendi. 3 saniye içinde yeniden başlatılıyor...
+timeout /t 3 > nul
+goto loop
+

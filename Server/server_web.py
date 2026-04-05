@@ -231,7 +231,7 @@ web_log_clients = set() # Set of FastAPI WebSocket objects
 system_logs = [] # In-memory log buffer (last 500)
 START_TIME = time.time() # Server start time
 MAX_LOG_BUFFER = 500
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
 
 import asyncio
@@ -301,7 +301,8 @@ async def run_manual_update_check() -> dict:
             response = await client.get(REPO_URL, headers={"User-Agent": "SecuAsist-Server"})
             if response.status_code == 200:
                 data = response.json()
-                latest_tag = data.get("tag_name", "").removeprefix("v")
+                raw_tag = data.get("tag_name", "")
+                latest_tag = raw_tag[1:] if raw_tag.startswith("v") else raw_tag
                 if latest_tag and latest_tag > VERSION:
                     zip_url = data.get("zipball_url")
                     if zip_url:
