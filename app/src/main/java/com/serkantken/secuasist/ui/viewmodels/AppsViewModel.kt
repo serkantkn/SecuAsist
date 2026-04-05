@@ -11,8 +11,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import com.serkantken.secuasist.SecuAsistApplication
+import com.serkantken.secuasist.database.AppDatabase
+import kotlinx.coroutines.flow.map
 
 class AppsViewModel(application: Application) : AndroidViewModel(application) {
+    private val app = application as SecuAsistApplication
+    private val syncLogDao = app.db.syncLogDao()
+
+    // Offline Sync Count
+    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        0
+    )
+
     private val packageManager = application.packageManager
 
     private val _appsList = MutableStateFlow<List<AppInfo>>(emptyList())

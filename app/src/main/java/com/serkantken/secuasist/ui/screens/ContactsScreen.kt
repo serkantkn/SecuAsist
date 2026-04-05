@@ -75,78 +75,95 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabTitles = listOf("Rehber", "Çağrı Kaydı")
+
     Scaffold(
         topBar = {
+            val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
             Column {
                 com.serkantken.secuasist.ui.components.ScreenHeader(
-                    title = "Rehber",
-                    onNewClick = if (isAdmin) { { showAddDialog = true } } else null
+                    title = "Kişiler",
+                    onNewClick = if (isAdmin) { { showAddDialog = true } } else null,
+                    offlineSyncCount = pendingSyncCount
                 )
                 
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSearch = {},
-                    active = false,
-                    onActiveChange = {},
-                    placeholder = { Text("Kişi Ara (İsim veya Numara)") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        Row {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { 
-                                    viewModel.updateSearchQuery("") 
-                                    focusRequester.requestFocus()
-                                    keyboardController?.show()
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Temizle")
-                                }
-                            }
-
-                             // Import Menu
-                            var showMenu by remember { mutableStateOf(false) }
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            
-                            val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                            ) { isGranted ->
-                                if (isGranted) {
-                                    viewModel.importContactsFromDevice(context)
-                                }
-                            }
-
-                            if (isAdmin) {
-                                IconButton(onClick = { showMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Daha Fazla")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Rehberden Al") },
-                                    onClick = {
-                                        showMenu = false
-                                        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                                context,
-                                                android.Manifest.permission.READ_CONTACTS
-                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                        ) {
-                                            viewModel.importContactsFromDevice(context)
-                                        } else {
-                                            permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
-                                        }
+                TabRow(selectedTabIndex = selectedTab) {
+                    tabTitles.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text(title, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+                
+                androidx.compose.animation.AnimatedVisibility(visible = selectedTab == 0) {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { viewModel.updateSearchQuery(it) },
+                        onSearch = {},
+                        active = false,
+                        onActiveChange = {},
+                        placeholder = { Text("Kişi Ara (İsim veya Numara)") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            Row {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { 
+                                        viewModel.updateSearchQuery("") 
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                    }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Temizle")
                                     }
-                                )
+                                }
+
+                                 // Import Menu
+                                var showMenu by remember { mutableStateOf(false) }
+                                val contextInstance = androidx.compose.ui.platform.LocalContext.current
+                                
+                                val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                                ) { isGranted ->
+                                    if (isGranted) {
+                                        viewModel.importContactsFromDevice(contextInstance)
+                                    }
+                                }
+
+                                if (isAdmin) {
+                                    IconButton(onClick = { showMenu = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "Daha Fazla")
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rehberden Al") },
+                                        onClick = {
+                                            showMenu = false
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                                    contextInstance,
+                                                    android.Manifest.permission.READ_CONTACTS
+                                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            ) {
+                                                viewModel.importContactsFromDevice(contextInstance)
+                                            } else {
+                                                permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                            }
+                                        }
+                                    )
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                        .focusRequester(focusRequester)
-                ) {}
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                            .focusRequester(focusRequester)
+                    ) {}
+                }
             }
         },
         floatingActionButton = {
@@ -177,7 +194,8 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
             .fillMaxSize()
             .padding(paddingValues)) {
             
-            if (contacts.isEmpty()) {
+            if (selectedTab == 0) {
+                if (contacts.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Kayıtlı kişi bulunamadı.", style = MaterialTheme.typography.bodyLarge)
                 }
@@ -226,6 +244,9 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
                         )
                     }
                 }
+            }
+            } else {
+                CallLogTab()
             }
         }
     }

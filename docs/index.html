@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecuAsist — Akıllı Site Güvenlik Yönetimi</title>
+    <meta name="description" content="SecuAsist, site güvenlik personeli için geliştirilmiş akıllı güvenlik yönetim platformu. Villa yönetimi, çağrı asistanı, kargo takibi ve daha fazlası.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #030712;
+            --bg-secondary: #0f172a;
+            --bg-card: rgba(15, 23, 42, 0.6);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #475569;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-violet: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --border: rgba(148, 163, 184, 0.08);
+            --glow-blue: rgba(59, 130, 246, 0.15);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* --- AMBIENT BACKGROUND --- */
+        .ambient {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 0; overflow: hidden;
+        }
+        .ambient .orb {
+            position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.12;
+            animation: float 20s ease-in-out infinite;
+        }
+        .ambient .orb:nth-child(1) { width: 600px; height: 600px; background: var(--accent-blue); top: -200px; left: -100px; animation-delay: 0s; }
+        .ambient .orb:nth-child(2) { width: 500px; height: 500px; background: var(--accent-violet); top: 40%; right: -150px; animation-delay: -7s; }
+        .ambient .orb:nth-child(3) { width: 400px; height: 400px; background: var(--accent-cyan); bottom: -100px; left: 30%; animation-delay: -14s; }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -40px) scale(1.05); }
+            66% { transform: translate(-20px, 20px) scale(0.95); }
+        }
+
+        /* --- LAYOUT --- */
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+        /* --- NAV --- */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(3, 7, 18, 0.7); backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border);
+        }
+        nav .container {
+            display: flex; justify-content: space-between; align-items: center;
+            height: 64px;
+        }
+        .nav-logo {
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 800; font-size: 1.2em; color: var(--text-primary);
+            text-decoration: none;
+        }
+        .nav-logo .shield {
+            width: 32px; height: 32px; border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+        }
+        .nav-links { display: flex; gap: 32px; list-style: none; }
+        .nav-links a {
+            color: var(--text-secondary); text-decoration: none; font-size: 0.9em;
+            font-weight: 500; transition: color 0.3s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* --- HERO --- */
+        .hero {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 120px 24px 80px;
+        }
+        .hero-content { max-width: 800px; }
+        .hero-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 6px 16px; border-radius: 100px; font-size: 0.8em;
+            color: var(--accent-blue); font-weight: 600; margin-bottom: 32px;
+            letter-spacing: 0.5px;
+        }
+        .hero-badge .dot {
+            width: 6px; height: 6px; border-radius: 50%; background: var(--accent-emerald);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.5); }
+        }
+        .hero h1 {
+            font-size: clamp(2.5em, 6vw, 4.5em); font-weight: 900;
+            line-height: 1.1; margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-blue) 50%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero p {
+            font-size: clamp(1em, 2vw, 1.25em); color: var(--text-secondary);
+            max-width: 600px; margin: 0 auto 40px; line-height: 1.8;
+        }
+        .hero-buttons { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 28px; border-radius: 12px; font-weight: 600;
+            font-size: 0.95em; text-decoration: none; transition: all 0.3s;
+            cursor: pointer; border: none; font-family: inherit;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white; box-shadow: 0 4px 24px rgba(59, 130, 246, 0.3);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4); }
+        .btn-secondary {
+            background: var(--bg-card); color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: rgba(30, 41, 59, 0.8); transform: translateY(-2px); }
+
+        /* --- PLATFORMS --- */
+        .platforms {
+            display: flex; justify-content: center; gap: 48px;
+            margin-top: 64px; flex-wrap: wrap;
+        }
+        .platform-item {
+            display: flex; align-items: center; gap: 10px;
+            color: var(--text-muted); font-size: 0.85em; font-weight: 500;
+        }
+        .platform-item .icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+
+        /* --- SECTIONS --- */
+        section { padding: 100px 0; }
+        .section-header { text-align: center; margin-bottom: 64px; }
+        .section-tag {
+            display: inline-block; font-size: 0.75em; font-weight: 700;
+            color: var(--accent-blue); letter-spacing: 2px; text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .section-header h2 {
+            font-size: clamp(1.8em, 4vw, 2.8em); font-weight: 800;
+            margin-bottom: 16px; line-height: 1.2;
+        }
+        .section-header p { color: var(--text-secondary); max-width: 600px; margin: 0 auto; font-size: 1.05em; }
+
+        /* --- FEATURES GRID --- */
+        .features-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+        }
+        .feature-card {
+            background: var(--bg-card); backdrop-filter: blur(10px);
+            border: 1px solid var(--border); border-radius: 20px;
+            padding: 32px; transition: all 0.4s;
+            position: relative; overflow: hidden;
+        }
+        .feature-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0;
+            height: 2px; background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+            opacity: 0; transition: opacity 0.4s;
+        }
+        .feature-card:hover { transform: translateY(-4px); border-color: rgba(59, 130, 246, 0.2); }
+        .feature-card:hover::before { opacity: 1; }
+        .feature-icon {
+            width: 56px; height: 56px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; margin-bottom: 20px;
+        }
+        .feature-icon.blue { background: rgba(59, 130, 246, 0.1); }
+        .feature-icon.cyan { background: rgba(6, 182, 212, 0.1); }
+        .feature-icon.emerald { background: rgba(16, 185, 129, 0.1); }
+        .feature-icon.violet { background: rgba(139, 92, 246, 0.1); }
+        .feature-icon.amber { background: rgba(245, 158, 11, 0.1); }
+        .feature-icon.rose { background: rgba(244, 63, 94, 0.1); }
+        .feature-card h3 { font-size: 1.15em; font-weight: 700; margin-bottom: 10px; }
+        .feature-card p { color: var(--text-secondary); font-size: 0.9em; line-height: 1.7; }
+
+        /* --- CALL ASSISTANT SHOWCASE --- */
+        .showcase { background: var(--bg-secondary); border-radius: 32px; padding: 80px 48px; margin: 0 24px; }
+        .showcase-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+        .showcase-content .section-tag { text-align: left; }
+        .showcase-content h2 { font-size: 2.2em; font-weight: 800; margin-bottom: 20px; text-align: left; }
+        .showcase-content p { color: var(--text-secondary); margin-bottom: 32px; font-size: 1.05em; }
+        .showcase-features { list-style: none; }
+        .showcase-features li {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 12px 0; border-bottom: 1px solid var(--border);
+            font-size: 0.95em;
+        }
+        .showcase-features li:last-child { border: none; }
+        .showcase-features .check {
+            width: 24px; height: 24px; border-radius: 8px; flex-shrink: 0;
+            background: rgba(16, 185, 129, 0.1); color: var(--accent-emerald);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; margin-top: 2px;
+        }
+
+        /* Phone mockup */
+        .phone-mockup {
+            width: 280px; margin: 0 auto;
+            background: #1a1a2e; border-radius: 36px;
+            border: 3px solid #2a2a4a; padding: 12px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+        }
+        .phone-screen {
+            background: linear-gradient(180deg, #0c1222 0%, #0f172a 100%);
+            border-radius: 26px; padding: 20px 16px; min-height: 480px;
+            display: flex; flex-direction: column;
+        }
+        .phone-notch {
+            width: 100px; height: 24px; background: #1a1a2e; border-radius: 0 0 16px 16px;
+            margin: -20px auto 20px; position: relative;
+        }
+        .phone-call-header { text-align: center; margin-bottom: 24px; }
+        .phone-call-header .label { font-size: 0.65em; color: var(--accent-emerald); letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+        .phone-call-header .name { font-size: 1.5em; font-weight: 800; margin: 8px 0 4px; }
+        .phone-call-header .subtitle { font-size: 0.8em; color: var(--text-secondary); }
+        .phone-info-card {
+            background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: 16px; padding: 16px; margin-bottom: 12px;
+        }
+        .phone-info-row {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 0.75em; padding: 6px 0;
+        }
+        .phone-info-row .lbl { color: var(--text-muted); }
+        .phone-info-row .val { color: var(--text-primary); font-weight: 600; }
+        .phone-buttons {
+            display: flex; justify-content: center; gap: 16px; margin-top: auto; padding-top: 24px;
+        }
+        .phone-btn {
+            width: 52px; height: 52px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; font-size: 20px;
+        }
+        .phone-btn.accept { background: var(--accent-emerald); }
+        .phone-btn.reject { background: var(--accent-rose); }
+        .phone-btn.nav { background: rgba(59, 130, 246, 0.2); }
+
+        /* --- STATS --- */
+        .stats-row {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 20px; margin-top: 80px;
+        }
+        .stat-card {
+            text-align: center; padding: 32px 16px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .stat-card .number {
+            font-size: 2.5em; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-card .label { color: var(--text-muted); font-size: 0.85em; margin-top: 8px; font-weight: 500; }
+
+        /* --- FOOTER --- */
+        footer {
+            border-top: 1px solid var(--border); padding: 48px 0;
+            margin-top: 100px;
+        }
+        .footer-grid {
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 24px;
+        }
+        .footer-left { display: flex; align-items: center; gap: 10px; }
+        .footer-left .shield {
+            width: 28px; height: 28px; border-radius: 7px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+        }
+        .footer-left span { font-weight: 700; font-size: 1em; }
+        .footer-links { display: flex; gap: 24px; list-style: none; }
+        .footer-links a {
+            color: var(--text-muted); text-decoration: none; font-size: 0.85em;
+            font-weight: 500; transition: color 0.3s;
+        }
+        .footer-links a:hover { color: var(--text-primary); }
+        .footer-copy { color: var(--text-muted); font-size: 0.8em; }
+
+        /* --- ANIMATIONS --- */
+        .fade-in {
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+        .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .features-grid { grid-template-columns: 1fr; }
+            .showcase { padding: 48px 24px; margin: 0; border-radius: 0; }
+            .showcase-grid { grid-template-columns: 1fr; }
+            .phone-mockup { margin-bottom: 40px; order: -1; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .hero { padding: 100px 24px 60px; }
+            .platforms { gap: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient">
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+
+    <!-- NAV -->
+    <nav>
+        <div class="container">
+            <a href="#" class="nav-logo">
+                <div class="shield">🛡️</div>
+                SecuAsist
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">Özellikler</a></li>
+                <li><a href="#assistant">Çağrı Asistanı</a></li>
+                <li><a href="#stats">Hakkında</a></li>
+                <li><a href="privacy-policy.html">Gizlilik Politikası</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                v0.7.0 — Aktif Geliştirmede
+            </div>
+            <h1>Akıllı Site Güvenlik Yönetimi</h1>
+            <p>
+                Site güvenlik personeli için tasarlanmış profesyonel yönetim platformu. 
+                Villa bilgileri, çağrı asistanı, kargo takibi ve anlık senkronizasyon — hepsi tek uygulamada.
+            </p>
+            <div class="hero-buttons">
+                <a href="#features" class="btn btn-primary">
+                    ✨ Özellikleri Keşfet
+                </a>
+                <a href="privacy-policy.html" class="btn btn-secondary">
+                    📄 Gizlilik Politikası
+                </a>
+            </div>
+
+            <div class="platforms">
+                <div class="platform-item">
+                    <div class="icon">🤖</div>
+                    <div>
+                        <div style="color: var(--text-primary); font-weight: 600;">Android</div>
+                        <div style="font-size: 0.8em;">Kotlin + Jetpack Compose</div>
+                    </div>
+                </div>
+                <div class="platform-item">
+                    <div class="icon">🍎</div>
+                    <div>
+                        <div style="color: var(--text-primary); font-weight: 600;">iOS</div>
+                        <div style="font-size: 0.8em;">SwiftUI + SwiftData</div>
+                    </div>
+                </div>
+                <div class="platform-item">
+                    <div class="icon">🌐</div>
+                    <div>
+                        <div style="color: var(--text-primary); font-weight: 600;">Web Panel</div>
+                        <div style="font-size: 0.8em;">React + FastAPI</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header fade-in">
+                <div class="section-tag">Özellikler</div>
+                <h2>Güvenlik Yönetimini<br>Yeniden Tanımlıyoruz</h2>
+                <p>Kapsamlı villa yönetiminden anlık çağrı asistanına — güvenlik personelinizin ihtiyacı olan her şey.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon blue">🏘️</div>
+                    <h3>Villa Yönetimi</h3>
+                    <p>Her villanın detaylı bilgileri, durum bayrakları, sokak bilgisi, navigasyon noktaları ve sakin bilgileri tek ekranda. Anlık durum güncellemeleri tüm cihazlara yansır.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon cyan">📞</div>
+                    <h3>Çağrı Asistanı</h3>
+                    <p>Gelen arama anında arayan kişinin villa bilgileri, kargo durumu ve yol tarifi ekranda belirir. Güvenlik personeli her zaman bilgili olur.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon emerald">📦</div>
+                    <h3>Kargo Takibi</h3>
+                    <p>Siteye gelen kargoları kaydedin, sakinlere bildirin ve teslim durumunu takip edin. Beklenen kargo uyarıları çağrı sırasında otomatik görünür.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon violet">🔄</div>
+                    <h3>Anlık Senkronizasyon</h3>
+                    <p>Tüm cihazlar yerel ağ üzerinden WebSocket ile anlık senkronize olur. Bir cihazda yapılan değişiklik anında diğerlerinde görünür.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon amber">🖥️</div>
+                    <h3>Web Yönetim Paneli</h3>
+                    <p>Bilgisayardan tüm verileri yönetin, toplu içe aktarma yapın, cihaz bağlantılarını ve sistem loglarını canlı izleyin.</p>
+                </div>
+                <div class="feature-card fade-in">
+                    <div class="feature-icon rose">🔒</div>
+                    <h3>Yerel Ağ Güvenliği</h3>
+                    <p>Hiçbir veri internete çıkmaz. Tüm iletişim yerel ağ üzerinde kalır. Verileriniz her zaman sizin kontrolünüzde.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CALL ASSISTANT SHOWCASE -->
+    <section id="assistant">
+        <div class="showcase fade-in">
+            <div class="container">
+                <div class="showcase-grid">
+                    <div class="showcase-content">
+                        <div class="section-tag">Çağrı Asistanı</div>
+                        <h2>Arama Geldiğinde<br>Her Şey Ekranda</h2>
+                        <p>Bir sakin aradığında veya siz onu aradığınızda, yüzen asistan penceresi otomatik olarak ilgili tüm bilgileri gösterir.</p>
+                        <ul class="showcase-features">
+                            <li>
+                                <span class="check">✓</span>
+                                <div><strong>Villa ve Sakin Bilgileri</strong> — Villa numarası, isim ve sokak adı büyük fontlarla</div>
+                            </li>
+                            <li>
+                                <span class="check">✓</span>
+                                <div><strong>Kargo Uyarısı</strong> — Bekleyen kargo varsa otomatik bildirim</div>
+                            </li>
+                            <li>
+                                <span class="check">✓</span>
+                                <div><strong>Hızlı Navigasyon</strong> — Tek dokunuşla villaya yol tarifi</div>
+                            </li>
+                            <li>
+                                <span class="check">✓</span>
+                                <div><strong>iOS Dynamic Island</strong> — iPhone'da kilit ekranında bile villa bilgisi</div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="phone-mockup">
+                            <div class="phone-screen">
+                                <div class="phone-notch"></div>
+                                <div class="phone-call-header">
+                                    <div class="label">📞 Gelen Çağrı</div>
+                                    <div class="name">Villa 47</div>
+                                    <div class="subtitle">Ahmet Yılmaz</div>
+                                    <div class="subtitle" style="color: var(--accent-blue); font-size: 0.75em; margin-top: 4px;">Papatya Sokak</div>
+                                </div>
+                                <div class="phone-info-card">
+                                    <div class="phone-info-row">
+                                        <span class="lbl">Durum</span>
+                                        <span class="val" style="color: var(--accent-emerald);">● Dolu</span>
+                                    </div>
+                                    <div class="phone-info-row">
+                                        <span class="lbl">Tip</span>
+                                        <span class="val">Ev Sahibi</span>
+                                    </div>
+                                    <div class="phone-info-row">
+                                        <span class="lbl">Navigasyon</span>
+                                        <span class="val" style="color: var(--accent-blue);">A Kapısı →</span>
+                                    </div>
+                                </div>
+                                <div class="phone-info-card" style="border-color: rgba(245, 158, 11, 0.2); background: rgba(245, 158, 11, 0.06);">
+                                    <div class="phone-info-row">
+                                        <span class="lbl">📦 Bekleyen Kargo</span>
+                                        <span class="val" style="color: var(--accent-amber);">Trendyol</span>
+                                    </div>
+                                </div>
+                                <div class="phone-buttons">
+                                    <div class="phone-btn reject">✕</div>
+                                    <div class="phone-btn nav">🧭</div>
+                                    <div class="phone-btn accept">✓</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- STATS -->
+    <section id="stats">
+        <div class="container">
+            <div class="section-header fade-in">
+                <div class="section-tag">Platform</div>
+                <h2>Üç Platform, Tek Ekosistem</h2>
+                <p>Android, iOS ve Web paneli arasında kesintisiz senkronizasyon.</p>
+            </div>
+            <div class="stats-row fade-in">
+                <div class="stat-card">
+                    <div class="number">3</div>
+                    <div class="label">Platform Desteği</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">∞</div>
+                    <div class="label">Villa Kapasitesi</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">&lt;1s</div>
+                    <div class="label">Senkronizasyon Süresi</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number">0</div>
+                    <div class="label">Dışa Giden Veri</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-left">
+                    <div class="shield">🛡️</div>
+                    <span>SecuAsist</span>
+                </div>
+                <ul class="footer-links">
+                    <li><a href="privacy-policy.html">Gizlilik Politikası</a></li>
+                    <li><a href="mailto:serkantkn5@gmail.com">İletişim</a></li>
+                    <li><a href="https://github.com/serkantkn/SecuAsist" target="_blank">GitHub</a></li>
+                </ul>
+                <div class="footer-copy">© 2026 SecuAsist. Tüm hakları saklıdır.</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- SCROLL ANIMATIONS -->
+    <script>
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+    </script>
+</body>
+</html>

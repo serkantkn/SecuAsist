@@ -33,7 +33,7 @@ interface CargoCompanyDao {
     fun getAllCargoCompanies(): Flow<List<CargoCompany>>
 
     @Query("SELECT * FROM CargoCompanies")
-    suspend fun getAllCompaniesAsList(): List<CargoCompany>
+    suspend fun getAllSync(): List<CargoCompany>
 
     @Query("SELECT * FROM CargoCompanies WHERE companyId = :companyId")
     suspend fun getCargoCompanyById(companyId: Int): CargoCompany?

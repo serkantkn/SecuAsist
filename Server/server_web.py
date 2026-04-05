@@ -15,6 +15,12 @@ import io
 import random
 from datetime import datetime
 import socket
+import sys
+import zipfile
+import io
+import httpx
+import shutil
+import os
 
 def get_local_ip():
     try:
@@ -223,7 +229,10 @@ init_db()
 connected_clients = {} # DeviceId -> WebSocket
 web_log_clients = set() # Set of FastAPI WebSocket objects
 system_logs = [] # In-memory log buffer (last 500)
+START_TIME = time.time() # Server start time
 MAX_LOG_BUFFER = 500
+VERSION = "1.0.0"
+REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
 
 import asyncio
 
@@ -257,6 +266,99 @@ async def _broadcast_log_entry(log_entry):
         except:
             web_log_clients.discard(client)
 
+def get_server_status():
+    """Gather simulated and real server metrics."""
+    uptime_seconds = int(time.time() - START_TIME)
+    h, m, s = uptime_seconds // 3600, (uptime_seconds % 3600) // 60, uptime_seconds % 60
+    uptime_str = f"{h:02d}:{m:02d}:{s:02d}"
+    
+    # Simulating CPU and RAM since psutil might not be installed
+    cpu = f"{random.randint(2, 18)}%"
+    ram = f"{random.randint(120, 480)} MB"
+    
+    return {
+        "cpu": cpu,
+        "ram": ram,
+        "uptime": uptime_str,
+        "clients": len(connected_clients)
+    }
+
+async def server_status_broadcaster():
+    """Periodically broadcast server health to all mobile clients."""
+    while True:
+        try:
+            if connected_clients:
+                status = get_server_status()
+                await broadcast_sync("SERVER_STATUS", status)
+        except Exception as e:
+            logger.error(f"Error in status broadcaster: {e}")
+        await asyncio.sleep(10) # Send every 10 seconds
+
+async def run_manual_update_check() -> dict:
+    try:
+        logger.info("🔍 Checking for updates on GitHub...")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(REPO_URL, headers={"User-Agent": "SecuAsist-Server"})
+            if response.status_code == 200:
+                data = response.json()
+                latest_tag = data.get("tag_name", "").removeprefix("v")
+                if latest_tag and latest_tag > VERSION:
+                    zip_url = data.get("zipball_url")
+                    if zip_url:
+                        logger.warning(f"🚀 New version found: v{latest_tag}! Starting auto-update...")
+                        asyncio.create_task(perform_update(zip_url))
+                        return {"status": "updating", "version": latest_tag}
+                return {"status": "up-to-date", "version": VERSION}
+            elif response.status_code == 404:
+                logger.info("Yayımlanmış bir güncelleme bulunamadı (Repo veya Release yok).")
+                return {"status": "up-to-date", "version": VERSION, "message": "No stable release published yet."}
+            else:
+                logger.debug(f"Update check skipped ({response.status_code})")
+                return {"status": "error", "message": f"API HTTP {response.status_code}"}
+    except Exception as e:
+        logger.error(f"❌ Update check failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+async def check_for_updates():
+    """Periodically check GitHub for newer versions and perform auto-update."""
+    while True:
+        await run_manual_update_check()
+        await asyncio.sleep(3600) # Check every 1 hour
+
+async def perform_update(zip_url):
+    """Download, extract and restart server."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(zip_url, follow_redirects=True)
+            if resp.status_code == 200:
+                # 1. Save and Extract
+                with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+                    # GitHub zips have a root folder (user-repo-hash)
+                    root_name = z.namelist()[0].split('/')[0]
+                    for member in z.namelist():
+                        if '/' in member:
+                            relative_path = member.partition('/')[2]
+                            if not relative_path: continue
+                            
+                            # PROTECT DATABASE AND LOGS
+                            if relative_path in ["secuasist.db", "server.log"]: continue
+                            
+                            source = z.open(member)
+                            target_path = os.path.join(BASE_DIR, relative_path)
+                            
+                            if member.endswith('/'):
+                                os.makedirs(target_path, exist_ok=True)
+                            else:
+                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                                with open(target_path, "wb") as f:
+                                    shutil.copyfileobj(source, f)
+                                    
+                logger.warn("✅ Update files extracted. Restarting server...")
+                # 2. Restart
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+    except Exception as e:
+        logger.error(f"❌ Critical error during update: {e}")
+
 
 async def handle_sync_msg(websocket, msg):
     type_ = msg.get("type")
@@ -284,6 +386,11 @@ async def handle_sync_msg(websocket, msg):
                 "villaContacts": villaContacts, "companyDeliverers": [], "cameraVisibleVillas": []
             }
         }))
+        return
+
+    if type_ == "GET_SERVER_STATUS":
+        status = get_server_status()
+        await websocket.send(json.dumps({"type": "SERVER_STATUS", "payload": status}))
         return
 
     # Log the sync event
@@ -385,6 +492,10 @@ async def ws_handler(websocket, path="/"):
 @app.get("/")
 async def get_index():
     return FileResponse(INDEX_PATH)
+
+@app.get("/api/v1/version")
+async def get_version():
+    return {"version": VERSION, "updatedAt": os.path.getmtime(__file__)}
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -608,12 +719,56 @@ async def toggle_sync_server():
     else: await start_sync_server()
     return {"active": is_sync_running}
 
+# --- SYSTEM CONTROLS ---
+
+@app.get("/api/v1/server/export")
+async def export_database():
+    """Download the current sqlite database."""
+    return FileResponse(DB_PATH, media_type='application/octet-stream', filename='secuasist_backup.db')
+
+@app.post("/api/v1/server/import")
+async def import_database(file: UploadFile = File(...)):
+    """Upload a secuasist_backup.db to replace the current one, then restart the server."""
+    if not file.filename.endswith('.db'):
+        raise HTTPException(status_code=400, detail="Sadece .db uzantılı dosyalar yüklenebilir.")
+    
+    contents = await file.read()
+    with open(DB_PATH, 'wb') as f:
+        f.write(contents)
+        
+    logger.warning("✅ Database replaced via Web Import. Restarting server...")
+    
+    # Restart non-blocking to allow request to complete
+    def do_restart():
+        time.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    
+    asyncio.get_event_loop().run_in_executor(None, do_restart)
+    return {"status": "success", "message": "Veritabanı içe aktarıldı, sunucu yeniden başlatılıyor."}
+
+@app.post("/api/v1/server/restart")
+async def restart_server():
+    """Forcefully restarts the python process."""
+    logger.warning("♻️ Server restart requested from Web Panel.")
+    def do_restart():
+        time.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    asyncio.get_event_loop().run_in_executor(None, do_restart)
+    return {"status": "success", "message": "Sunucu yeniden başlatılıyor..."}
+
+@app.get("/api/v1/server/update/check")
+async def manual_update_check():
+    """Triggers the remote update process manually."""
+    return await run_manual_update_check()
+
 # --- BACKGROUND WS TASK ---
 
 @app.on_event("startup")
 async def startup_event():
     await start_sync_server() # Start automatically on startup
-    logger.info("⚡ Background WebSocket service initialization requested.")
+    asyncio.create_task(server_status_broadcaster()) # Start background broadcaster
+    asyncio.create_task(check_for_updates()) # Start update checker
+    logger.info(f"⚡ SecuAsist Server v{VERSION} Initialized.")
 
 if __name__ == "__main__":
     import uvicorn

@@ -2,30 +2,33 @@ package com.serkantken.secuasist.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.serkantken.secuasist.models.Villa
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun VillaDetailSheet(
     villa: Villa,
@@ -40,17 +43,7 @@ fun VillaDetailSheet(
 ) {
     val context = LocalContext.current
     
-    // Launcher for Dialer Role Permission
-    val dialerRoleLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            // Permission granted, user can try calling again
-        }
-    }
-
     // Mode State: Read-Only (default) vs Editing
-    // If villaId is 0 (new villa), start in editing mode
     var isEditing by remember { mutableStateOf(villa.villaId == 0) }
 
     // Local state for editing fields
@@ -60,7 +53,7 @@ fun VillaDetailSheet(
     var navA by remember { mutableStateOf(villa.villaNavigationA ?: "") }
     var navB by remember { mutableStateOf(villa.villaNavigationB ?: "") }
 
-    // Toggles (0/1 to Boolean)
+    // Toggles
     var isRental by remember { mutableStateOf(villa.isVillaRental == 1) }
     var isEmpty by remember { mutableStateOf(villa.isVillaEmpty == 1) }
     var isUnderConstruction by remember { mutableStateOf(villa.isVillaUnderConstruction == 1) }
@@ -73,13 +66,13 @@ fun VillaDetailSheet(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { 
-                    if (villa.villaId == 0) {
-                        Text("Yeni Villa Ekle") 
-                    } else {
-                        Text(if (isEditing) "Düzenle: Villa ${villa.villaNo}" else "Detay: Villa ${villa.villaNo}")
-                    }
+                    Text(
+                        if (villa.villaId == 0) "Yeni Villa" else "Villa Detay",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
@@ -88,19 +81,13 @@ fun VillaDetailSheet(
                 },
                 actions = {
                     if (!isEditing && isAdmin) {
-                        // Read-Only Actions
                         IconButton(onClick = { isEditing = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Düzenle")
                         }
                     } else if (isEditing) {
-                        // Editing Actions
-                        if (villa.villaId != 0) { // Only show delete for existing villas
+                        if (villa.villaId != 0) {
                             IconButton(onClick = { showDeleteConfirmation = true }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Sil",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
+                                Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                         IconButton(onClick = {
@@ -125,278 +112,291 @@ fun VillaDetailSheet(
                                 isEditing = false
                             }
                         }) {
-                            Icon(Icons.Default.Save, contentDescription = "Kaydet")
+                            Icon(Icons.Default.Save, contentDescription = "Kaydet", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.surface
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- LINKED CONTACTS SECTION (Moved to Top) ---
-            Text("Bağlı Kişiler", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            
-            if (linkedContacts.isEmpty()) {
-                Text("Bu villaya bağlı kişi yok.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-            } else {
-                linkedContacts.forEach { contact ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth()
+            val hasActiveStatus = isRental || isEmpty || isUnderConstruction || isSpecial || callFromHome || dontCallForCargo || callOnlyMobile
+
+            // --- Hero Section ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp, horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (hasActiveStatus && !isEditing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = contact.contactName ?: "İsimsiz",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                if (!contact.contactPhone.isNullOrEmpty()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(100.dp),
+                                tonalElevation = 4.dp
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = contact.contactPhone,
-                                        style = MaterialTheme.typography.bodyMedium
+                                        text = if (isEditing && villa.villaId == 0) "?" else villaNo,
+                                        style = MaterialTheme.typography.displayMedium,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
-                            
-                            Row {
-                                // Call Button
-                                if (!contact.contactPhone.isNullOrEmpty()) {
-                                    IconButton(onClick = {
-                                    val hasCallPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                                        context,
-                                        android.Manifest.permission.CALL_PHONE
-                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                                    try {
-                                        val action = if (hasCallPermission) Intent.ACTION_CALL else Intent.ACTION_DIAL
-                                        val callIntent = Intent(action).apply {
-                                            data = Uri.parse("tel:${contact.contactPhone}")
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        context.startActivity(callIntent)
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                        android.widget.Toast.makeText(context, "Arama başlatılamadı.", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                    }) {
-                                        Icon(Icons.Default.Call, contentDescription = "Ara", tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                                
-                                // Unlink Button (Only in Edit Mode)
-                                if (isEditing) {
-                                    IconButton(onClick = { onUnlinkContact(contact) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Kaldır", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (isEditing) {
-                var showContactSelection by remember { mutableStateOf(false) }
-                Button(
-                    onClick = { showContactSelection = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Kişi Ekle")
-                }
-
-                if (showContactSelection) {
-                    var contactSearchQuery by remember { mutableStateOf("") }
-                    val filteredAllContacts = allContacts.filter { 
-                        contactSearchQuery.isEmpty() || 
-                        (it.contactName?.contains(contactSearchQuery, ignoreCase = true) == true) ||
-                        (it.contactPhone?.contains(contactSearchQuery, ignoreCase = true) == true)
-                    }
-
-                    AlertDialog(
-                        onDismissRequest = { showContactSelection = false },
-                        title = { Text("Kişi Seçin") },
-                        text = {
-                            Column {
-                                OutlinedTextField(
-                                    value = contactSearchQuery,
-                                    onValueChange = { contactSearchQuery = it },
-                                    label = { Text("Kişi Ara (İsim veya Tel)") },
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                                    singleLine = true
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (street.isNotBlank()) street else "Sokak Belirtilmedi",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.widthIn(max = 120.dp)
+                            )
+                            if (villa.villaId != 0) {
+                                Text(
+                                    text = "Villa Kaydı",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
-                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                                    filteredAllContacts.forEach { contact ->
-                                        if (linkedContacts.none { it.contactId == contact.contactId }) {
-                                            TextButton(
-                                                onClick = {
-                                                    onLinkContact(contact, false, "Tenant")
-                                                    showContactSelection = false
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text(
-                                                    text = "${contact.contactName} (${contact.contactPhone})",
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
                             }
-                        },
-                        confirmButton = {},
-                        dismissButton = {
-                            TextButton(onClick = { showContactSelection = false }) { Text("İptal") }
                         }
-                    )
-                }
-            }
-            
-            HorizontalDivider()
-
-            // --- VILLA DETAILS SECTION ---
-            // --- VILLA DETAILS SECTION ---
-            if (isEditing) {
-                // Determine if we are creating a new villa (id=0)
-                val isCreatingNew = villa.villaId == 0
-                
-                if (isCreatingNew) {
-                    OutlinedTextField(
-                        value = villaNo,
-                        onValueChange = { if (it.all { char -> char.isDigit() }) villaNo = it },
-                        label = { Text("Villa No") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-
-                val context = LocalContext.current
-                OutlinedTextField(
-                    value = street,
-                    onValueChange = { street = it },
-                    label = { Text("Sokak / Konum") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Notlar") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
-                )
-                OutlinedTextField(
-                    value = navA,
-                    onValueChange = { navA = it },
-                    label = { Text("Yol Tarifi (Navigasyon A)") },
-                    placeholder = { Text("Örn: Siteden girince 2. sağdan dönün...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                OutlinedTextField(
-                    value = navB,
-                    onValueChange = { navB = it },
-                    label = { Text("Yol Tarifi (Navigasyon B)") },
-                    placeholder = { Text("Örn: Arka kapıdan giriş şifresi 1234...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            } else {
-                InfoRow(label = "Sokak / Konum", value = street.ifEmpty { "-" })
-
-                // Gate Preference Logic
-                val prefs = context.getSharedPreferences("secuasist_prefs", android.content.Context.MODE_PRIVATE)
-                val preferredGate = prefs.getString("preferred_gate", "A") ?: "A"
-                
-                if (preferredGate == "A") {
-                    if (navA.isNotBlank()) InfoRow(label = "Yol Tarifi (A Kapısı)", value = navA)
+                        
+                        Spacer(modifier = Modifier.width(20.dp))
+                        
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            if (isUnderConstruction) HeroStatusBadge(Icons.Default.Build, "Tadilat", Color(0xFFFFA500))
+                            if (isEmpty) HeroStatusBadge(Icons.Default.Home, "Boş", Color.Red)
+                            if (isRental) HeroStatusBadge(Icons.Default.VpnKey, "Kiracı", Color.Blue)
+                            if (isSpecial) HeroStatusBadge(Icons.Default.Star, "VIP", Color(0xFFFFD700))
+                            if (callFromHome) HeroStatusBadge(Icons.Default.Phone, "Evden Ara", Color(0xFF4CAF50))
+                            if (dontCallForCargo) HeroStatusBadge(Icons.Default.Inventory2, "Kargo Red", Color.Red)
+                            if (callOnlyMobile) HeroStatusBadge(Icons.Default.Smartphone, "Sadece Cep", Color(0xFFC2185B))
+                        }
+                    }
                 } else {
-                    if (navB.isNotBlank()) InfoRow(label = "Yol Tarifi (B Kapısı)", value = navB)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(100.dp),
+                            tonalElevation = 4.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (isEditing && villa.villaId == 0) "?" else villaNo,
+                                    style = MaterialTheme.typography.displayMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (street.isNotBlank()) street else "Sokak Belirtilmedi",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        if (villa.villaId != 0) {
+                            Text(
+                                text = "Villa Kaydı",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
                 }
-
-                InfoRow(label = "Notlar", value = notes.ifEmpty { "-" })
             }
 
-            HorizontalDivider()
-
-            Text("Durumlar", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (isEditing || isRental) {
-                    StatusChip(
-                        label = "Kiracı Var",
-                        selected = isRental,
-                        enabled = isEditing,
-                        onSelectedChange = { isRental = it }
-                    )
+                // --- Contacts Section ---
+                SectionHeader(title = "Bağlı Kişiler", icon = Icons.Outlined.Person)
+                
+                if (linkedContacts.isEmpty()) {
+                    EmptyStateCard(message = "Bu villaya bağlı kişi bulunmuyor.")
+                } else {
+                    linkedContacts.forEach { contact ->
+                        ContactCard(
+                            contact = contact,
+                            isEditing = isEditing,
+                            onCall = { phone ->
+                                val hasCallPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, android.Manifest.permission.CALL_PHONE
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                try {
+                                    val action = if (hasCallPermission) Intent.ACTION_CALL else Intent.ACTION_DIAL
+                                    val callIntent = Intent(action).apply {
+                                        data = Uri.parse("tel:$phone")
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(callIntent)
+                                } catch (e: Exception) { e.printStackTrace() }
+                            },
+                            onUnlink = { onUnlinkContact(contact) }
+                        )
+                    }
                 }
-                if (isEditing || isEmpty) {
-                    StatusChip(
-                        label = "Boş Villa",
-                        selected = isEmpty,
-                        enabled = isEditing,
-                        onSelectedChange = { isEmpty = it }
-                    )
+
+                if (isEditing) {
+                    var showContactSelection by remember { mutableStateOf(false) }
+                    OutlinedButton(
+                        onClick = { showContactSelection = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Kişi Ekle")
+                    }
+
+                    if (showContactSelection) {
+                        ContactSelectionDialog(
+                            allContacts = allContacts,
+                            linkedContacts = linkedContacts,
+                            onDismiss = { showContactSelection = false },
+                            onSelect = { contact ->
+                                onLinkContact(contact, false, "Tenant")
+                                showContactSelection = false
+                            }
+                        )
+                    }
                 }
-                if (isEditing || isUnderConstruction) {
-                    StatusChip(
-                        label = "İnşaat Halinde",
-                        selected = isUnderConstruction,
-                        enabled = isEditing,
-                        onSelectedChange = { isUnderConstruction = it }
-                    )
+
+                // --- Details Section ---
+                SectionHeader(title = "Villa Detayları", icon = Icons.Outlined.Info)
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (isEditing) {
+                            if (villa.villaId == 0) {
+                                OutlinedTextField(
+                                    value = villaNo,
+                                    onValueChange = { if (it.all { char -> char.isDigit() }) villaNo = it },
+                                    label = { Text("Villa No") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                            }
+                            OutlinedTextField(
+                                value = street,
+                                onValueChange = { street = it },
+                                label = { Text("Sokak / Konum") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            OutlinedTextField(
+                                value = notes,
+                                onValueChange = { notes = it },
+                                label = { Text("Villa Notları") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        } else {
+                            DetailItem(icon = Icons.Outlined.Place, label = "Sokak", value = street.ifBlank { "-" })
+                            
+                            val prefs = context.getSharedPreferences("secuasist_prefs", android.content.Context.MODE_PRIVATE)
+                            val preferredGate = prefs.getString("preferred_gate", "A") ?: "A"
+                            val currentNav = if (preferredGate == "A") navA else navB
+                            
+                            DetailItem(
+                                icon = Icons.Outlined.Navigation, 
+                                label = "Yol Tarifi (${preferredGate} Kapısı)", 
+                                value = currentNav.ifBlank { "Tarif belirtilmemiş" }
+                            )
+                            
+                            DetailItem(icon = Icons.Outlined.Description, label = "Notlar", value = notes.ifBlank { "-" })
+                        }
+                    }
                 }
-                if (isEditing || isSpecial) {
-                    StatusChip(
-                        label = "Özel İlgi",
-                        selected = isSpecial,
-                        enabled = isEditing,
-                        onSelectedChange = { isSpecial = it }
-                    )
+
+                if (isEditing) {
+                    SectionHeader(title = "Navigasyon Ayarları", icon = Icons.Outlined.Map)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = navA,
+                                onValueChange = { navA = it },
+                                label = { Text("Yol Tarifi (A Kapısı)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            OutlinedTextField(
+                                value = navB,
+                                onValueChange = { navB = it },
+                                label = { Text("Yol Tarifi (B Kapısı)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+                    }
                 }
-                if (isEditing || callFromHome) {
-                    StatusChip(
-                        label = "Evden Aransın",
-                        selected = callFromHome,
-                        enabled = isEditing,
-                        onSelectedChange = { callFromHome = it }
-                    )
+
+                // --- Status Section ---
+                if (isEditing) {
+                    @Suppress("DEPRECATION")
+                    SectionHeader(title = "Durum ve Tercihler", icon = Icons.Outlined.FactCheck)
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    ) {
+                        FlowRow(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CategoryStatusChip("Mülkiyet", "Kiracı", isRental, isEditing) { isRental = it }
+                            CategoryStatusChip("Mülkiyet", "Boş Villa", isEmpty, isEditing) { isEmpty = it }
+                            CategoryStatusChip("Hizmet", "İnşaat", isUnderConstruction, isEditing) { isUnderConstruction = it }
+                            CategoryStatusChip("Hizmet", "VIP", isSpecial, isEditing) { isSpecial = it }
+                            CategoryStatusChip("Arama", "Evden Ara", callFromHome, isEditing) { callFromHome = it }
+                            CategoryStatusChip("Arama", "Kargo Engel", dontCallForCargo, isEditing, isDestructive = true) { dontCallForCargo = it }
+                            CategoryStatusChip("Arama", "Sadece Cep", callOnlyMobile, isEditing) { callOnlyMobile = it }
+                        }
+                    }
                 }
-                if (isEditing || dontCallForCargo) {
-                    StatusChip(
-                        label = "Kargo İçin Aranmasın",
-                        selected = dontCallForCargo,
-                        enabled = isEditing,
-                        isDestructive = true,
-                        onSelectedChange = { dontCallForCargo = it }
-                    )
-                }
-                if (isEditing || callOnlyMobile) {
-                    StatusChip(
-                        label = "Sadece Cepten Ara",
-                        selected = callOnlyMobile,
-                        enabled = isEditing,
-                        onSelectedChange = { callOnlyMobile = it }
-                    )
-                }
+                
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
@@ -405,55 +405,131 @@ fun VillaDetailSheet(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Villayı Sil") },
-            text = { Text("Villa ${villa.villaNo} kalıcı olarak silinecek. Emin misiniz?") },
+            text = { Text("Villa ${villa.villaNo} ve tüm bağlı kayıtları kalıcı olarak silinecek. Emin misiniz?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDelete(villa)
-                        showDeleteConfirmation = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Sil")
-                }
+                Button(
+                    onClick = { onDelete(villa); showDeleteConfirmation = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Evet, Sil") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("İptal")
-                }
+                TextButton(onClick = { showDeleteConfirmation = false }) { Text("İptal") }
             }
         )
     }
 }
 
 @Composable
-fun InfoRow(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+fun SectionHeader(title: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 1.sp
         )
-        Text(text = value, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
-fun StatusChip(
+fun ContactCard(
+    contact: com.serkantken.secuasist.models.Contact,
+    isEditing: Boolean,
+    onCall: (String) -> Unit,
+    onUnlink: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(text = contact.contactName ?: "İsimsiz", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = contact.contactPhone ?: "-", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Row {
+                if (!contact.contactPhone.isNullOrEmpty()) {
+                    IconButton(onClick = { onCall(contact.contactPhone) }) {
+                        Icon(Icons.Default.Call, contentDescription = "Ara", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                if (isEditing) {
+                    IconButton(onClick = onUnlink) {
+                        Icon(Icons.Default.LinkOff, contentDescription = "Kaldır", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailItem(icon: ImageVector, label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+fun EmptyStateCard(message: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun CategoryStatusChip(
+    category: String,
     label: String,
     selected: Boolean,
-    enabled: Boolean,
+    isEditing: Boolean,
     isDestructive: Boolean = false,
     onSelectedChange: (Boolean) -> Unit
 ) {
     FilterChip(
         selected = selected,
-        // If editing is enabled, toggle. If not, do nothing (Read-Only).
-        // giving enabled=true allows the color to show.
-        onClick = { if (enabled) onSelectedChange(!selected) },
-        label = { Text(label) },
+        onClick = { if (isEditing) onSelectedChange(!selected) },
+        label = { Text(label, fontSize = 12.sp) },
         leadingIcon = if (selected) {
-            { Icon(androidx.compose.material.icons.Icons.Default.Check, contentDescription = null) }
+            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
         } else null,
         colors = if (isDestructive && selected) {
             FilterChipDefaults.filterChipColors(
@@ -464,6 +540,65 @@ fun StatusChip(
         } else {
             FilterChipDefaults.filterChipColors()
         },
-        enabled = true // Always visually enabled to show colors
+        enabled = true,
+        shape = RoundedCornerShape(8.dp)
     )
+}
+
+@Composable
+fun ContactSelectionDialog(
+    allContacts: List<com.serkantken.secuasist.models.Contact>,
+    linkedContacts: List<com.serkantken.secuasist.models.Contact>,
+    onDismiss: () -> Unit,
+    onSelect: (com.serkantken.secuasist.models.Contact) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filtered = allContacts.filter { 
+        searchQuery.isEmpty() || (it.contactName?.contains(searchQuery, ignoreCase = true) == true)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Kişi Bağla") },
+        text = {
+            Column(modifier = Modifier.heightIn(max = 400.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Ara...") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+                )
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    filtered.filter { contact -> linkedContacts.none { it.contactId == contact.contactId } }.forEach { contact ->
+                        ListItem(
+                            headlineContent = { Text(contact.contactName ?: "İsimsiz") },
+                            supportingContent = { Text(contact.contactPhone ?: "-") },
+                            leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                            modifier = Modifier.clickable { onSelect(contact) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
+    )
+}
+
+@Composable
+fun HeroStatusBadge(icon: ImageVector, label: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+            Text(label, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
+    }
 }

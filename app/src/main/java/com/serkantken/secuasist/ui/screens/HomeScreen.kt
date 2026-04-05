@@ -23,6 +23,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +48,9 @@ fun HomeScreen(
     val searchResults by viewModel.filteredResults.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
+    val latestInfo by viewModel.latestVersionInfo.collectAsState()
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val app = context.applicationContext as SecuAsistApplication
@@ -87,6 +92,13 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             Column {
+                if (isUpdateAvailable && latestInfo != null) {
+                    UpdateBanner(
+                        version = latestInfo!!.first,
+                        onClick = { app.updateManager.checkForUpdates() }
+                    )
+                }
+
                 // 1. IOS-Style Header
                 val context = androidx.compose.ui.platform.LocalContext.current
                 com.serkantken.secuasist.ui.components.ScreenHeader(
@@ -106,6 +118,7 @@ fun HomeScreen(
                     } else null,
                     onSettingsClick = onSettingsClick,
                     connectionState = connectionState,
+                    offlineSyncCount = pendingSyncCount,
                     extraActions = {
                         IconButton(onClick = { viewModel.refresh() }) {
                             Icon(
@@ -116,6 +129,8 @@ fun HomeScreen(
                         }
                     }
                 )
+                
+                WhatsAppNotificationCard()
                 
                 // 2. Search Bar (Customized to look integrated)
                 SearchBar(
@@ -328,47 +343,40 @@ fun VillaItem(villa: Villa, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon Left
-            Icon(
-                imageVector = Icons.Default.Home,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
+            // Large Number Left
+            Text(
+                text = "${villa.villaNo}",
+                style = MaterialTheme.typography.headlineLarge,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.padding(end = 12.dp)
             )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
+
             // Info Column Right
             Column(
-                modifier = Modifier.weight(1f), // Take remaining space
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "Villa ${villa.villaNo}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-                
                 // Street - optional
-                if (!villa.villaStreet.isNullOrEmpty()) {
-                    Text(
-                        text = villa.villaStreet ?: "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        fontSize = 11.sp
-                    )
-                }
+                Text(
+                    text = villa.villaStreet?.ifBlank { "Sokak Belirtilmedi" } ?: "Sokak Belirtilmedi",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium
+                )
 
-                // Icons Badges (Fixed Height Row to maintain consistent Card Size)
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Icons Badges
                 val statusIcons = mutableListOf<Triple<androidx.compose.ui.graphics.vector.ImageVector, Color, String>>()
-                if (villa.isVillaUnderConstruction == 1) statusIcons.add(Triple(Icons.Default.Build, Color(0xFFFFA500), "Tedilatta"))
+                if (villa.isVillaUnderConstruction == 1) statusIcons.add(Triple(Icons.Default.Build, Color(0xFFFFA500), "Tadilat"))
                 if (villa.isVillaEmpty == 1) statusIcons.add(Triple(Icons.Default.Home, Color.Red, "Boş"))
                 if (villa.isVillaRental == 1) statusIcons.add(Triple(Icons.Default.VpnKey, Color.Blue, "Kiracı"))
                 if (villa.isVillaSpecial == 1) statusIcons.add(Triple(Icons.Default.Star, Color(0xFFFFD700), "VIP"))
@@ -376,11 +384,10 @@ fun VillaItem(villa: Villa, onClick: () -> Unit) {
                 if (villa.isVillaCallForCargo == 0) statusIcons.add(Triple(Icons.Default.Inventory2, Color.Red, "Kargo Red"))
                 if (villa.isCallOnlyMobile == 1) statusIcons.add(Triple(Icons.Default.Smartphone, Color(0xFFC2185B), "Sadece Cep"))
 
-                Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth().height(16.dp), // Fixed height row
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.height(18.dp)
                 ) {
                     if (statusIcons.isNotEmpty()) {
                         statusIcons.take(4).forEach { (icon, color, _) ->
@@ -388,7 +395,7 @@ fun VillaItem(villa: Villa, onClick: () -> Unit) {
                                  imageVector = icon,
                                  contentDescription = null,
                                  tint = color,
-                                 modifier = Modifier.size(16.dp)
+                                 modifier = Modifier.size(14.dp)
                              )
                         }
                         if (statusIcons.size > 4) {
@@ -462,6 +469,37 @@ fun ContactSearchResultItem(contact: com.serkantken.secuasist.models.Contact, on
                     maxLines = 1
                 )
             }
+        }
+    }
+}
+@Composable
+fun UpdateBanner(version: String, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .statusBarsPadding() // Ensure it stays below status bar if needed, or Column handles it
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Smartphone,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Yeni Sürüm Mevcut: v$version. Güncellemek için dokunun.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimary,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

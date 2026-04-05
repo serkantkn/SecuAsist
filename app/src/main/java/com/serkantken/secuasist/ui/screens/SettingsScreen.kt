@@ -42,6 +42,7 @@ import com.serkantken.secuasist.ui.viewmodels.SettingsViewModel
 import com.serkantken.secuasist.SecuAsistApplication
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Refresh
 import kotlinx.coroutines.launch
 
 @RequiresApi(Build.VERSION_CODES.Q)
@@ -194,6 +195,80 @@ fun SettingsGeneralTab(
                 }
             }
         }
+        
+        // Floating Widget Toggle
+        val floatingWidgetEnabled by viewModel.floatingWidgetEnabled.collectAsState()
+
+        SettingCard(
+            title = "Arama Asistanı (Yüzen Kutu)",
+            description = "Ekranda beliren ve arayanın hangi villaya geldiğini gösteren asistan kutucuğunu açıp kapatın."
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(if (floatingWidgetEnabled) "Açık" else "Kapalı", style = MaterialTheme.typography.bodyMedium)
+                Switch(
+                    checked = floatingWidgetEnabled,
+                    onCheckedChange = { viewModel.updateFloatingWidgetEnabled(it) }
+                )
+            }
+        }
+        
+        // Data Management (Backup/Restore)
+        val exportLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/json")
+        ) { uri ->
+            uri?.let {
+                viewModel.exportBackup(it) { result ->
+                    result.onSuccess { count ->
+                        android.widget.Toast.makeText(context, "Yedekleme başarılı: $count kayıt", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    result.onFailure { error ->
+                        android.widget.Toast.makeText(context, "Yedekleme hatası: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+
+        val importLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            uri?.let {
+                viewModel.importBackup(it) { result ->
+                    result.onSuccess { count ->
+                        android.widget.Toast.makeText(context, "Geri yükleme başarılı: $count kayıt", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    result.onFailure { error ->
+                        android.widget.Toast.makeText(context, "Geri yükleme hatası: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+
+        SettingCard(
+            title = "Veri Yönetimi (Yedekle / Geri Yükle)",
+            description = "Tüm verilerinizi (Villalar, Kişiler, Kameralar vb.) bir dosyaya yedekleyebilir veya yedek dosyasından geri yükleyebilirsiniz."
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { exportLauncher.launch("SecuAsist_Backup_${System.currentTimeMillis()}.json") },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Yedekle")
+                }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Geri Yükle")
+                }
+            }
+        }
 
     }
 }
@@ -318,6 +393,57 @@ fun SettingsConnectionTab(
                 }
             }
         }
+
+        // Server Health Status
+        val serverStatus by viewModel.serverStatus.collectAsState()
+        
+        if (connectionState == com.serkantken.secuasist.network.ConnectionState.CONNECTED) {
+            SettingCard(
+                title = "Sunucu Sağlık Durumu",
+                description = "Bağlı olduğunuz sunucunun anlık kaynak kullanım ve çalışma verileri.",
+                extraActions = {
+                    IconButton(
+                        onClick = { viewModel.refreshServerStatus() },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh, 
+                            contentDescription = "Yenile",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        StatusItem("CPU Kullanımı", serverStatus.cpuUsage)
+                        StatusItem("RAM Kullanımı", serverStatus.ramUsage)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        StatusItem("Çalışma Süresi", serverStatus.uptime)
+                        StatusItem("Cihaz Sayısı", serverStatus.connectedDevices.toString())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusItem(label: String, value: String) {
+    Column(modifier = Modifier.padding(4.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -487,6 +613,7 @@ fun SettingsPermissionsTab(viewModel: SettingsViewModel) {
 fun SettingCard(
     title: String,
     description: String,
+    extraActions: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Card(
@@ -494,18 +621,27 @@ fun SettingCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                extraActions?.invoke()
+            }
             Spacer(modifier = Modifier.height(8.dp))
             content()
         }

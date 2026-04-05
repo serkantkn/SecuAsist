@@ -35,6 +35,8 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Divider
+import androidx.compose.material.icons.filled.Refresh
+import com.serkantken.secuasist.SecuAsistApplication
 import com.serkantken.secuasist.models.Cargo
 import com.serkantken.secuasist.models.CargoCompany
 import com.serkantken.secuasist.models.Contact
@@ -69,9 +71,14 @@ fun CargoScreen(viewModel: CargoViewModel = viewModel()) {
         Scaffold(
             topBar = {
                 Column {
+                    val connectionState by viewModel.connectionState.collectAsState(initial = com.serkantken.secuasist.network.ConnectionState.DISCONNECTED)
+                    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+                    
                     // Standardized Header
                     com.serkantken.secuasist.ui.components.ScreenHeader(
                         title = "Kargo Takip",
+                        connectionState = connectionState,
+                        offlineSyncCount = pendingSyncCount,
                         extraActions = {
                             IconButton(
                                 onClick = { showReportScreen = true },

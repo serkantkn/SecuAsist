@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -14,6 +15,7 @@ import com.serkantken.secuasist.ui.theme.SecuAsistTheme
 class CallActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O_MR1)
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         
         // Turn on screen and show over lockscreen for incoming calls
@@ -21,7 +23,7 @@ class CallActivity : ComponentActivity() {
         setTurnScreenOn(true)
         
         setContent {
-            SecuAsistTheme {
+            SecuAsistTheme(darkTheme = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

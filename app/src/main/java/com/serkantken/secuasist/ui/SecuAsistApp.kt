@@ -53,21 +53,14 @@ fun SecuAsistApp() {
     
     // Check if app is default launcher
     var isDefaultLauncher by remember { mutableStateOf(false) }
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
-                    addCategory(android.content.Intent.CATEGORY_HOME)
-                }
-                val resolveInfo = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-                isDefaultLauncher = resolveInfo?.activityInfo?.packageName == context.packageName
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                addCategory(android.content.Intent.CATEGORY_HOME)
             }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+            val resolveInfo = context.packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            isDefaultLauncher = resolveInfo?.activityInfo?.packageName == context.packageName
         }
     }
 

@@ -22,6 +22,7 @@ fun ScreenHeader(
     onNewClick: (() -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null,
     connectionState: ConnectionState? = null,
+    offlineSyncCount: Int = 0,
     extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
@@ -41,12 +42,28 @@ fun ScreenHeader(
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Offline Sync Badge
+            if (offlineSyncCount > 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.error,
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text(
+                        text = offlineSyncCount.toString(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            
             // Extra Actions Slot
             extraActions()
             
             // Connection Status (Optional)
             if (connectionState != null) {
-                if (extraActions != {}) Spacer(modifier = Modifier.width(8.dp))
+                if (extraActions != {} || offlineSyncCount > 0) Spacer(modifier = Modifier.width(8.dp))
                 val (iconColor, _) = when(connectionState) {
                     ConnectionState.CONNECTED -> Color.Green to "Bağlı"
                     ConnectionState.CONNECTING -> Color.Yellow to "Bağlanıyor"

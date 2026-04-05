@@ -35,6 +35,9 @@ interface CameraDao {
     @Query("SELECT * FROM Cameras WHERE cameraId = :id")
     suspend fun getCameraById(id: String): Camera?
 
+    @Query("SELECT * FROM Cameras")
+    suspend fun getAllSync(): List<Camera>
+
     // --- Relations ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -51,6 +54,9 @@ interface CameraDao {
 
     @Query("DELETE FROM CameraVisibleVillas")
     suspend fun deleteAllCrossRefs()
+
+    @Query("SELECT * FROM CameraVisibleVillas")
+    suspend fun getAllCrossRefsSync(): List<CameraVisibleVillaCrossRef>
 
     @Transaction
     @Query("SELECT * FROM Cameras")

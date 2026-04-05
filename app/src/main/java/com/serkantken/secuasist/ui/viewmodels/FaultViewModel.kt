@@ -10,12 +10,22 @@ import com.serkantken.secuasist.models.CameraWithVillas
 import com.serkantken.secuasist.models.Intercom
 import com.serkantken.secuasist.models.Villa
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class FaultViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as SecuAsistApplication
     private val cameraDao = app.db.cameraDao()
     private val intercomDao = app.db.intercomDao()
+    private val syncLogDao = app.db.syncLogDao()
+
+    // Offline Sync Count
+    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        0
+    )
     private val villaDao = app.db.villaDao()
 
     val allVillas: Flow<List<Villa>> = villaDao.getAllVillas()

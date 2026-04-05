@@ -23,6 +23,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val villaContactDao = (application as SecuAsistApplication).db.villaContactDao()
     private val app = application as SecuAsistApplication
     private val intercomDao = app.db.intercomDao()
+    private val syncLogDao = app.db.syncLogDao()
+
+    // Update State
+    val isUpdateAvailable = app.updateManager.isUpdateAvailable.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+    val latestVersionInfo = app.updateManager.latestVersionInfo.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    // Offline Sync Count
+    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        0
+    )
 
     suspend fun getVillasForContact(contactId: String) = villaContactDao.getVillasForContact(contactId)
 
@@ -120,7 +136,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // All available contacts for selection
     val allContacts = contactDao.getAllContactsAsFlow().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<Contact>()
     )
 
     fun getContactsForVilla(villaId: Int) = villaContactDao.getContactsForVilla(villaId)

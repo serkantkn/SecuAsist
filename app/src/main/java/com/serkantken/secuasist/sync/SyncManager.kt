@@ -14,12 +14,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class SyncManager(private val context: Context) {
     private val app = context.applicationContext as SecuAsistApplication
     private val gson = Gson()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Server Health Status
+    private val _serverStatus = MutableStateFlow<JsonObject?>(null)
+    val serverStatus = _serverStatus.asStateFlow()
 
     fun start() {
         // Listen for connection state changes
@@ -30,6 +36,7 @@ class SyncManager(private val context: Context) {
                     Log.i("SyncManager", "🚀 Connected! Syncing all data...")
                     flushSyncQueue()
                     refreshAllData()
+                    requestServerStatus()
                 }
             }
             .launchIn(scope)
@@ -40,6 +47,15 @@ class SyncManager(private val context: Context) {
                 handleMessage(message)
             }
             .launchIn(scope)
+    }
+
+    fun requestServerStatus() {
+        scope.launch {
+            if (app.wsClient.isConnected()) {
+                Log.d("SyncManager", "🖥️ Requesting server health status...")
+                app.wsClient.sendData("GET_SERVER_STATUS", emptyMap<String, Any>())
+            }
+        }
     }
 
     fun refreshAllData() {
@@ -375,6 +391,10 @@ class SyncManager(private val context: Context) {
                         app.db.intercomDao().deleteById(id)
                         Log.i("SyncManager", "🗑️ Synced Delete Intercom: $id")
                     }
+                }
+                "SERVER_STATUS" -> {
+                    _serverStatus.value = payload.asJsonObject
+                    Log.d("SyncManager", "🖥️ Server metrics updated")
                 }
             }
         } catch (e: Exception) {

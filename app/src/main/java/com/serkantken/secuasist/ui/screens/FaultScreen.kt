@@ -92,8 +92,12 @@ fun FaultScreen(
 
     Scaffold(
         topBar = {
+            val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
             Column {
-                com.serkantken.secuasist.ui.components.ScreenHeader(title = "Arıza Takibi")
+                com.serkantken.secuasist.ui.components.ScreenHeader(
+                    title = "Arıza Takibi",
+                    offlineSyncCount = pendingSyncCount
+                )
                 TabRow(selectedTabIndex = selectedTabIndex) {
                     tabs.forEachIndexed { index, title ->
                         Tab(

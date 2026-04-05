@@ -27,6 +27,14 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
     private val contactDao = (application as SecuAsistApplication).db.contactDao()
     private val app = application as SecuAsistApplication
+    private val syncLogDao = app.db.syncLogDao()
+
+    // Offline Sync Count
+    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        0
+    )
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -216,10 +224,10 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun mergeDatabaseContactsInternal(): Int {
         var mergedCount = 0
-        val allContacts = contactDao.getAllContactsAsList()
+        val allContacts = contactDao.getAllContactsSync()
         val grouped = allContacts.groupBy { com.serkantken.secuasist.utils.ContactUtils.normalizePhoneNumber(it.contactPhone ?: "") }
         
-        grouped.forEach { (normalized, contacts) ->
+        for ((normalized, contacts) in grouped) {
             if (contacts.size > 1 && normalized.length >= 10) {
                 val primary = contacts.maxByOrNull { contact -> 
                     villaContactDao.getVillaAssociationsCount(contact.contactId)
@@ -227,9 +235,9 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                 
                 val duplicates = contacts.filter { it.contactId != primary.contactId }
                 
-                duplicates.forEach { duplicate ->
+                for (duplicate in duplicates) {
                     val relationships = villaContactDao.getRelationshipsByContactId(duplicate.contactId)
-                    relationships.forEach { rel ->
+                    for (rel in relationships) {
                         val existingRelations = villaContactDao.getRelationshipsByContactId(primary.contactId)
                         val isAlreadyLinked = existingRelations.any { it.villaId == rel.villaId }
                         
@@ -240,7 +248,8 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                     contactDao.delete(duplicate)
-                    app.syncManager.sendData("DELETE_CONTACT", mapOf("contactId" to duplicate.contactId))
+                    val payload = mapOf("contactId" to duplicate.contactId)
+                    app.syncManager.sendData("DELETE_CONTACT", payload)
                     mergedCount++
                 }
             }

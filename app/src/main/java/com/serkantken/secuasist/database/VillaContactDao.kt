@@ -30,6 +30,9 @@ interface VillaContactDao {
     @Query("DELETE FROM VillaContacts")
     suspend fun deleteAll()
 
+    @Query("SELECT * FROM VillaContacts")
+    suspend fun getAllSync(): List<VillaContact>
+
     // Belirli bir villanın tüm ilgili kişilerini çekmek için
     @Query("SELECT C.* FROM Contacts C JOIN VillaContacts VC ON C.contactId = VC.contactId WHERE VC.villaId = :villaId ORDER BY VC.orderIndex ASC")
     fun getContactsForVilla(villaId: Int): Flow<List<Contact>>

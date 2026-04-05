@@ -35,8 +35,8 @@ interface VillaDao {
     @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
     fun getAllVillas(): Flow<List<Villa>> // Tüm villaları gözlemlenebilir bir şekilde döndürür
 
-    @Query("SELECT * FROM Villas ORDER BY villaNo ASC") // Villa numarasına göre sıralı
-    suspend fun getAllVillasAsList(): List<Villa> // Flow olmayan versiyon
+    @Query("SELECT * FROM Villas ORDER BY villaNo ASC")
+    suspend fun getAllVillasSync(): List<Villa>
 
     @Query("SELECT * FROM Villas WHERE CAST(villaNo AS TEXT) LIKE :query OR villaStreet LIKE :query ORDER BY villaNo ASC")
     fun searchVillas(query: String): Flow<List<Villa>>

@@ -27,11 +27,9 @@ interface CargoDao {
     @Query("DELETE FROM Cargos")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM Cargos ORDER BY date DESC")
-    fun getAllCargos(): Flow<List<Cargo>>
+    @Query("SELECT * FROM Cargos")
+    suspend fun getAllSync(): List<Cargo>
 
-    @Query("SELECT * FROM Cargos WHERE cargoId = :cargoId")
-    suspend fun getCargoById(cargoId: Int): Cargo?
 
     @Query("SELECT * FROM Cargos WHERE cargoId IN (:cargoIds)")
     suspend fun getCargosByIds(cargoIds: List<Int>): List<Cargo>

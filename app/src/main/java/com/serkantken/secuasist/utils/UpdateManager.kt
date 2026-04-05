@@ -14,6 +14,8 @@ import androidx.core.content.FileProvider
 import com.serkantken.secuasist.BuildConfig
 import com.serkantken.secuasist.models.GitHubRelease
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.*
 import java.io.File
 import java.io.IOException
@@ -22,6 +24,12 @@ class UpdateManager(private val context: Context) {
     private val client = OkHttpClient()
     private val gson = Gson()
     private val repoUrl = "https://api.github.com/repos/serkantkn/SecuAsist/releases"
+
+    private val _isUpdateAvailable = MutableStateFlow(false)
+    val isUpdateAvailable = _isUpdateAvailable.asStateFlow()
+
+    private val _latestVersionInfo = MutableStateFlow<Triple<String, String, String>?>(null) // version, notes, downloadUrl
+    val latestVersionInfo = _latestVersionInfo.asStateFlow()
 
     fun checkForUpdates() {
         val request = Request.Builder()
@@ -58,6 +66,9 @@ class UpdateManager(private val context: Context) {
                     if (isNewerVersion(currentVersion, latestVersion)) {
                         val apkAsset = release.assets?.firstOrNull { it.name?.endsWith(".apk") == true }
                         if (apkAsset != null) {
+                            _isUpdateAvailable.value = true
+                            _latestVersionInfo.value = Triple(latestVersion, release.body ?: "", apkAsset.browser_download_url!!)
+                            
                             val file = File(
                                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                                 "SecuAsist-v$latestVersion.apk"

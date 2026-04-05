@@ -3,9 +3,8 @@ package com.serkantken.secuasist.services
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 data class CallStateInfo(
     val call: Call,
@@ -18,6 +17,12 @@ object CallManager {
 
     private val _currentCall = MutableStateFlow<CallStateInfo?>(null)
     val currentCall: StateFlow<CallStateInfo?> = _currentCall.asStateFlow()
+
+    private val _callDuration = MutableStateFlow(0L)
+    val callDuration: StateFlow<Long> = _callDuration.asStateFlow()
+
+    private var timerJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
@@ -34,10 +39,35 @@ object CallManager {
     fun updateCall(call: Call?) {
         if (call == null) {
             _currentCall.value = null
+            stopTimer()
         } else {
             val number = call.details?.handle?.schemeSpecificPart
-            _currentCall.value = CallStateInfo(call, call.state, number)
+            val oldState = _currentCall.value?.state
+            val newState = call.state
+            _currentCall.value = CallStateInfo(call, newState, number)
+            
+            if (newState == Call.STATE_ACTIVE && oldState != Call.STATE_ACTIVE) {
+                startTimer()
+            } else if (newState == Call.STATE_DISCONNECTED) {
+                stopTimer()
+            }
         }
+    }
+
+    private fun startTimer() {
+        if (timerJob != null) return
+        _callDuration.value = 0L
+        timerJob = scope.launch {
+            while (isActive) {
+                delay(1000)
+                _callDuration.value++
+            }
+        }
+    }
+
+    private fun stopTimer() {
+        timerJob?.cancel()
+        timerJob = null
     }
 
     fun answerCall() {

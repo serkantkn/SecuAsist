@@ -32,6 +32,9 @@ interface IntercomDao {
     @Query("SELECT * FROM Intercoms WHERE intercomId = :id")
     suspend fun getIntercomById(id: String): Intercom?
 
+    @Query("SELECT * FROM Intercoms")
+    suspend fun getAllSync(): List<Intercom>
+
     @Query("DELETE FROM Intercoms WHERE intercomId = :id")
     suspend fun deleteById(id: String)
 }

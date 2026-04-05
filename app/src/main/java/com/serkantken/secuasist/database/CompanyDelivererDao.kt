@@ -21,6 +21,9 @@ interface CompanyDelivererDao {
     @Query("DELETE FROM CompanyContacts")
     suspend fun deleteAll()
 
+    @Query("SELECT * FROM CompanyContacts")
+    suspend fun getAllSync(): List<CompanyDelivererCrossRef>
+
     @Query("DELETE FROM CompanyContacts WHERE companyId = :companyId AND contactId = :contactId")
     suspend fun removeDelivererFromCompany(companyId: Int, contactId: String)
 

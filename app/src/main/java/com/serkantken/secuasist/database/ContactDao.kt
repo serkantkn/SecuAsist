@@ -24,11 +24,11 @@ interface ContactDao {
     @Delete
     suspend fun delete(contact: Contact)
 
-    @Query("DELETE FROM Contacts WHERE contactId = :id")
-    suspend fun deleteById(id: String)
-
     @Query("DELETE FROM Contacts")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM Contacts WHERE contactId = :id")
+    suspend fun deleteById(id: String)
 
     @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
     fun getAllContacts(): LiveData<List<Contact>>
@@ -39,11 +39,11 @@ interface ContactDao {
     @Query("SELECT * FROM Contacts WHERE contactId IN (:contactIds)")
     fun getContactsByIdsAsFlow(contactIds: List<String>): Flow<List<Contact>>
 
-    @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
-    suspend fun getAllContactsAsList(): List<Contact>
-
     @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
     fun getAllContactsAsFlow(): Flow<List<Contact>>
+
+    @Query("SELECT * FROM Contacts ORDER BY contactName ASC")
+    fun getAllContactsSync(): List<Contact>
     
     @Query("SELECT * FROM Contacts ORDER BY lastCallTimestamp DESC")
     fun getAllContactsByRecentAsFlow(): Flow<List<Contact>>

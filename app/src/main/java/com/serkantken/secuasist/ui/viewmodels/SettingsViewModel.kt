@@ -7,11 +7,15 @@ import android.provider.Settings
 import android.telecom.TelecomManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.serkantken.secuasist.SecuAsistApplication
 import com.serkantken.secuasist.data.AppTheme
 import com.serkantken.secuasist.data.ThemePreferences
+import com.serkantken.secuasist.utils.BackupManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -58,12 +62,67 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _preferredGate = MutableStateFlow(prefs.getString("preferred_gate", "A") ?: "A")
     val preferredGate: StateFlow<String> = _preferredGate
 
+    private val _floatingWidgetEnabled = MutableStateFlow(prefs.getBoolean("floating_widget_enabled", true))
+    val floatingWidgetEnabled: StateFlow<Boolean> = _floatingWidgetEnabled
+
     val currentTheme: StateFlow<AppTheme> = themePreferences.theme
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AppTheme.SYSTEM
         )
+
+    // Server Health Status
+    data class ServerStatus(
+        val cpuUsage: String = "0%",
+        val ramUsage: String = "0 MB",
+        val uptime: String = "00:00:00",
+        val connectedDevices: Int = 0
+    )
+    private val _serverStatus = MutableStateFlow(ServerStatus())
+    val serverStatus: StateFlow<ServerStatus> = _serverStatus
+
+    fun updateServerStatus(status: ServerStatus) {
+        _serverStatus.value = status
+    }
+
+    init {
+        val app = getApplication<SecuAsistApplication>()
+        app.syncManager.serverStatus
+            .onEach { json ->
+                json?.let {
+                    _serverStatus.value = ServerStatus(
+                        cpuUsage = it.get("cpu").asString,
+                        ramUsage = it.get("ram").asString,
+                        uptime = it.get("uptime").asString,
+                        connectedDevices = it.get("clients").asInt
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    fun refreshServerStatus() {
+        val app = getApplication<SecuAsistApplication>()
+        app.syncManager.requestServerStatus()
+    }
+
+    // Backup & Restore
+    private val backupManager = BackupManager(application)
+
+    fun exportBackup(uri: android.net.Uri, onResult: (Result<Int>) -> Unit) {
+        viewModelScope.launch {
+            val result = backupManager.exportToUri(uri)
+            onResult(result)
+        }
+    }
+
+    fun importBackup(uri: android.net.Uri, onResult: (Result<Int>) -> Unit) {
+        viewModelScope.launch {
+            val result = backupManager.importFromUri(uri)
+            onResult(result)
+        }
+    }
 
     fun updateTheme(theme: AppTheme) {
         viewModelScope.launch {
@@ -84,6 +143,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updatePreferredGate(gate: String) {
         _preferredGate.value = gate
         prefs.edit().putString("preferred_gate", gate).apply()
+    }
+    
+    fun updateFloatingWidgetEnabled(enabled: Boolean) {
+        _floatingWidgetEnabled.value = enabled
+        prefs.edit().putBoolean("floating_widget_enabled", enabled).apply()
     }
     
     fun updateDeviceName(name: String) {

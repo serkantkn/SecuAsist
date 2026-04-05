@@ -24,14 +24,29 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
     private val cargoCompanyDao = app.db.cargoCompanyDao()
     private val villaDao = app.db.villaDao()
     private val villaContactDao = app.db.villaContactDao()
+    private val syncLogDao = app.db.syncLogDao()
+
+    // Offline Sync Count
+    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        0
+    )
 
     // --- New Entry Tab State ---
     val companies = cargoCompanyDao.getAllCargoCompanies()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Expose WebSocket Connection State
+    val connectionState = app.wsClient.connectionState.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        com.serkantken.secuasist.network.ConnectionState.DISCONNECTED
+    )
+
     init {
         viewModelScope.launch {
-            if (cargoCompanyDao.getAllCompaniesAsList().isEmpty()) {
+            if (cargoCompanyDao.getAllSync().isEmpty()) {
                 val defaults = listOf(
                     "Yurtiçi Kargo", "Aras Kargo", "MNG Kargo", "Sürat Kargo", 
                     "PTT Kargo", "UPS Kargo", "DHL", "HepsiJet", 
@@ -318,7 +333,7 @@ class CargoViewModel(application: Application) : AndroidViewModel(application) {
         // Ensure villas are loaded
         var villas = allVillas.value
         if (villas.isEmpty()) {
-             villas = villaDao.getAllVillasAsList()
+             villas = villaDao.getAllVillasSync()
         }
         val allVillasMap = villas.associateBy { it.villaNo } 
         

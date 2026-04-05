@@ -18,10 +18,14 @@ class CallReceiver : BroadcastReceiver() {
         val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
         val isDefaultDialer = telecomManager.defaultDialerPackage == context.packageName
 
+        val prefs = context.getSharedPreferences("secuasist_prefs", Context.MODE_PRIVATE)
+        val isFloatingWidgetEnabled = prefs.getBoolean("floating_widget_enabled", true)
+
         // If we are the default dialer, the InCallService will handle the UI.
         // We only show the floating widget if we are NOT the default dialer.
-        if (isDefaultDialer) {
-            Log.d("CallReceiver", "App is default dialer, skipping floating widget fallback.")
+        // Or if the floating widget is explicitly disabled in settings.
+        if (isDefaultDialer || !isFloatingWidgetEnabled) {
+            Log.d("CallReceiver", "App is default dialer or floating widget deactivated, skipping fallback.")
             return
         }
 
@@ -45,8 +49,11 @@ class CallReceiver : BroadcastReceiver() {
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
+                // The FloatingWidgetService handles its own lifecycle with a 2s delay
+                // to show the disconnected state. We don't stop it immediately here.
                 val serviceIntent = Intent(context, FloatingWidgetService::class.java)
-                context.stopService(serviceIntent)
+                serviceIntent.putExtra("ACTION_STOP_WITH_DELAY", true)
+                context.startService(serviceIntent)
             }
         }
     }

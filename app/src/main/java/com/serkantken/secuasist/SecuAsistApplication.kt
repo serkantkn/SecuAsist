@@ -35,12 +35,14 @@ class SecuAsistApplication : Application() {
     private lateinit var prefs: SharedPreferences
 
     lateinit var syncManager: com.serkantken.secuasist.sync.SyncManager
+    lateinit var updateManager: com.serkantken.secuasist.utils.UpdateManager
     
     override fun onCreate() {
         super.onCreate()
         
         prefs = getSharedPreferences("secuasist_prefs", Context.MODE_PRIVATE)
         db = AppDatabase.getDatabase(this)
+        updateManager = com.serkantken.secuasist.utils.UpdateManager(this)
 
         val savedIp = prefs.getString("server_ip", "10.0.2.2") ?: "10.0.2.2"
         val savedPort = try {

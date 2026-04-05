@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -45,6 +47,8 @@ import kotlin.math.sqrt
 import com.serkantken.secuasist.services.CallManager
 import com.serkantken.secuasist.ui.viewmodels.CallViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 
 @Composable
 fun CallScreen(
@@ -52,6 +56,7 @@ fun CallScreen(
     viewModel: CallViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val call = uiState.call
     val callState = uiState.callState
     
@@ -86,31 +91,60 @@ fun CallScreen(
         else -> "Bağlanıyor..."
     }
 
-    val infiniteTransition = rememberInfiniteTransition()
-    val rotationAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
+    val accentBlue = Color(0xFF93C5FD)
+    val borderColor = Color(0xFF1E293B)
+
+    val backgroundColor by animateColorAsState(
+        targetValue = when (callState) {
+            Call.STATE_ACTIVE -> Color(0xFF065F46) // Emerald 800 (Dark Green)
+            Call.STATE_DISCONNECTED -> Color(0xFF991B1B) // Red 800 (Dark Red)
+            else -> Color(0xFF0C1222) // Default Blue Slate
+        },
+        animationSpec = tween(durationMillis = 600)
+    )
+
+    // Dynamic Status & Navigation Bar Coloring
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (context as android.app.Activity).window
+            window.statusBarColor = backgroundColor.toArgb()
+            window.navigationBarColor = backgroundColor.toArgb()
+            
+            // Ensure icons stay readable (white) since our bgs are dark
+            androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+        }
+    }
+
+    val contentColor by animateColorAsState(
+        targetValue = if (callState == Call.STATE_ACTIVE || callState == Call.STATE_DISCONNECTED) Color.White else accentBlue,
+        animationSpec = tween(durationMillis = 600)
+    )
+
+    val titleColor by animateColorAsState(
+        targetValue = if (callState == Call.STATE_ACTIVE || callState == Call.STATE_DISCONNECTED) Color.White else Color(0xFFF1F5F9),
+        animationSpec = tween(durationMillis = 600)
+    )
+
+    val labelColor by animateColorAsState(
+        targetValue = if (callState == Call.STATE_ACTIVE || callState == Call.STATE_DISCONNECTED) Color.White.copy(alpha = 0.7f) else Color(0xFF475569),
+        animationSpec = tween(durationMillis = 600)
     )
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Rotating Gradient Background
+        // Dark Mockup Background
         Box(
             modifier = Modifier
-                .requiredSize(2000.dp)
-                .align(Alignment.Center)
-                .graphicsLayer { rotationZ = rotationAngle }
+                .fillMaxSize()
                 .background(
-                    Brush.linearGradient(
+                    Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFE53935), // Red top
-                            Color(0xFF8E24AA), // Pinkish Purple center
-                            Color(0xFFFF9800)  // Orange bottom
+                            backgroundColor,
+                            backgroundColor.copy(alpha = 0.8f),
+                            backgroundColor
                         )
                     )
                 )
@@ -122,103 +156,85 @@ fun CallScreen(
                 .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(60.dp))
-            
-            // --- UNIFIED CALL INFO (Matches Floating Widget Design) ---
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // --- "GELEN ÇAĞRI" Label ---
+            Surface(
+                color = Color.White.copy(alpha = 0.15f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
             ) {
-                if (uiState.villa != null) {
-                    // VİLLA NO
-                    Text(
-                        text = "VİLLA: ${uiState.villa!!.villaNo}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-
-                // İSİM / NUMARA
-                Text(
-                    text = displayName.uppercase(),
-                    color = Color.White,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                if (uiState.villa != null) {
-                    // SOKAK
-                    Text(
-                        text = uiState.villa!!.villaStreet ?: "Bilinmeyen Sokak",
-                        color = Color.White.copy(alpha = 0.9f),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-
-                // Eyalet / Zamanlayıcı
-                Text(
-                    text = stateText,
-                    color = Color.White.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            if (uiState.missedCargoCompanies.isNotEmpty()) {
-                val companiesStr = uiState.missedCargoCompanies.joinToString(", ")
-                Surface(
-                    color = Color.White.copy(alpha = 0.2f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(top = 8.dp)
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Text("📞", fontSize = 12.sp)
                     Text(
-                        text = "⚠ $companiesStr KARGO UYARISI",
-                        color = Color.Red,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        text = stateText.uppercase(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 2.sp
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // --- Villa No ---
+            if (uiState.villa != null) {
+                Text(
+                    text = "Villa ${uiState.villa!!.villaNo}",
+                    color = titleColor,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // --- İsim ---
+            Text(
+                text = displayName,
+                color = titleColor,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
+            Spacer(modifier = Modifier.weight(0.15f))
             
-            // --- Navigation / Bottom Details ---
+            // --- Bilgi Kartı ---
             if (uiState.villa != null && !showKeypad) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(horizontal = 16.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                Surface(
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(0.85f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "VARDIYA / YOL TARİFİ", 
-                            style = MaterialTheme.typography.labelSmall, 
-                            color = Color.White.copy(alpha = 0.6f),
-                            letterSpacing = 2.sp
+                        InfoRow(
+                            label = "Sokak", 
+                            value = uiState.villa!!.villaStreet ?: "Bilinmeyen Sokak", 
+                            valueColor = contentColor,
+                            labelColor = labelColor
                         )
-                        Text(
-                            text = uiState.villa!!.villaNavigationA.takeIf { !it.isNullOrBlank() } ?: "Yol tarifi belirtilmemiş.", 
-                            style = MaterialTheme.typography.bodyLarge, 
-                            color = Color.White,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        HorizontalDivider(color = borderColor, thickness = 0.5.dp)
+                        
+                        // Preferred Gate Logic for Navigation
+                        val prefs = context.getSharedPreferences("secuasist_prefs", android.content.Context.MODE_PRIVATE)
+                        val preferredGate = prefs.getString("preferred_gate", "A") ?: "A"
+                        val currentNav = if (preferredGate == "A") uiState.villa!!.villaNavigationA else uiState.villa!!.villaNavigationB
+                        
+                        InfoRow(
+                            label = "Navigasyon (${preferredGate})", 
+                            value = currentNav.takeIf { !it.isNullOrBlank() } ?: "Belirtilmedi", 
+                            valueColor = contentColor,
+                            labelColor = labelColor
                         )
                     }
                 }
@@ -226,14 +242,35 @@ fun CallScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             }
 
+            // --- Kargo Uyarısı ---
+            if (uiState.missedCargoCompanies.isNotEmpty()) {
+                val companiesStr = uiState.missedCargoCompanies.joinToString(", ")
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(0.85f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📦 Bekleyen Kargo", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(companiesStr, color = Color(0xFFF59E0B), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+
             Spacer(modifier = Modifier.weight(1f))
             
             if (showKeypad && callState == Call.STATE_ACTIVE) {
                 DtmfKeypad(modifier = Modifier.padding(bottom = 24.dp))
             }
 
-            // Feature Buttons Row
-            if (callState == Call.STATE_ACTIVE) {
+            // Feature Buttons Row (Now enabled during ringing as well)
+            if (callState == Call.STATE_ACTIVE || callState == Call.STATE_RINGING || callState == Call.STATE_DIALING) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -247,7 +284,8 @@ fun CallScreen(
                     FeatureButton(
                         icon = Icons.Outlined.Dialpad,
                         text = "Tuş Takımı",
-                        isActive = showKeypad,
+                        isActive = showKeypad && callState == Call.STATE_ACTIVE, // Keypad only usable while active
+                        enabled = callState == Call.STATE_ACTIVE,
                         onClick = { showKeypad = !showKeypad }
                     )
                     FeatureButton(
@@ -306,14 +344,24 @@ fun FeatureButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
     isActive: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val backgroundColor = if (isActive) Color.White else Color.DarkGray.copy(alpha = 0.3f)
-    val iconColor = if (isActive) Color.Black else Color.White
+    val backgroundColor = when {
+        !enabled -> Color.DarkGray.copy(alpha = 0.1f)
+        isActive -> Color.White
+        else -> Color.DarkGray.copy(alpha = 0.3f)
+    }
+    val iconColor = when {
+        !enabled -> Color.Gray
+        isActive -> Color.Black
+        else -> Color.White
+    }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(
             onClick = onClick,
+            enabled = enabled,
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
@@ -322,7 +370,7 @@ fun FeatureButton(
             Icon(icon, contentDescription = text, tint = iconColor, modifier = Modifier.size(28.dp))
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = text, color = Color.LightGray, fontSize = 12.sp)
+        Text(text = text, color = if (enabled) Color.LightGray else Color.Gray, fontSize = 12.sp)
     }
 }
 
@@ -491,5 +539,32 @@ fun DtmfKey(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun InfoRow(
+    label: String, 
+    value: String, 
+    valueColor: Color,
+    labelColor: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label, 
+            color = labelColor, 
+            fontSize = 15.sp, 
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = value, 
+            color = valueColor, 
+            fontSize = 15.sp, 
+            fontWeight = FontWeight.Bold
+        )
     }
 }
