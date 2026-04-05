@@ -1,3 +1,17 @@
+import sys
+
+# --- EMERGENCY COMPATIBILITY GUARD ---
+try:
+    import fastapi
+    import uvicorn
+    import httpx
+    import websockets
+except ImportError as e:
+    print(f"\n[HATA] Kutuphane eksik: {e}")
+    print("Lütfen 'baslat.bat' calistirarak kurulumu tamamlayin veya 'pip install -r requirements.txt' komutunu calistirin.")
+    input("Kapatmak icin Enter'a basin...")
+    sys.exit(1)
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Request, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -15,12 +29,8 @@ import io
 import random
 from datetime import datetime
 import socket
-import sys
 import zipfile
-import io
-import httpx
 import shutil
-import os
 
 def get_local_ip():
     try:
@@ -230,7 +240,7 @@ except Exception as e:
     logger.critical(f"FATAL: Database initialization failed: {e}")
     sys.exit(1)
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
 
 import asyncio
