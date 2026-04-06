@@ -312,19 +312,24 @@ async def run_manual_update_check() -> dict:
         logger.info("🔍 Checking for updates on GitHub...")
         async with httpx.AsyncClient() as client:
             response = await client.get(REPO_URL, headers={"User-Agent": "SecuAsist-Server"})
+            logger.info(f"✅ GitHub response received: {response.status_code}")
             if response.status_code == 200:
                 data = response.json()
                 raw_tag = data.get("tag_name", "")
                 latest_tag = raw_tag[1:] if raw_tag.startswith("v") else raw_tag
+                logger.info(f"📊 Version Comparison: Latest: {latest_tag} | Current: {VERSION}")
+                
                 if latest_tag and latest_tag > VERSION:
                     zip_url = data.get("zipball_url")
                     if zip_url:
                         logger.warning(f"🚀 New version found: v{latest_tag}! Starting auto-update...")
                         asyncio.create_task(perform_update(zip_url))
                         return {"status": "updating", "version": latest_tag}
+                
+                logger.info("✅ System is already up to date.")
                 return {"status": "up-to-date", "version": VERSION}
             elif response.status_code == 404:
-                logger.info("Yayımlanmış bir güncelleme bulunamadı (Repo veya Release yok).")
+                logger.info("ℹ️ No stable release published yet (404).")
                 return {"status": "up-to-date", "version": VERSION, "message": "No stable release published yet."}
             else:
                 logger.debug(f"Update check skipped ({response.status_code})")
