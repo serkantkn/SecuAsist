@@ -50,6 +50,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "secuasist.db")
 INDEX_PATH = os.path.join(BASE_DIR, "templates", "index.html")
 
+# --- GLOBAL STATE ---
+connected_clients = {}  # DeviceId -> WebSocket
+web_log_clients = set() # Set of FastAPI WebSocket objects
+system_logs = []         # In-memory log buffer (last 500)
+START_TIME = time.time() # Server start time
+MAX_LOG_BUFFER = 500
+VERSION = "1.0.3"
+REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
+
 app = FastAPI(title="SecuAsist Dashboard API")
 
 # --- DATABASE MODELS ---
@@ -239,16 +248,6 @@ try:
 except Exception as e:
     logger.critical(f"FATAL: Database initialization failed: {e}")
     sys.exit(1)
-
-connected_clients = {} # DeviceId -> WebSocket
-web_log_clients = set() # Set of FastAPI WebSocket objects
-system_logs = [] # In-memory log buffer (last 500)
-START_TIME = time.time() # Server start time
-MAX_LOG_BUFFER = 500
-VERSION = "1.0.3"
-REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/latest"
-
-import asyncio
 
 def add_system_log(level, category, message, details=None):
     """Add a log entry to the in-memory buffer and broadcast to web clients."""
