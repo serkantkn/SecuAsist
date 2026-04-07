@@ -14,7 +14,7 @@ except ImportError as e:
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Request, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 import websockets
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -61,30 +61,35 @@ REPO_URL = "https://api.github.com/repos/serkantkn/SecuAsist-Server/releases/lat
 
 app = FastAPI(title="SecuAsist Dashboard API")
 
-# --- DATABASE MODELS ---
+# --- VERİTABANI MODELLERİ ---
 
 class IDBase(BaseModel):
     updatedAt: Optional[int] = None
     deviceId: Optional[str] = "Sunucu"
 
-class Villa(IDBase):
-    villaId: Optional[int] = None
-    villaNo: int
-    villaStreet: Optional[str] = ""
-    villaNavigationA: Optional[str] = ""
-    villaNavigationB: Optional[str] = ""
-    villaNotes: Optional[str] = ""
-    isVillaUnderConstruction: Optional[int] = 0
-    isVillaSpecial: Optional[int] = 0
-    isVillaRental: Optional[int] = 0
-    isVillaCallFromHome: Optional[int] = 0
-    isVillaCallForCargo: Optional[int] = 1
-    isVillaEmpty: Optional[int] = 0
+class Unit(IDBase):
+    """Evrensel birim modeli: Villa, Blok, Kat, Daire, Mağaza hepsini kapsar."""
+    unitId: Optional[int] = None
+    parentId: Optional[int] = None       # Hiyerarşi için (örn: Dairenin ait olduğu Kat)
+    unitType: Optional[str] = "VILLA"    # BLOCK, FLOOR, VILLA, APARTMENT, SHOP
+    unitNo: Optional[int] = None
+    unitName: Optional[str] = ""
+    street: Optional[str] = ""
+    navigationA: Optional[str] = ""
+    navigationB: Optional[str] = ""
+    notes: Optional[str] = ""
+    floorNumber: Optional[int] = None
+    isUnderConstruction: Optional[int] = 0
+    isSpecial: Optional[int] = 0
+    isRental: Optional[int] = 0
+    isCallFromHome: Optional[int] = 0
+    isCallForCargo: Optional[int] = 1
+    isEmpty: Optional[int] = 0
     isCallOnlyMobile: Optional[int] = 0
 
 class Contact(IDBase):
     contactId: str
-    villaId: Optional[int] = None
+    unitId: Optional[int] = None
     contactName: Optional[str] = ""
     contactPhone: Optional[str] = ""
     contactType: Optional[str] = "Diğer"
@@ -98,7 +103,7 @@ class Company(IDBase):
 class Cargo(IDBase):
     cargoId: Optional[int] = None
     companyId: Optional[int] = None
-    villaId: Optional[int] = None
+    unitId: Optional[int] = None
     whoCalled: Optional[str] = None
     isCalled: Optional[int] = 0
     isMissed: Optional[int] = 0
@@ -118,7 +123,7 @@ class Camera(IDBase):
 
 class Intercom(IDBase):
     intercomId: str
-    villaId: Optional[int] = None
+    unitId: Optional[int] = None
     intercomName: Optional[str] = ""
     isWorking: Optional[int] = 1
     lastChecked: Optional[int] = None
@@ -150,40 +155,93 @@ def insert_db(sql, params=()):
 
 run_db = insert_db
 
+# --- PROJE YAPILANDIRMASI ---
+
+# Proje tipleri ve her tipin sahip olduğu modüller
+PROJECT_TYPES = {
+    "VILLA": {
+        "label": "Villa Sitesi",
+        "unit_label": "Villa",
+        "unit_label_plural": "Villalar",
+        "modules": ["units", "contacts", "cargos", "cameras", "intercoms"],
+        "has_hierarchy": False,  # Villalar düz listedir (blok/kat yok)
+    },
+    "BLOCK": {
+        "label": "Blok Sitesi",
+        "unit_label": "Daire",
+        "unit_label_plural": "Daireler",
+        "modules": ["units", "contacts", "cargos", "cameras", "intercoms"],
+        "has_hierarchy": True,   # Blok > Kat > Daire hiyerarşisi
+    },
+    "MALL": {
+        "label": "AVM / İş Merkezi",
+        "unit_label": "Mağaza",
+        "unit_label_plural": "Mağazalar",
+        "modules": ["units", "contacts", "cameras", "intercoms"],  # Kargo YOK
+        "has_hierarchy": True,   # Blok > Kat > Mağaza hiyerarşisi
+    },
+}
+
+def get_project_config():
+    """Veritabanından proje yapılandırmasını oku. Kurulum yapılmamışsa None döndür."""
+    try:
+        row = query_db("SELECT * FROM config WHERE key = 'project_type'", one=True)
+        if row:
+            ptype = dict(row).get("value", "VILLA")
+            config = PROJECT_TYPES.get(ptype, PROJECT_TYPES["VILLA"]).copy()
+            config["project_type"] = ptype
+            # Site adını da oku
+            name_row = query_db("SELECT * FROM config WHERE key = 'site_name'", one=True)
+            config["site_name"] = dict(name_row).get("value", "SecuAsist") if name_row else "SecuAsist"
+            config["is_configured"] = True
+            return config
+        return {"is_configured": False}
+    except Exception:
+        return {"is_configured": False}
+
 def init_db():
     schema = """
-    CREATE TABLE IF NOT EXISTS villas (
-        villaId INTEGER PRIMARY KEY AUTOINCREMENT,
-        villaNo INTEGER,
-        villaStreet TEXT,
-        villaNavigationA TEXT,
-        villaNavigationB TEXT,
-        villaNotes TEXT,
-        isVillaUnderConstruction INTEGER DEFAULT 0,
-        isVillaSpecial INTEGER DEFAULT 0,
-        isVillaRental INTEGER DEFAULT 0,
-        isVillaCallFromHome INTEGER DEFAULT 0,
-        isVillaCallForCargo INTEGER DEFAULT 1,
-        isVillaEmpty INTEGER DEFAULT 0,
+    CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+    CREATE TABLE IF NOT EXISTS units (
+        unitId INTEGER PRIMARY KEY AUTOINCREMENT,
+        parentId INTEGER,
+        unitType TEXT DEFAULT 'VILLA',
+        unitNo INTEGER,
+        unitName TEXT,
+        street TEXT,
+        navigationA TEXT,
+        navigationB TEXT,
+        notes TEXT,
+        floorNumber INTEGER,
+        isUnderConstruction INTEGER DEFAULT 0,
+        isSpecial INTEGER DEFAULT 0,
+        isRental INTEGER DEFAULT 0,
+        isCallFromHome INTEGER DEFAULT 0,
+        isCallForCargo INTEGER DEFAULT 1,
+        isEmpty INTEGER DEFAULT 0,
         isCallOnlyMobile INTEGER DEFAULT 0,
         updatedAt INTEGER,
-        deviceId TEXT
+        deviceId TEXT,
+        FOREIGN KEY(parentId) REFERENCES units(unitId) ON DELETE CASCADE
     );
-    CREATE TABLE IF NOT EXISTS villaContacts (
-        villaId INTEGER,
+    CREATE TABLE IF NOT EXISTS unitContacts (
+        unitId INTEGER,
         contactId TEXT,
         isRealOwner INTEGER,
         contactType TEXT,
         notes TEXT,
         updatedAt INTEGER,
         deviceId TEXT,
-        PRIMARY KEY(villaId, contactId),
-        FOREIGN KEY(villaId) REFERENCES villas(villaId) ON DELETE CASCADE,
+        PRIMARY KEY(unitId, contactId),
+        FOREIGN KEY(unitId) REFERENCES units(unitId) ON DELETE CASCADE,
         FOREIGN KEY(contactId) REFERENCES contacts(contactId) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS contacts (
         contactId TEXT PRIMARY KEY,
-        villaId INTEGER,
+        unitId INTEGER,
         contactName TEXT,
         contactPhone TEXT,
         contactType TEXT,
@@ -194,7 +252,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS cargos (
         cargoId INTEGER PRIMARY KEY AUTOINCREMENT,
         companyId INTEGER,
-        villaId INTEGER,
+        unitId INTEGER,
         whoCalled TEXT,
         isCalled INTEGER DEFAULT 0,
         isMissed INTEGER DEFAULT 0,
@@ -206,7 +264,7 @@ def init_db():
         updatedAt INTEGER,
         deviceId TEXT,
         FOREIGN KEY(companyId) REFERENCES companies(companyId) ON DELETE CASCADE,
-        FOREIGN KEY(villaId) REFERENCES villas(villaId) ON DELETE CASCADE
+        FOREIGN KEY(unitId) REFERENCES units(unitId) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS companies (
         companyId INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,17 +285,18 @@ def init_db():
     );
     CREATE TABLE IF NOT EXISTS intercoms (
         intercomId TEXT PRIMARY KEY,
-        villaId INTEGER,
+        unitId INTEGER,
         intercomName TEXT,
         isWorking INTEGER DEFAULT 1,
         lastChecked INTEGER,
         notes TEXT,
         updatedAt INTEGER,
         deviceId TEXT,
-        FOREIGN KEY(villaId) REFERENCES villas(villaId) ON DELETE CASCADE
+        FOREIGN KEY(unitId) REFERENCES units(unitId) ON DELETE CASCADE
     );
     """
     with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(schema)
         conn.commit()
     logger.info("✅ Database initialized successfully.")
@@ -387,22 +446,23 @@ async def handle_sync_msg(websocket, msg):
         device_name = getattr(websocket, 'device_name', 'Unknown')
         logger.info(f"🔄 Full sync requested by {device_name}")
         add_system_log("INFO", "SYNC", f"Tam senkronizasyon talebi: {device_name}")
-        villas = [dict(r) for r in query_db("SELECT * FROM villas")]
+        units = [dict(r) for r in query_db("SELECT * FROM units")]
         contacts = [dict(r) for r in query_db("SELECT * FROM contacts")]
         cargos = [dict(r) for r in query_db("SELECT * FROM cargos")]
         companies = [dict(r) for r in query_db("SELECT * FROM companies")]
         cameras = [dict(r) for r in query_db("SELECT * FROM cameras")]
         intercoms = [dict(r) for r in query_db("SELECT * FROM intercoms")]
-        villaContacts = [dict(r) for r in query_db("SELECT * FROM villaContacts")]
+        unitContacts = [dict(r) for r in query_db("SELECT * FROM unitContacts")]
+        config = get_project_config()
         
-        logger.info(f"📊 Syncing: {len(villas)} Villas, {len(contacts)} Contacts, {len(villaContacts)} Mappings")
+        logger.info(f"📊 Syncing: {len(units)} Units, {len(contacts)} Contacts, {len(unitContacts)} Mappings")
         
         await websocket.send(json.dumps({
             "type": "FULL_SYNC",
             "payload": {
-                "villas": villas, "contacts": contacts,
+                "units": units, "contacts": contacts,
                 "cargos": cargos, "companies": companies, "cameras": cameras, "intercoms": intercoms,
-                "villaContacts": villaContacts, "companyDeliverers": [], "cameraVisibleVillas": []
+                "unitContacts": unitContacts, "config": config
             }
         }))
         return
@@ -421,45 +481,45 @@ async def handle_sync_msg(websocket, msg):
         if type_ == "ADD_CONTACT":
             run_db("INSERT OR REPLACE INTO contacts (contactId, contactName, contactPhone, contactType, updatedAt) VALUES (?, ?, ?, ?, ?)",
                    (payload.get("contactId"), payload.get("contactName"), payload.get("contactPhone"), payload.get("contactType"), payload.get("updatedAt")))
-            if payload.get("villaId"):
-                run_db("UPDATE contacts SET villaId=? WHERE contactId=?", (payload.get("villaId"), payload.get("contactId")))
+            if payload.get("unitId"):
+                run_db("UPDATE contacts SET unitId=? WHERE contactId=?", (payload.get("unitId"), payload.get("contactId")))
         elif type_ == "UPDATE_CONTACT":
             run_db("UPDATE contacts SET contactName=?, contactPhone=?, contactType=?, updatedAt=? WHERE contactId=?",
                    (payload.get("contactName"), payload.get("contactPhone"), payload.get("contactType"), payload.get("updatedAt"), payload.get("contactId")))
-            if "villaId" in payload:
-                run_db("UPDATE contacts SET villaId=? WHERE contactId=?", (payload.get("villaId"), payload.get("contactId")))
+            if "unitId" in payload:
+                run_db("UPDATE contacts SET unitId=? WHERE contactId=?", (payload.get("unitId"), payload.get("contactId")))
         elif type_ == "DELETE_CONTACT":
             run_db("DELETE FROM contacts WHERE contactId=?", (payload.get("contactId"),))
-        elif type_ == "ADD_VILLA_CONTACT":
-            run_db("INSERT OR REPLACE INTO villaContacts (villaId, contactId, isRealOwner, contactType, notes, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
-                   (payload.get("villaId"), payload.get("contactId"), payload.get("isRealOwner") or 0, payload.get("contactType"), payload.get("notes"), payload.get("updatedAt")))
-            run_db("UPDATE contacts SET villaId=? WHERE contactId=?", (payload.get("villaId"), payload.get("contactId")))
-        elif type_ == "DELETE_VILLA_CONTACT":
-            run_db("DELETE FROM villaContacts WHERE villaId=? AND contactId=?", (payload.get("villaId"), payload.get("contactId")))
-            run_db("UPDATE contacts SET villaId=NULL WHERE contactId=? AND villaId=?", (payload.get("contactId"), payload.get("villaId")))
-        elif type_ == "ADD_VILLA":
-            sql = """INSERT OR REPLACE INTO villas (villaId, villaNo, villaStreet, villaNavigationA, villaNavigationB, villaNotes, 
-                     isVillaUnderConstruction, isVillaSpecial, isVillaRental, isVillaCallFromHome, 
-                     isVillaCallForCargo, isVillaEmpty, isCallOnlyMobile, updatedAt, deviceId) 
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-            run_db(sql, (payload.get("villaId"), payload.get("villaNo"), payload.get("villaStreet"), 
-                         payload.get("villaNavigationA"), payload.get("villaNavigationB"), payload.get("villaNotes"), 
-                         payload.get("isVillaUnderConstruction") or 0, payload.get("isVillaSpecial") or 0,
-                         payload.get("isVillaRental") or 0, payload.get("isVillaCallFromHome") or 0, 
-                         payload.get("isVillaCallForCargo") or 1, payload.get("isVillaEmpty") or 0, 
+        elif type_ == "ADD_UNIT_CONTACT":
+            run_db("INSERT OR REPLACE INTO unitContacts (unitId, contactId, isRealOwner, contactType, notes, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+                   (payload.get("unitId"), payload.get("contactId"), payload.get("isRealOwner") or 0, payload.get("contactType"), payload.get("notes"), payload.get("updatedAt")))
+            run_db("UPDATE contacts SET unitId=? WHERE contactId=?", (payload.get("unitId"), payload.get("contactId")))
+        elif type_ == "DELETE_UNIT_CONTACT":
+            run_db("DELETE FROM unitContacts WHERE unitId=? AND contactId=?", (payload.get("unitId"), payload.get("contactId")))
+            run_db("UPDATE contacts SET unitId=NULL WHERE contactId=? AND unitId=?", (payload.get("contactId"), payload.get("unitId")))
+        elif type_ == "ADD_UNIT":
+            sql = """INSERT OR REPLACE INTO units (unitId, parentId, unitType, unitNo, unitName, street, navigationA, navigationB, notes, floorNumber,
+                     isUnderConstruction, isSpecial, isRental, isCallFromHome, isCallForCargo, isEmpty, isCallOnlyMobile, updatedAt, deviceId) 
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+            run_db(sql, (payload.get("unitId"), payload.get("parentId"), payload.get("unitType", "VILLA"), payload.get("unitNo"), payload.get("unitName"),
+                         payload.get("street"), payload.get("navigationA"), payload.get("navigationB"), payload.get("notes"), payload.get("floorNumber"),
+                         payload.get("isUnderConstruction") or 0, payload.get("isSpecial") or 0,
+                         payload.get("isRental") or 0, payload.get("isCallFromHome") or 0, 
+                         payload.get("isCallForCargo") or 1, payload.get("isEmpty") or 0, 
                          payload.get("isCallOnlyMobile") or 0, payload.get("updatedAt"), payload.get("deviceId") or "Mobil"))
-        elif type_ == "UPDATE_VILLA":
-            sql = """UPDATE villas SET villaNo=?, villaStreet=?, villaNavigationA=?, villaNavigationB=?, villaNotes=?, 
-                     isVillaUnderConstruction=?, isVillaSpecial=?, isVillaRental=?, isVillaCallFromHome=?, 
-                     isVillaCallForCargo=?, isVillaEmpty=?, isCallOnlyMobile=?, updatedAt=?, deviceId=? 
-                     WHERE villaId=?"""
-            run_db(sql, (payload.get("villaNo"), payload.get("villaStreet"), payload.get("villaNavigationA"), 
-                         payload.get("villaNavigationB"), payload.get("villaNotes"), 
-                         payload.get("isVillaUnderConstruction") or 0, payload.get("isVillaSpecial") or 0,
-                         payload.get("isVillaRental") or 0, payload.get("isVillaCallFromHome") or 0, 
-                         payload.get("isVillaCallForCargo") or 1, payload.get("isVillaEmpty") or 0, 
+        elif type_ == "UPDATE_UNIT":
+            sql = """UPDATE units SET parentId=?, unitType=?, unitNo=?, unitName=?, street=?, navigationA=?, navigationB=?, notes=?, floorNumber=?,
+                     isUnderConstruction=?, isSpecial=?, isRental=?, isCallFromHome=?, isCallForCargo=?, isEmpty=?, isCallOnlyMobile=?, updatedAt=?, deviceId=? 
+                     WHERE unitId=?"""
+            run_db(sql, (payload.get("parentId"), payload.get("unitType"), payload.get("unitNo"), payload.get("unitName"),
+                         payload.get("street"), payload.get("navigationA"), payload.get("navigationB"), payload.get("notes"), payload.get("floorNumber"),
+                         payload.get("isUnderConstruction") or 0, payload.get("isSpecial") or 0,
+                         payload.get("isRental") or 0, payload.get("isCallFromHome") or 0, 
+                         payload.get("isCallForCargo") or 1, payload.get("isEmpty") or 0, 
                          payload.get("isCallOnlyMobile") or 0, payload.get("updatedAt"), payload.get("deviceId") or "Mobil",
-                         payload.get("villaId")))
+                         payload.get("unitId")))
+        elif type_ == "DELETE_UNIT":
+            run_db("DELETE FROM units WHERE unitId=?", (payload.get("unitId"),))
     except Exception as e:
         logger.error(f"Error persisting {type_}: {e}")
         add_system_log("ERROR", "SYNC", f"Veri kaydetme hatası: {type_}", {"error": str(e)})
@@ -516,6 +576,29 @@ async def get_index():
 async def get_version():
     return {"version": VERSION, "updatedAt": os.path.getmtime(__file__)}
 
+@app.get("/api/v1/config")
+async def get_config():
+    """Proje yapılandırmasını döndür. Kurulum yapılmamışsa is_configured=False gelir."""
+    return get_project_config()
+
+class SetupRequest(BaseModel):
+    project_type: str  # VILLA, BLOCK, MALL
+    site_name: Optional[str] = "SecuAsist"
+
+@app.post("/api/v1/setup")
+async def setup_project(req: SetupRequest):
+    """İlk kurulum sihirbazı: Proje tipini ve site adını ayarla."""
+    if req.project_type not in PROJECT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Geçersiz proje tipi: {req.project_type}. Geçerli tipler: {list(PROJECT_TYPES.keys())}")
+    
+    run_db("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("project_type", req.project_type))
+    run_db("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("site_name", req.site_name or "SecuAsist"))
+    
+    logger.info(f"🏗️ Proje kurulumu tamamlandı: {PROJECT_TYPES[req.project_type]['label']} - {req.site_name}")
+    add_system_log("SUCCESS", "SYSTEM", f"Proje kurulumu: {PROJECT_TYPES[req.project_type]['label']} - {req.site_name}")
+    
+    return get_project_config()
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
@@ -537,17 +620,25 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 @app.get("/api/v1/stats")
 async def get_stats():
-    v_count = query_db("SELECT COUNT(*) FROM villas", one=True)[0]
+    config = get_project_config()
+    u_count = query_db("SELECT COUNT(*) FROM units", one=True)[0]
     c_count = query_db("SELECT COUNT(*) FROM contacts", one=True)[0]
     ca_count = query_db("SELECT COUNT(*) FROM cargos", one=True)[0]
     cam_count = query_db("SELECT COUNT(*) FROM cameras", one=True)[0]
-    return {
-        "villas": v_count, 
+    
+    stats = {
+        "units": u_count, 
         "contacts": c_count, 
-        "cargos": ca_count, 
         "cameras": cam_count,
-        "connectedDevices": len(connected_clients)
+        "connectedDevices": len(connected_clients),
+        "config": config
     }
+    if config.get("is_configured") and "cargos" in config.get("modules", []):
+        stats["cargos"] = ca_count
+    else:
+        stats["cargos"] = ca_count
+    
+    return stats
 
 @app.get("/api/v1/logs")
 async def get_logs():
@@ -565,37 +656,44 @@ async def get_devices():
         })
     return devices
 
-# --- VILLAS ---
-@app.get("/api/v1/villas", response_model=List[Villa])
-async def get_villas():
-    return [dict(r) for r in query_db("SELECT * FROM villas ORDER BY villaNo")]
+# --- BİRİMLER (UNITS) ---
+@app.get("/api/v1/units", response_model=List[Unit])
+async def get_units(parent_id: Optional[int] = None, unit_type: Optional[str] = None):
+    """Birimleri listele. parent_id ile alt birimleri, unit_type ile filtreleme yapılabilir."""
+    if parent_id is not None:
+        return [dict(r) for r in query_db("SELECT * FROM units WHERE parentId = ? ORDER BY unitNo", (parent_id,))]
+    elif unit_type:
+        return [dict(r) for r in query_db("SELECT * FROM units WHERE unitType = ? ORDER BY unitNo", (unit_type,))]
+    else:
+        return [dict(r) for r in query_db("SELECT * FROM units ORDER BY unitNo")]
 
-@app.post("/api/v1/villas")
-async def upsert_villa(villa: Villa):
+@app.post("/api/v1/units")
+async def upsert_unit(unit: Unit):
     now = int(time.time()*1000)
-    is_update = villa.villaId is not None
-    sql = """INSERT OR REPLACE INTO villas (villaId, villaNo, villaStreet, villaNavigationA, villaNavigationB, villaNotes, 
-             isVillaUnderConstruction, isVillaSpecial, isVillaRental, isVillaCallFromHome, 
-             isVillaCallForCargo, isVillaEmpty, isCallOnlyMobile, updatedAt, deviceId) 
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-    vid = insert_db(sql, (villa.villaId, villa.villaNo, villa.villaStreet, villa.villaNavigationA, villa.villaNavigationB,
-                         villa.villaNotes, villa.isVillaUnderConstruction, villa.isVillaSpecial,
-                         villa.isVillaRental, villa.isVillaCallFromHome, villa.isVillaCallForCargo,
-                         villa.isVillaEmpty, villa.isCallOnlyMobile, villa.updatedAt or now, villa.deviceId or "Sunucu"))
+    is_update = unit.unitId is not None and query_db("SELECT unitId FROM units WHERE unitId=?", (unit.unitId,), one=True) is not None
     
-    villa_dict = villa.model_dump()
-    villa_dict["villaId"] = villa.villaId or vid
-    villa_dict["updatedAt"] = villa.updatedAt or now
-    await broadcast_sync("UPDATE_VILLA" if is_update else "ADD_VILLA", villa_dict)
-    return {"status": "success", "id": villa_dict["villaId"]}
+    sql = """INSERT OR REPLACE INTO units (unitId, parentId, unitType, unitNo, unitName, street, navigationA, navigationB, notes, floorNumber,
+             isUnderConstruction, isSpecial, isRental, isCallFromHome, isCallForCargo, isEmpty, isCallOnlyMobile, updatedAt, deviceId) 
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+    uid = insert_db(sql, (unit.unitId, unit.parentId, unit.unitType, unit.unitNo, unit.unitName,
+                         unit.street, unit.navigationA, unit.navigationB, unit.notes, unit.floorNumber,
+                         unit.isUnderConstruction, unit.isSpecial, unit.isRental, unit.isCallFromHome,
+                         unit.isCallForCargo, unit.isEmpty, unit.isCallOnlyMobile,
+                         unit.updatedAt or now, unit.deviceId or "Sunucu"))
+    
+    unit_dict = unit.model_dump()
+    unit_dict["unitId"] = unit.unitId or uid
+    unit_dict["updatedAt"] = unit.updatedAt or now
+    await broadcast_sync("UPDATE_UNIT" if is_update else "ADD_UNIT", unit_dict)
+    return {"status": "success", "id": unit_dict["unitId"]}
 
-@app.delete("/api/v1/villas/{villa_id}")
-async def delete_villa(villa_id: int):
-    insert_db("DELETE FROM villas WHERE villaId = ?", (villa_id,))
-    await broadcast_sync("DELETE_VILLA", {"villaId": villa_id})
+@app.delete("/api/v1/units/{unit_id}")
+async def delete_unit(unit_id: int):
+    insert_db("DELETE FROM units WHERE unitId = ?", (unit_id,))
+    await broadcast_sync("DELETE_UNIT", {"unitId": unit_id})
     return {"status": "success"}
 
-# --- CONTACTS ---
+# --- KİŞİLER (CONTACTS) ---
 @app.get("/api/v1/contacts", response_model=List[Contact])
 async def get_contacts():
     return [dict(r) for r in query_db("SELECT * FROM contacts ORDER BY contactName")]
@@ -603,9 +701,9 @@ async def get_contacts():
 @app.post("/api/v1/contacts")
 async def upsert_contact(contact: Contact):
     now = int(time.time()*1000)
-    sql = """INSERT OR REPLACE INTO contacts (contactId, villaId, contactName, contactPhone, contactType, lastCallTimestamp, updatedAt, deviceId) 
+    sql = """INSERT OR REPLACE INTO contacts (contactId, unitId, contactName, contactPhone, contactType, lastCallTimestamp, updatedAt, deviceId) 
              VALUES (?,?,?,?,?,?,?,?)"""
-    insert_db(sql, (contact.contactId, contact.villaId, contact.contactName, contact.contactPhone, 
+    insert_db(sql, (contact.contactId, contact.unitId, contact.contactName, contact.contactPhone, 
                    contact.contactType, contact.lastCallTimestamp, contact.updatedAt or now, contact.deviceId or "Sunucu"))
     contact_dict = contact.model_dump()
     contact_dict["updatedAt"] = contact.updatedAt or now
@@ -618,10 +716,18 @@ async def delete_contact(contact_id: str):
     await broadcast_sync("DELETE_CONTACT", {"contactId": contact_id})
     return {"status": "success"}
 
-@app.post("/api/v1/import/villas")
-async def import_villas(file: UploadFile = File(...)):
+# --- CSV İÇE AKTARMA ---
+@app.post("/api/v1/import/units")
+async def import_units(file: UploadFile = File(...)):
+    """CSV dosyasından birim içe aktar. Proje tipine göre unitType otomatik atanır."""
+    config = get_project_config()
+    default_type = "VILLA"
+    if config.get("is_configured"):
+        ptype = config.get("project_type", "VILLA")
+        if ptype == "BLOCK": default_type = "APARTMENT"
+        elif ptype == "MALL": default_type = "SHOP"
+    
     content = await file.read()
-    # Try common encodings
     text = None
     for enc in ["utf-8", "windows-1254", "iso-8859-9"]:
         try:
@@ -637,37 +743,36 @@ async def import_villas(file: UploadFile = File(...)):
     delimiter = ";" if ";" in lines[0] else ","
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     
-    villas_added = 0
+    units_added = 0
     now = int(time.time()*1000)
     
     for i, row in enumerate(reader):
         if not row: continue
-        # Simple header skip
-        if i == 0 and ("no" in row[0].lower() or "villa" in row[0].lower()): continue
+        if i == 0 and ("no" in row[0].lower() or "villa" in row[0].lower() or "birim" in row[0].lower() or "daire" in row[0].lower()): continue
         
         try:
-            v_no = int(row[0])
+            u_no = int(row[0])
             street = row[1] if len(row) > 1 else ""
             notes = row[2] if len(row) > 2 else ""
             navA = row[3] if len(row) > 3 else ""
             navB = row[4] if len(row) > 4 else ""
             
-            existing = query_db("SELECT villaId FROM villas WHERE villaNo = ?", (v_no,), one=True)
+            existing = query_db("SELECT unitId FROM units WHERE unitNo = ? AND unitType = ?", (u_no, default_type), one=True)
             if existing:
-                sql = """UPDATE villas SET villaStreet=?, villaNotes=?, villaNavigationA=?, villaNavigationB=?, 
-                         updatedAt=?, deviceId=? WHERE villaNo=?"""
-                insert_db(sql, (street, notes, navA, navB, now, "Sunucu", v_no))
+                sql = """UPDATE units SET street=?, notes=?, navigationA=?, navigationB=?, 
+                         updatedAt=?, deviceId=? WHERE unitNo=? AND unitType=?"""
+                insert_db(sql, (street, notes, navA, navB, now, "Sunucu", u_no, default_type))
             else:
-                sql = """INSERT INTO villas (villaNo, villaStreet, villaNotes, villaNavigationA, villaNavigationB, 
-                         isVillaCallForCargo, updatedAt, deviceId) VALUES (?,?,?,?,?,?,?,?)"""
-                insert_db(sql, (v_no, street, notes, navA, navB, 1, now, "Sunucu"))
-            villas_added += 1
+                sql = """INSERT INTO units (unitNo, unitType, street, notes, navigationA, navigationB, 
+                         isCallForCargo, updatedAt, deviceId) VALUES (?,?,?,?,?,?,?,?,?)"""
+                insert_db(sql, (u_no, default_type, street, notes, navA, navB, 1, now, "Sunucu"))
+            units_added += 1
         except Exception as e: 
             logger.error(f"Import row error: {e}")
             continue
         
     await broadcast_sync("FULL_SYNC_REQUIRED", {})
-    return {"status": "success", "count": villas_added}
+    return {"status": "success", "count": units_added}
 
 # --- CARGOS ---
 @app.get("/api/v1/cargos", response_model=List[Cargo])

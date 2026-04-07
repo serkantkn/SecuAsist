@@ -131,26 +131,140 @@
             </div>
         );
 
+        // --- KURULUM SİHİRBAZI ---
+
+        const SetupWizard = ({ onComplete }) => {
+            const [step, setStep] = useState(1);
+            const [projectType, setProjectType] = useState(null);
+            const [siteName, setSiteName] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const projectOptions = [
+                { id: 'VILLA', label: 'Villa Sitesi', icon: '🏡', desc: 'Villalardan oluşan konut siteleri için', color: 'emerald' },
+                { id: 'BLOCK', label: 'Blok Sitesi', icon: '🏢', desc: 'Blok, kat ve dairelerden oluşan siteler için', color: 'blue' },
+                { id: 'MALL', label: 'AVM / İş Merkezi', icon: '🏬', desc: 'Mağaza ve ofislerden oluşan ticari yapılar için', color: 'violet' },
+            ];
+
+            const handleFinish = async () => {
+                if (!projectType || !siteName.trim()) { globalShowToast('Lütfen tüm alanları doldurun.', 'error'); return; }
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/v1/setup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ project_type: projectType, site_name: siteName.trim() })
+                    });
+                    if (res.ok) {
+                        const config = await res.json();
+                        globalShowToast('Kurulum başarıyla tamamlandı!', 'success');
+                        onComplete(config);
+                    } else {
+                        globalShowToast('Kurulum sırasında bir hata oluştu.', 'error');
+                    }
+                } catch (e) { globalShowToast('Sunucuya ulaşılamadı.', 'error'); }
+                setLoading(false);
+            };
+
+            return (
+                <div className="flex items-center justify-center h-screen w-screen animate-fade-in">
+                    <div className="glass rounded-3xl p-10 max-w-2xl w-full mx-4 shadow-2xl border border-slate-700/50">
+                        {/* Header */}
+                        <div className="text-center mb-10">
+                            <h1 className="text-4xl font-black grad-text mb-3">SecuAsist</h1>
+                            <p className="text-slate-400 text-sm">Güvenlik Yönetim Platformunu Yapılandırın</p>
+                            <div className="flex justify-center mt-6 space-x-3">
+                                <div className={`w-10 h-1.5 rounded-full transition-all ${step >= 1 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
+                                <div className={`w-10 h-1.5 rounded-full transition-all ${step >= 2 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
+                            </div>
+                        </div>
+
+                        {/* Adım 1: Proje Tipi */}
+                        {step === 1 && (
+                            <div className="animate-fade-in">
+                                <h2 className="text-lg font-bold mb-1">Yönetim Alanı Seçin</h2>
+                                <p className="text-slate-500 text-xs mb-6">SecuAsist hangi tür yapıda kullanılacak?</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {projectOptions.map(opt => (
+                                        <button key={opt.id} onClick={() => setProjectType(opt.id)}
+                                            className={`p-6 rounded-2xl text-left transition-all border-2 hover:scale-[1.02] ${
+                                                projectType === opt.id 
+                                                    ? `border-${opt.color}-500 bg-${opt.color}-500/10 shadow-lg shadow-${opt.color}-500/10` 
+                                                    : 'border-slate-700/50 hover:border-slate-600 bg-slate-800/30'
+                                            }`}
+                                        >
+                                            <div className="text-3xl mb-3">{opt.icon}</div>
+                                            <div className="font-bold text-sm">{opt.label}</div>
+                                            <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">{opt.desc}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex justify-end mt-8">
+                                    <button onClick={() => { if (projectType) setStep(2); else globalShowToast('Lütfen bir alan seçin.', 'error'); }}
+                                        className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-500/20"
+                                    >Devam →</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Adım 2: Site Adı */}
+                        {step === 2 && (
+                            <div className="animate-fade-in">
+                                <h2 className="text-lg font-bold mb-1">Site / Tesis Bilgileri</h2>
+                                <p className="text-slate-500 text-xs mb-6">Bu bilgi panelde ve raporlarda görünecektir.</p>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-1">Site Adı</label>
+                                        <input type="text" value={siteName} onChange={e => setSiteName(e.target.value)}
+                                            placeholder="Örn: Güneşpark Villaları, Maviş AVM"
+                                            className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                        />
+                                    </div>
+                                    <div className="glass rounded-xl p-4 mt-4">
+                                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Seçilen Mod</div>
+                                        <div className="flex items-center">
+                                            <span className="text-2xl mr-3">{projectOptions.find(o => o.id === projectType)?.icon}</span>
+                                            <span className="font-bold">{projectOptions.find(o => o.id === projectType)?.label}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-between mt-8">
+                                    <button onClick={() => setStep(1)}
+                                        className="px-6 py-3 text-slate-400 hover:text-white text-sm font-bold transition-all"
+                                    >← Geri</button>
+                                    <button onClick={handleFinish} disabled={loading}
+                                        className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                                    >{loading ? 'Kuruluyor...' : '✓ Kurulumu Tamamla'}</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         // --- PAGE COMPONENTS ---
 
-        const Sidebar = ({ activeTab, setActiveTab }) => {
-            const items = [
-                { id: 'dashboard', label: 'Panel', icon: '📊' },
-                { id: 'villas', label: 'Villalar', icon: '🏡' },
-                { id: 'contacts', label: 'Kişiler', icon: '👥' },
-                { id: 'cargos', label: 'Kargolar', icon: '📦' },
-                { id: 'faults', label: 'Arızalar', icon: '🛠️' },
-                { id: 'logs', label: 'Sistem Logları', icon: '📜' },
-                { id: 'settings', label: 'Ayarlar', icon: '⚙️' },
+        const Sidebar = ({ activeTab, setActiveTab, config }) => {
+            const allItems = [
+                { id: 'dashboard', label: 'Panel', icon: '📊', module: null },
+                { id: 'units', label: config?.unit_label_plural || 'Villalar', icon: config?.project_type === 'MALL' ? '🏬' : config?.project_type === 'BLOCK' ? '🏢' : '🏡', module: 'units' },
+                { id: 'contacts', label: 'Kişiler', icon: '👥', module: 'contacts' },
+                { id: 'cargos', label: 'Kargolar', icon: '📦', module: 'cargos' },
+                { id: 'faults', label: 'Arızalar', icon: '🛠️', module: 'cameras' },
+                { id: 'logs', label: 'Sistem Logları', icon: '📜', module: null },
+                { id: 'settings', label: 'Ayarlar', icon: '⚙️', module: null },
             ];
+
+            const modules = config?.modules || ['units', 'contacts', 'cargos', 'cameras', 'intercoms'];
+            const items = allItems.filter(item => item.module === null || modules.includes(item.module));
 
             return (
                 <div className="w-64 h-screen glass border-r border-slate-800/60 flex flex-col shrink-0">
                     <div className="p-6">
-                        <h1 className="text-xl font-bold grad-text text-2xl tracking-tight italic">SecuAsist</h1>
+                        <h1 className="text-xl font-bold grad-text text-2xl tracking-tight italic">{config?.site_name || 'SecuAsist'}</h1>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-widest font-semibold flex items-center">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
-                            Yönetim Merkezi v0.8
+                            {config?.label || 'Yönetim Merkezi'}
                         </p>
                     </div>
                     <nav className="flex-1 mt-4">
@@ -169,82 +283,65 @@
             );
         };
 
-        const VillaPage = ({ villas, contacts, onUpdate }) => {
+        const UnitPage = ({ units, contacts, onUpdate, config }) => {
             const [search, setSearch] = useState('');
-            const [editingVilla, setEditingVilla] = useState(null);
-            const [viewingVilla, setViewingVilla] = useState(null);
+            const [editingUnit, setEditingUnit] = useState(null);
+            const [viewingUnit, setViewingUnit] = useState(null);
             const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+            const unitLabel = config?.unit_label || 'Villa';
+            const unitLabelPlural = config?.unit_label_plural || 'Villalar';
 
-            const filteredVillas = (villas || []).filter(v => 
-                v.villaNo?.toString().includes(search) || 
-                v.villaStreet?.toLowerCase().includes(search.toLowerCase())
+            const filteredUnits = (units || []).filter(v => 
+                v.unitNo?.toString().includes(search) || 
+                v.street?.toLowerCase().includes(search.toLowerCase()) ||
+                v.unitName?.toLowerCase().includes(search.toLowerCase())
             );
 
             const handleSave = async () => {
-                if (!editingVilla.villaNo) { globalShowToast("Villa No zorunludur!", "error"); return; }
+                if (!editingUnit.unitNo) { globalShowToast(`${unitLabel} No zorunludur!`, "error"); return; }
                 try {
-                    const data = { ...editingVilla, updatedAt: Date.now() };
-                    const res = await fetch('/api/v1/villas', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                    if (res.ok) { onUpdate(); setEditingVilla(null); }
+                    const data = { ...editingUnit, updatedAt: Date.now() };
+                    const res = await fetch('/api/v1/units', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                    if (res.ok) { onUpdate(); setEditingUnit(null); }
                     else { const err = await res.json(); globalShowToast("Hata: " + JSON.stringify(err.detail), "error"); }
                 } catch (e) { globalShowToast("Bağlantı hatası: " + e.message, "error"); }
             };
 
-            const villaContacts = useMemo(() => {
-                const target = viewingVilla || editingVilla;
-                if (!target || !target.villaId) return [];
-                return (contacts || []).filter(c => c.villaId === target.villaId);
-            }, [viewingVilla, editingVilla, contacts]);
+            const unitContacts = useMemo(() => {
+                const target = viewingUnit || editingUnit;
+                if (!target || !target.unitId) return [];
+                return (contacts || []).filter(c => c.unitId === target.unitId);
+            }, [viewingUnit, editingUnit, contacts]);
 
             const availableContacts = useMemo(() => {
-                if (!editingVilla || !editingVilla.villaId) return [];
-                return (contacts || []).filter(c => c.villaId !== editingVilla.villaId);
-            }, [editingVilla, contacts]);
+                if (!editingUnit || !editingUnit.unitId) return [];
+                return (contacts || []).filter(c => c.unitId !== editingUnit.unitId);
+            }, [editingUnit, contacts]);
 
-            const updateContactVilla = async (contact, newVillaId) => {
-                if (!contact || !contact.contactId) {
-                    console.error("Invalid contact for update:", contact);
-                    return;
-                }
+            const updateContactUnit = async (contact, newUnitId) => {
+                if (!contact || !contact.contactId) return;
                 try {
-                    const res = await fetch('/api/v1/contacts', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...contact, villaId: newVillaId, updatedAt: Date.now() })
-                    });
-                    if(res.ok) {
-                        console.log(`Contact ${contact.contactId} updated with villa ${newVillaId}`);
-                        onUpdate();
-                    } else {
-                        const err = await res.json();
-                        console.error("API Error updating contact:", err);
-                    }
-                } catch (e) { console.error("Network Error updating contact:", e); }
+                    const res = await fetch('/api/v1/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...contact, unitId: newUnitId, updatedAt: Date.now() }) });
+                    if(res.ok) onUpdate();
+                } catch (e) { console.error("Network Error:", e); }
             };
 
-            const renderVillaStatuses = (villa) => {
+            const renderUnitStatuses = (unit) => {
                 const statuses = [
-                    { label: "Sadece Cep", value: villa.isCallOnlyMobile, color: "rose", icon: "📱" },
-                    { label: "Kiralık", value: villa.isVillaRental, color: "purple", icon: "🔑" },
-                    { label: "Boş", value: villa.isVillaEmpty, color: "rose", icon: "🏠" },
-                    { label: "Şantiye", value: villa.isVillaUnderConstruction, color: "amber", icon: "🔨" },
-                    { label: "Evden Aransın", value: villa.isVillaCallFromHome, color: "emerald", icon: "📞" },
-                    { label: "Kargo Red", value: villa.isVillaCallForCargo === 0 ? 1 : 0, color: "rose", icon: "📦" },
-                    { label: "VIP / ÖZEL", value: villa.isVillaSpecial, color: "amber", icon: "⭐" }
+                    { label: "Sadece Cep", value: unit.isCallOnlyMobile, color: "rose", icon: "📱" },
+                    { label: "Kiralık", value: unit.isRental, color: "purple", icon: "🔑" },
+                    { label: "Boş", value: unit.isEmpty, color: "rose", icon: "🏠" },
+                    { label: "Şantiye", value: unit.isUnderConstruction, color: "amber", icon: "🔨" },
+                    { label: "Evden Aransın", value: unit.isCallFromHome, color: "emerald", icon: "📞" },
+                    { label: "Kargo Red", value: unit.isCallForCargo === 0 ? 1 : 0, color: "rose", icon: "📦" },
+                    { label: "VIP / ÖZEL", value: unit.isSpecial, color: "amber", icon: "⭐" }
                 ].filter(s => s.value === 1);
-
                 if (statuses.length === 0) return <p className="text-slate-500 italic text-xs">Aktif özellik bulunmuyor.</p>;
-
                 return (
                     <div className="flex flex-wrap gap-2">
                         {statuses.map(s => (
                             <span key={s.label} title={s.label} className={`px-3 py-1 rounded-full bg-${s.color}-500/10 text-${s.color}-400 border border-${s.color}-500/20 text-[10px] font-bold flex items-center gap-1.5`}>
-                                <span>{s.icon}</span>
-                                <span className="uppercase tracking-wider">{s.label}</span>
+                                <span>{s.icon}</span><span className="uppercase tracking-wider">{s.label}</span>
                             </span>
                         ))}
                     </div>
@@ -255,208 +352,124 @@
                 <div className="flex flex-col h-full animate-fade-in">
                     <div className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl px-8 py-4 border-b border-slate-800/40 flex justify-between items-center shrink-0">
                         <div className="shrink-0 mr-8">
-                            <h2 className="text-2xl font-bold">Villalar</h2>
-                            <p className="text-slate-400 text-[10px] mt-1 font-mono uppercase tracking-widest">{villas.length} kayıtlı villa</p>
+                            <h2 className="text-2xl font-bold">{unitLabelPlural}</h2>
+                            <p className="text-slate-400 text-[10px] mt-1 font-mono uppercase tracking-widest">{units.length} kayıtlı {unitLabel.toLowerCase()}</p>
                         </div>
                         <div className="flex space-x-4 items-center">
                             <div className="relative">
-                                <input 
-                                    type="text" 
-                                    placeholder="Villa veya sokak ara..." 
-                                    className="bg-white/50 dark:bg-slate-800/50 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm w-64 focus:border-blue-500 outline-none"
-                                    value={search}
-                                    onChange={e => setSearch(e.target.value)}
-                                />
+                                <input type="text" placeholder={`${unitLabel} veya sokak ara...`} className="bg-white/50 dark:bg-slate-800/50 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm w-64 focus:border-blue-500 outline-none" value={search} onChange={e => setSearch(e.target.value)} />
                                 <span className="absolute left-3 top-2.5 opacity-40">🔍</span>
                             </div>
                             <label className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer flex items-center">
                                 📤 CSV İçe Aktar
                                 <input type="file" className="hidden" accept=".csv" onChange={async (e) => {
-                                    const file = e.target.files[0];
-                                    if(!file) return;
-                                    const formData = new FormData();
-                                    formData.append('file', file);
-                                    const res = await fetch('/api/v1/import/villas', { method:'POST', body:formData });
-                                    if(res.ok) { const data = await res.json(); globalShowToast(`${data.count} villa başarıyla içe aktarıldı.`, "success"); onUpdate(); }
+                                    const file = e.target.files[0]; if(!file) return;
+                                    const formData = new FormData(); formData.append('file', file);
+                                    const res = await fetch('/api/v1/import/units', { method:'POST', body:formData });
+                                    if(res.ok) { const data = await res.json(); globalShowToast(`${data.count} ${unitLabel.toLowerCase()} içe aktarıldı.`, "success"); onUpdate(); }
                                     else { globalShowToast("Yükleme hatası!", "error"); }
                                 }} />
                             </label>
-                            <button onClick={() => setEditingVilla({ villaNo: '', villaStreet: '', deviceId: 'Sunucu' })} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all">+ Yeni Villa</button>
+                            <button onClick={() => setEditingUnit({ unitNo: '', street: '', unitType: config?.project_type === 'MALL' ? 'SHOP' : config?.project_type === 'BLOCK' ? 'APARTMENT' : 'VILLA', deviceId: 'Sunucu' })} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all">+ Yeni {unitLabel}</button>
                         </div>
                     </div>
-
                     <div className="flex-1 overflow-y-auto p-8 pb-32">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                            {filteredVillas.map(v => (
-                                <div key={v.villaId} onClick={() => setViewingVilla(v)} className="glass p-5 rounded-2xl hover:border-blue-500/40 transition-all group relative overflow-hidden cursor-pointer">
+                            {filteredUnits.map(v => (
+                                <div key={v.unitId} onClick={() => setViewingUnit(v)} className="glass p-5 rounded-2xl hover:border-blue-500/40 transition-all group relative overflow-hidden cursor-pointer">
                                     <div className="flex justify-between items-start z-10 relative">
-                                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-xl text-blue-400 border border-blue-500/20">
-                                            {v.villaNo}
-                                        </div>
+                                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-xl text-blue-400 border border-blue-500/20">{v.unitNo}</div>
                                         <div className="flex space-x-1">
-                                            {confirmDeleteId === v.villaId ? (
+                                            {confirmDeleteId === v.unitId ? (
                                                 <div className="flex items-center space-x-1 animate-fade-in" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={async () => { 
-                                                        const res = await fetch(`/api/v1/villas/${v.villaId}`, {method:'DELETE'}); 
-                                                        if(res.ok) { onUpdate(); setConfirmDeleteId(null); } else globalShowToast("Silme hatası!", "error");
-                                                    }} className="p-2 bg-rose-600 text-white rounded-lg text-[10px] font-bold">EVET</button>
+                                                    <button onClick={async () => { const res = await fetch(`/api/v1/units/${v.unitId}`, {method:'DELETE'}); if(res.ok) { onUpdate(); setConfirmDeleteId(null); } else globalShowToast("Silme hatası!", "error"); }} className="p-2 bg-rose-600 text-white rounded-lg text-[10px] font-bold">EVET</button>
                                                     <button onClick={() => setConfirmDeleteId(null)} className="p-2 bg-slate-700 text-white rounded-lg text-[10px] font-bold">İPTAL</button>
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <button onClick={(e) => { e.stopPropagation(); setEditingVilla(v); }} className="p-2 glass rounded-lg hover:text-blue-400 group-hover:opacity-100 transition-opacity">✏️</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(v.villaId); }} className="p-2 glass rounded-lg hover:text-rose-400 group-hover:opacity-100 transition-opacity z-20">🗑️</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setEditingUnit(v); }} className="p-2 glass rounded-lg hover:text-blue-400 group-hover:opacity-100 transition-opacity">✏️</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(v.unitId); }} className="p-2 glass rounded-lg hover:text-rose-400 group-hover:opacity-100 transition-opacity z-20">🗑️</button>
                                                 </>
                                             )}
                                         </div>
                                     </div>
                                     <div className="mt-4 z-10 relative">
-                                        <h4 className="font-semibold text-slate-200 truncate">{v.villaStreet || 'İsimsiz Sokak'}</h4>
-                                        <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate uppercase tracking-tighter">Nav A: {v.villaNavigationA || '-'}</p>
+                                        <h4 className="font-semibold text-slate-200 truncate">{v.unitName || v.street || 'İsimsiz'}</h4>
+                                        <p className="text-[10px] text-slate-500 mt-0.5 font-medium truncate uppercase tracking-tighter">Nav A: {v.navigationA || '-'}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-1.5 mt-4 z-10 relative">
-                                        {v.isVillaUnderConstruction === 1 && <span title="Şantiye" className="w-6 h-6 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] border border-amber-500/20">🔨</span>}
-                                        {v.isVillaEmpty === 1 && <span title="Boş" className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center text-[10px] border border-rose-500/20">🏠</span>}
-                                        {v.isVillaRental === 1 && <span title="Kiralık" className="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center text-[10px] border border-purple-500/20">🔑</span>}
-                                        {v.isVillaSpecial === 1 && <span title="VIP / ÖZEL" className="w-6 h-6 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] border border-amber-500/20">⭐</span>}
-                                        {v.isVillaCallFromHome === 1 && <span title="Evden Aransın" className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px] border border-emerald-500/20">📞</span>}
-                                        {v.isVillaCallForCargo === 0 && <span title="Kargo Red" className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center text-[10px] border border-rose-500/20">📦</span>}
+                                        {v.isUnderConstruction === 1 && <span title="Şantiye" className="w-6 h-6 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] border border-amber-500/20">🔨</span>}
+                                        {v.isEmpty === 1 && <span title="Boş" className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center text-[10px] border border-rose-500/20">🏠</span>}
+                                        {v.isRental === 1 && <span title="Kiralık" className="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center text-[10px] border border-purple-500/20">🔑</span>}
+                                        {v.isSpecial === 1 && <span title="VIP" className="w-6 h-6 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] border border-amber-500/20">⭐</span>}
+                                        {v.isCallFromHome === 1 && <span title="Evden Aransın" className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px] border border-emerald-500/20">📞</span>}
+                                        {v.isCallForCargo === 0 && <span title="Kargo Red" className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center text-[10px] border border-rose-500/20">📦</span>}
                                         {v.isCallOnlyMobile === 1 && <span title="Sadece Cep" className="w-6 h-6 rounded-full bg-rose-500/10 flex items-center justify-center text-[10px] border border-rose-500/20">📱</span>}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-
-                    {/* VILLA DETAIL MODAL */}
-                    <Modal title="Villa Detayları" isOpen={!!viewingVilla} onClose={() => setViewingVilla(null)}>
-                        {viewingVilla && (
+                    <Modal title={`${unitLabel} Detayları`} isOpen={!!viewingUnit} onClose={() => setViewingUnit(null)}>
+                        {viewingUnit && (
                             <div className="space-y-8 pb-4">
                                 <div className="flex items-center space-x-6">
-                                    <div className="w-20 h-20 rounded-2xl bg-blue-500/10 flex items-center justify-center font-bold text-4xl text-blue-400 border border-blue-500/20">
-                                        {viewingVilla.villaNo}
-                                    </div>
+                                    <div className="w-20 h-20 rounded-2xl bg-blue-500/10 flex items-center justify-center font-bold text-4xl text-blue-400 border border-blue-500/20">{viewingUnit.unitNo}</div>
                                     <div>
-                                        <h3 className="text-2xl font-bold text-white">{viewingVilla.villaStreet || 'İsimsiz Sokak'}</h3>
-                                        <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest font-medium">SecuAsist Villa Tanımlaması</p>
+                                        <h3 className="text-2xl font-bold text-white">{viewingUnit.unitName || viewingUnit.street || 'İsimsiz'}</h3>
+                                        <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest font-medium">{unitLabel} Tanımlaması</p>
                                     </div>
                                 </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="glass p-4 rounded-xl border-l-4 border-blue-500">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">A KAPI YOL TARİFİ</p>
-                                        <p className="text-sm mt-1 font-medium">{viewingVilla.villaNavigationA || 'Belirtilmedi'}</p>
-                                    </div>
-                                    <div className="glass p-4 rounded-xl border-l-4 border-indigo-500">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">B KAPI YOL TARİFİ</p>
-                                        <p className="text-sm mt-1 font-medium">{viewingVilla.villaNavigationB || 'Belirtilmedi'}</p>
-                                    </div>
-                                    <div className="md:col-span-2 glass p-4 rounded-xl">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">VİLLA NOTLARI</p>
-                                        <p className="text-sm italic text-slate-300">{viewingVilla.villaNotes || 'Kayıtlı not bulunmuyor.'}</p>
+                                    <div className="glass p-4 rounded-xl border-l-4 border-blue-500"><p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">A KAPI YOL TARİFİ</p><p className="text-sm mt-1 font-medium">{viewingUnit.navigationA || 'Belirtilmedi'}</p></div>
+                                    <div className="glass p-4 rounded-xl border-l-4 border-indigo-500"><p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">B KAPI YOL TARİFİ</p><p className="text-sm mt-1 font-medium">{viewingUnit.navigationB || 'Belirtilmedi'}</p></div>
+                                    <div className="md:col-span-2 glass p-4 rounded-xl"><p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-2">NOTLAR</p><p className="text-sm italic text-slate-300">{viewingUnit.notes || 'Kayıtlı not bulunmuyor.'}</p></div>
+                                </div>
+                                <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center"><span className="w-8 h-[1px] bg-slate-700 mr-3"></span>{unitLabel.toUpperCase()} DURUMU</h4>{renderUnitStatuses(viewingUnit)}</div>
+                                <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center"><span className="w-8 h-[1px] bg-slate-700 mr-3"></span>BAĞLI KİŞİLER ({unitContacts.length})</h4>
+                                    <div className="space-y-3">{unitContacts.map(c => (<div key={c.contactId} className="glass p-4 rounded-xl flex justify-between items-center"><div className="flex items-center space-x-3"><div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg">👤</div><div><p className="font-semibold text-sm">{c.contactName}</p><p className="text-xs text-slate-500">{c.contactPhone}</p></div></div><span className="text-[10px] font-bold bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full border border-blue-500/20 uppercase">{c.contactType}</span></div>))}
+                                        {unitContacts.length === 0 && (<div className="p-8 text-center glass rounded-xl border-dashed border-slate-700 text-slate-500 italic text-sm">Bu {unitLabel.toLowerCase()}'ya bağlı kişi bulunamadı.</div>)}
                                     </div>
                                 </div>
-
-                                <div>
-                                    <h4 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center">
-                                        <span className="w-8 h-[1px] bg-slate-700 mr-3"></span>
-                                        VİLLA DURUMU
-                                    </h4>
-                                    {renderVillaStatuses(viewingVilla)}
-                                </div>
-
-                                <div>
-                                    <h4 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center">
-                                        <span className="w-8 h-[1px] bg-slate-700 mr-3"></span>
-                                        BAĞLI KİŞİLER ({villaContacts.length})
-                                    </h4>
-                                    <div className="space-y-3">
-                                        {villaContacts.map(c => (
-                                            <div key={c.contactId} className="glass p-4 rounded-xl flex justify-between items-center group hover:border-blue-500/30 transition-all">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg">👤</div>
-                                                    <div>
-                                                        <p className="font-semibold text-sm">{c.contactName}</p>
-                                                        <p className="text-xs text-slate-500">{c.contactPhone}</p>
-                                                    </div>
-                                                </div>
-                                                <span className="text-[10px] font-bold bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full border border-blue-500/20 uppercase">
-                                                    {c.contactType}
-                                                </span>
-                                            </div>
-                                        ))}
-                                        {villaContacts.length === 0 && (
-                                            <div className="p-8 text-center glass rounded-xl border-dashed border-slate-700 text-slate-500 italic text-sm">
-                                                Bu villaya bağlı herhangi bir kişi bulunamadı.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                
-                                <div className="pt-4 flex justify-end">
-                                    <button onClick={() => setViewingVilla(null)} className="bg-slate-800 hover:bg-slate-700 px-8 py-2.5 rounded-xl text-sm font-bold transition-all">KAPAT</button>
-                                </div>
+                                <div className="pt-4 flex justify-end"><button onClick={() => setViewingUnit(null)} className="bg-slate-800 hover:bg-slate-700 px-8 py-2.5 rounded-xl text-sm font-bold transition-all">KAPAT</button></div>
                             </div>
                         )}
                     </Modal>
-
-                    {/* VILLA EDIT MODAL */}
-                    <Modal title={editingVilla?.villaId ? "Villa Düzenle" : "Yeni Villa"} isOpen={!!editingVilla} onClose={() => setEditingVilla(null)}>
+                    <Modal title={editingUnit?.unitId ? `${unitLabel} Düzenle` : `Yeni ${unitLabel}`} isOpen={!!editingUnit} onClose={() => setEditingUnit(null)}>
                         <div className="space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <Input label="Villa No" value={editingVilla?.villaNo} onChange={val => setEditingVilla({...editingVilla, villaNo: val})} type="number" />
-                                <Input label="Sokak" value={editingVilla?.villaStreet} onChange={val => setEditingVilla({...editingVilla, villaStreet: val})} />
-                                <Input label="A Kapısı Yol Tarifi" value={editingVilla?.villaNavigationA} onChange={val => setEditingVilla({...editingVilla, villaNavigationA: val})} />
-                                <Input label="B Kapısı Yol Tarifi" value={editingVilla?.villaNavigationB} onChange={val => setEditingVilla({...editingVilla, villaNavigationB: val})} />
-                                <div className="md:col-span-2"><Input label="Villa Notları" value={editingVilla?.villaNotes} onChange={val => setEditingVilla({...editingVilla, villaNotes: val})} /></div>
-                                <Toggle label="Sadece Cepten Ara" value={editingVilla?.isCallOnlyMobile} onChange={val => setEditingVilla({...editingVilla, isCallOnlyMobile: val})} />
-                                <Toggle label="Şantiye / İnşaat" value={editingVilla?.isVillaUnderConstruction} onChange={val => setEditingVilla({...editingVilla, isVillaUnderConstruction: val})} />
-                                <Toggle label="Özel Durum" value={editingVilla?.isVillaSpecial} onChange={val => setEditingVilla({...editingVilla, isVillaSpecial: val})} />
-                                <Toggle label="Kiralık Villa" value={editingVilla?.isVillaRental} onChange={val => setEditingVilla({...editingVilla, isVillaRental: val})} />
-                                <Toggle label="Dahili Arama İzni" value={editingVilla?.isVillaCallFromHome} onChange={val => setEditingVilla({...editingVilla, isVillaCallFromHome: val})} />
-                                <Toggle label="Kargo Arama İzni" value={editingVilla?.isVillaCallForCargo} onChange={val => setEditingVilla({...editingVilla, isVillaCallForCargo: val})} />
-                                <Toggle label="Boş Villa" value={editingVilla?.isVillaEmpty} onChange={val => setEditingVilla({...editingVilla, isVillaEmpty: val})} />
+                                <Input label={`${unitLabel} No`} value={editingUnit?.unitNo} onChange={val => setEditingUnit({...editingUnit, unitNo: val})} type="number" />
+                                <Input label="İsim" value={editingUnit?.unitName} onChange={val => setEditingUnit({...editingUnit, unitName: val})} />
+                                <Input label="Sokak / Adres" value={editingUnit?.street} onChange={val => setEditingUnit({...editingUnit, street: val})} />
+                                <Input label="A Kapısı Yol Tarifi" value={editingUnit?.navigationA} onChange={val => setEditingUnit({...editingUnit, navigationA: val})} />
+                                <Input label="B Kapısı Yol Tarifi" value={editingUnit?.navigationB} onChange={val => setEditingUnit({...editingUnit, navigationB: val})} />
+                                <div className="md:col-span-2"><Input label="Notlar" value={editingUnit?.notes} onChange={val => setEditingUnit({...editingUnit, notes: val})} /></div>
+                                <Toggle label="Sadece Cepten Ara" value={editingUnit?.isCallOnlyMobile} onChange={val => setEditingUnit({...editingUnit, isCallOnlyMobile: val})} />
+                                <Toggle label="Şantiye / İnşaat" value={editingUnit?.isUnderConstruction} onChange={val => setEditingUnit({...editingUnit, isUnderConstruction: val})} />
+                                <Toggle label="Özel Durum" value={editingUnit?.isSpecial} onChange={val => setEditingUnit({...editingUnit, isSpecial: val})} />
+                                <Toggle label="Kiralık" value={editingUnit?.isRental} onChange={val => setEditingUnit({...editingUnit, isRental: val})} />
+                                <Toggle label="Dahili Arama İzni" value={editingUnit?.isCallFromHome} onChange={val => setEditingUnit({...editingUnit, isCallFromHome: val})} />
+                                <Toggle label="Kargo Arama İzni" value={editingUnit?.isCallForCargo} onChange={val => setEditingUnit({...editingUnit, isCallForCargo: val})} />
+                                <Toggle label="Boş Birim" value={editingUnit?.isEmpty} onChange={val => setEditingUnit({...editingUnit, isEmpty: val})} />
                             </div>
-
-                            {editingVilla?.villaId && (
-                                <div>
-                                    <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center">
-                                        <span className="w-8 h-[1px] bg-slate-700 mr-3"></span>
-                                        Kişi Eşleştirme
-                                    </h4>
-                                    
+                            {editingUnit?.unitId && (
+                                <div><h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center"><span className="w-8 h-[1px] bg-slate-700 mr-3"></span>Kişi Eşleştirme</h4>
                                     <div className="space-y-4">
-                                        <div className="p-4 glass rounded-xl space-y-3">
-                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Rehberden Kişi Ekle</p>
-                                            <div className="flex gap-2">
-                                                <select className="flex-1 bg-slate-100 dark:bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" onChange={(e) => {
-                                                    const cid = e.target.value;
-                                                    if(!cid) return;
-                                                    const contact = contacts.find(c => c.contactId === parseInt(cid));
-                                                    updateContactVilla(contact, editingVilla.villaId);
-                                                    e.target.value = "";
-                                                }}>
-                                                    <option value="">Seçiniz...</option>
-                                                    {availableContacts.map(c => <option key={c.contactId} value={c.contactId}>{c.contactName} ({c.contactPhone})</option>)}
-                                                </select>
-                                            </div>
+                                        <div className="p-4 glass rounded-xl space-y-3"><p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Rehberden Kişi Ekle</p>
+                                            <select className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500" onChange={(e) => { const cid = e.target.value; if(!cid) return; const contact = contacts.find(c => c.contactId === parseInt(cid)); updateContactUnit(contact, editingUnit.unitId); e.target.value = ""; }}>
+                                                <option value="">Seçiniz...</option>
+                                                {availableContacts.map(c => <option key={c.contactId} value={c.contactId}>{c.contactName} ({c.contactPhone})</option>)}
+                                            </select>
                                         </div>
-
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            {villaContacts.map(c => (
-                                                <div key={c.contactId} className="glass px-4 py-2 rounded-lg flex justify-between items-center text-sm border-l-2 border-emerald-500">
-                                                    <span className="truncate">{c.contactName}</span>
-                                                    <button onClick={() => updateContactVilla(c, null)} className="text-slate-500 hover:text-rose-500 text-lg ml-2 font-bold px-1">&times;</button>
-                                                </div>
-                                            ))}
-                                            {villaContacts.length === 0 && <p className="text-xs text-slate-500 italic col-span-2 p-2">Bağlı kişi yok.</p>}
+                                            {unitContacts.map(c => (<div key={c.contactId} className="glass px-4 py-2 rounded-lg flex justify-between items-center text-sm border-l-2 border-emerald-500"><span className="truncate">{c.contactName}</span><button onClick={() => updateContactUnit(c, null)} className="text-slate-500 hover:text-rose-500 text-lg ml-2 font-bold px-1">&times;</button></div>))}
+                                            {unitContacts.length === 0 && <p className="text-xs text-slate-500 italic col-span-2 p-2">Bağlı kişi yok.</p>}
                                         </div>
                                     </div>
                                 </div>
                             )}
-
                             <div className="pt-4 flex justify-end space-x-3">
-                                <button onClick={() => setEditingVilla(null)} className="px-6 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors border-transparent">İptal</button>
+                                <button onClick={() => setEditingUnit(null)} className="px-6 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors border-transparent">İptal</button>
                                 <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 px-8 py-2 rounded-lg text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all">DEĞİŞİKLİKLERİ KAYDET</button>
                             </div>
                         </div>
@@ -867,6 +880,8 @@
 
         const App = () => {
             const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+            const [projectConfig, setProjectConfig] = useState(null); // null = yükleniyor
+            const [isConfigured, setIsConfigured] = useState(null); // null = bilinmiyor
 
             const [toast, setToast] = useState(null);
             const [confirmDialog, setConfirmDialog] = useState(null);
@@ -878,9 +893,23 @@
                 };
                 globalShowConfirm = (msg, onConfirm) => setConfirmDialog({ msg, onConfirm });
             }, []);
+
+            // İlk açılışta config kontrolü
+            useEffect(() => {
+                fetch('/api/v1/config').then(r => r.json()).then(config => {
+                    setProjectConfig(config);
+                    setIsConfigured(config.is_configured === true);
+                }).catch(() => setIsConfigured(false));
+            }, []);
+
+            const handleSetupComplete = (config) => {
+                setProjectConfig(config);
+                setIsConfigured(true);
+            };
+
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [stats, setStats] = useState({ villas: 0, contacts: 0, cargos: 0, cameras: 0, connectedDevices: 0 });
-            const [villas, setVillas] = useState([]);
+            const [stats, setStats] = useState({ units: 0, contacts: 0, cargos: 0, cameras: 0, connectedDevices: 0 });
+            const [units, setUnits] = useState([]);
             const [contacts, setContacts] = useState([]);
             const [cargos, setCargos] = useState([]);
             const [companies, setCompanies] = useState([]);
@@ -892,8 +921,8 @@
 
             const fetchData = async () => {
                 const endpoints = [
-                    { url: '/api/v1/stats', setter: setStats },
-                    { url: '/api/v1/villas', setter: setVillas },
+                    { url: '/api/v1/stats', setter: (data) => { setStats(data); if(data.config) setProjectConfig(data.config); } },
+                    { url: '/api/v1/units', setter: setUnits },
                     { url: '/api/v1/contacts', setter: setContacts },
                     { url: '/api/v1/cargos', setter: setCargos },
                     { url: '/api/v1/companies', setter: setCompanies },
@@ -917,20 +946,59 @@
             };
 
             useEffect(() => {
-                fetchData();
-                const it = setInterval(fetchData, 4000);
-                return () => clearInterval(it);
-            }, []);
+                if (isConfigured) {
+                    fetchData();
+                    const it = setInterval(fetchData, 4000);
+                    return () => clearInterval(it);
+                }
+            }, [isConfigured]);
+
+            // Yükleme ekranı
+            if (isConfigured === null) {
+                return (
+                    <div className={`flex items-center justify-center h-screen w-screen ${theme}`}>
+                        <SystemDialogs toast={toast} setToast={setToast} confirmDialog={confirmDialog} setConfirmDialog={setConfirmDialog} />
+                        <div className="text-center animate-fade-in">
+                            <div className="text-4xl mb-4">⏳</div>
+                            <div className="text-slate-400 text-sm">Sunucu yapılandırması kontrol ediliyor...</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Kurulum sihirbazı
+            if (!isConfigured) {
+                return (
+                    <div className={`${theme}`}>
+                        <SystemDialogs toast={toast} setToast={setToast} confirmDialog={confirmDialog} setConfirmDialog={setConfirmDialog} />
+                        <SetupWizard onComplete={handleSetupComplete} />
+                    </div>
+                );
+            }
+
+            // Moda göre dashboard kartlarını oluştur
+            const modules = projectConfig?.modules || ['units', 'contacts', 'cargos', 'cameras', 'intercoms'];
+            const unitLabel = projectConfig?.unit_label_plural || 'Villalar';
+            const unitIcon = projectConfig?.project_type === 'MALL' ? '🏬' : projectConfig?.project_type === 'BLOCK' ? '🏢' : '🏡';
+            
+            const dashboardCards = [
+                { label: unitLabel, val: stats.units, icon: unitIcon, tab: 'units' },
+                { label: 'Kişiler', val: stats.contacts, icon: '👥', tab: 'contacts' },
+            ];
+            if (modules.includes('cargos')) {
+                dashboardCards.push({ label: 'Kargo Trafiği', val: stats.cargos, icon: '📦', tab: 'cargos' });
+            }
+            dashboardCards.push({ label: 'Cihaz Durumu', val: stats.connectedDevices, icon: '📱', tab: 'logs' });
 
             return (
                 <>
                 <SystemDialogs toast={toast} setToast={setToast} confirmDialog={confirmDialog} setConfirmDialog={setConfirmDialog} />
                 <div className={`flex h-screen w-screen overflow-hidden ${theme} transition-colors`}>
-                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} config={projectConfig} />
                     <main className="flex-1 flex flex-col min-w-0 ">
                         <header className="h-16 glass border-b border-slate-800/60 flex items-center justify-between px-8 shrink-0 relative z-50">
                             <div className="text-xl font-bold uppercase tracking-tighter text-slate-800 dark:text-slate-200 font-mono flex items-center">
-                                {activeTab}
+                                {activeTab === 'units' ? unitLabel : activeTab}
                                 {serverIp && (
                                     <span className="ml-4 px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-xs tracking-wider flex items-center">
                                         <span className="mr-1">🌐</span> IP: {serverIp}
@@ -955,13 +1023,8 @@
                         </header>
                         <div className="flex-1 overflow-hidden">
                             {activeTab === 'dashboard' && (
-                                <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in h-full overflow-y-auto">
-                                    {[
-                                        { label: 'Villalar', val: stats.villas, icon: '🏡', tab: 'villas' },
-                                        { label: 'Kişiler', val: stats.contacts, icon: '👥', tab: 'contacts' },
-                                        { label: 'Kargo Trafiği', val: stats.cargos, icon: '📦', tab: 'cargos' },
-                                        { label: 'Cihaz Durumu', val: stats.connectedDevices, icon: '📱', tab: 'logs' }
-                                    ].map(s => (
+                                <div className={`p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${dashboardCards.length} gap-6 animate-fade-in h-full overflow-y-auto`}>
+                                    {dashboardCards.map(s => (
                                         <div 
                                             key={s.label} 
                                             onClick={() => setActiveTab(s.tab)}
@@ -977,9 +1040,9 @@
                                     ))}
                                 </div>
                             )}
-                            {activeTab === 'villas' && <VillaPage villas={villas} contacts={contacts} onUpdate={fetchData} />}
-                            {activeTab === 'contacts' && <ContactPage contacts={contacts} allVillas={villas} onUpdate={fetchData} />}
-                            {activeTab === 'cargos' && <CargoPage cargos={cargos} companies={companies} />}
+                            {activeTab === 'units' && <UnitPage units={units} contacts={contacts} onUpdate={fetchData} config={projectConfig} />}
+                            {activeTab === 'contacts' && <ContactPage contacts={contacts} allVillas={units} onUpdate={fetchData} />}
+                            {activeTab === 'cargos' && modules.includes('cargos') && <CargoPage cargos={cargos} companies={companies} />}
                             {activeTab === 'faults' && <FaultPage cameras={cameras} intercoms={intercoms} />}
                             {activeTab === 'logs' && <LogPage devices={devices} />}
                             {activeTab === 'settings' && <SettingsPage theme={theme} setTheme={setTheme} />}
