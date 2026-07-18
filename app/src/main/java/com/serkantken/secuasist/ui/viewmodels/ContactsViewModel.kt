@@ -27,14 +27,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
     private val contactDao = (application as SecuAsistApplication).db.contactDao()
     private val app = application as SecuAsistApplication
-    private val syncLogDao = app.db.syncLogDao()
-
-    // Offline Sync Count
-    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        0
-    )
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -72,8 +64,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                 contactPhone = phone
             )
             contactDao.insert(newContact)
-            // contactId is already generated in newContact
-            app.syncManager.sendData("ADD_CONTACT", newContact)
             
             if (context != null && (saveToDevice || saveToGoogle)) {
                 com.serkantken.secuasist.utils.ContactUtils.saveContactToDevice(context, name, phone, saveToGoogle)
@@ -84,8 +74,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     fun deleteContact(contact: Contact) {
         viewModelScope.launch {
             contactDao.delete(contact)
-            val payload = mapOf("contactId" to contact.contactId)
-            app.syncManager.sendData("DELETE_CONTACT", payload)
         }
     }
 
@@ -93,7 +81,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val updatedContact = contact.copy(updatedAt = System.currentTimeMillis())
             contactDao.update(updatedContact)
-            app.syncManager.sendData("UPDATE_CONTACT", updatedContact)
         }
     }
 
@@ -134,7 +121,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                             contactPhone = deviceContact.phone
                         )
                         contactDao.insert(newContact)
-                        app.syncManager.sendData("ADD_CONTACT", newContact)
                         newAdded++
                         newContact.contactId
                     }
@@ -153,7 +139,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                                     notes = "Otomatik İçe Aktarıldı"
                                 )
                                 villaContactDao.insert(link)
-                                app.syncManager.sendData("ADD_VILLA_CONTACT", link)
                                 villasLinked++
                             }
                         }
@@ -209,7 +194,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                     notes = null
                 )
                 villaContactDao.insert(link)
-                app.syncManager.sendData("ADD_VILLA_CONTACT", link)
             }
         }
     }
@@ -218,7 +202,6 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val updated = contact.copy(lastCallTimestamp = System.currentTimeMillis())
             contactDao.update(updated)
-            app.syncManager.sendData("UPDATE_CONTACT", updated)
         }
     }
 
@@ -244,12 +227,9 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
                         if (!isAlreadyLinked) {
                             val newRel = rel.copy(contactId = primary.contactId, updatedAt = System.currentTimeMillis())
                             villaContactDao.insert(newRel)
-                            app.syncManager.sendData("ADD_VILLA_CONTACT", newRel)
                         }
                     }
                     contactDao.delete(duplicate)
-                    val payload = mapOf("contactId" to duplicate.contactId)
-                    app.syncManager.sendData("DELETE_CONTACT", payload)
                     mergedCount++
                 }
             }

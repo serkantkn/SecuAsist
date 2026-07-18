@@ -20,8 +20,7 @@ data class CallUiState(
     val villa: Villa? = null,
     val contactType: String? = null,
     val phoneNumber: String = "Bilinmeyen Numara",
-    val isSearching: Boolean = true,
-    val missedCargoCompanies: List<String> = emptyList()
+    val isSearching: Boolean = true
 )
 
 class CallViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,18 +59,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     // Update state to trigger flow collection updates in UI
                     _uiState.update { it.copy(call = call, callState = state) }
-                }
-
-                // Check for Call.STATE_ACTIVE to clear missed cargos
-                if (state == Call.STATE_ACTIVE) {
-                    val currentVilla = _uiState.value.villa
-                    if (currentVilla != null && _uiState.value.missedCargoCompanies.isNotEmpty()) {
-                        // Launch in Coroutine
-                        launch(Dispatchers.IO) {
-                            db.cargoDao().clearMissedCargosForVillaToday(currentVilla.villaId)
-                            _uiState.update { it.copy(missedCargoCompanies = emptyList()) }
-                        }
-                    }
                 }
             }
         }
@@ -116,7 +103,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
                 contact = contact, 
                 villa = villa,
                 contactType = contactType,
-                missedCargoCompanies = if (villa != null) db.cargoDao().getMissedCargoCompanyNamesToday(villa.villaId) else emptyList(),
                 isSearching = false
             ) 
         }

@@ -78,8 +78,7 @@ object CsvUtils {
                             villaStreet = street,
                             villaNotes = notes,
                             villaNavigationA = navA,
-                            villaNavigationB = navB,
-                            isVillaCallForCargo = 1
+                            villaNavigationB = navB
                         ))
                     } else {
                         println("CSV Debug: Could not parse villa number from: ${parts[0]}")

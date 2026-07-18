@@ -59,7 +59,6 @@ fun VillaDetailSheet(
     var isUnderConstruction by remember { mutableStateOf(villa.isVillaUnderConstruction == 1) }
     var isSpecial by remember { mutableStateOf(villa.isVillaSpecial == 1) }
     var callFromHome by remember { mutableStateOf(villa.isVillaCallFromHome == 1) }
-    var dontCallForCargo by remember { mutableStateOf(villa.isVillaCallForCargo == 0) }
     var callOnlyMobile by remember { mutableStateOf(villa.isCallOnlyMobile == 1) }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -104,7 +103,6 @@ fun VillaDetailSheet(
                                     isVillaUnderConstruction = if (isUnderConstruction) 1 else 0,
                                     isVillaSpecial = if (isSpecial) 1 else 0,
                                     isVillaCallFromHome = if (callFromHome) 1 else 0,
-                                    isVillaCallForCargo = if (dontCallForCargo) 0 else 1,
                                     isCallOnlyMobile = if (callOnlyMobile) 1 else 0,
                                     updatedAt = System.currentTimeMillis()
                                 )
@@ -130,7 +128,7 @@ fun VillaDetailSheet(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val hasActiveStatus = isRental || isEmpty || isUnderConstruction || isSpecial || callFromHome || dontCallForCargo || callOnlyMobile
+            val hasActiveStatus = isRental || isEmpty || isUnderConstruction || isSpecial || callFromHome || callOnlyMobile
 
             // --- Hero Section ---
             Box(
@@ -190,7 +188,6 @@ fun VillaDetailSheet(
                             if (isRental) HeroStatusBadge(Icons.Default.VpnKey, "Kiracı", Color.Blue)
                             if (isSpecial) HeroStatusBadge(Icons.Default.Star, "VIP", Color(0xFFFFD700))
                             if (callFromHome) HeroStatusBadge(Icons.Default.Phone, "Evden Ara", Color(0xFF4CAF50))
-                            if (dontCallForCargo) HeroStatusBadge(Icons.Default.Inventory2, "Kargo Red", Color.Red)
                             if (callOnlyMobile) HeroStatusBadge(Icons.Default.Smartphone, "Sadece Cep", Color(0xFFC2185B))
                         }
                     }
@@ -390,7 +387,6 @@ fun VillaDetailSheet(
                             CategoryStatusChip("Hizmet", "İnşaat", isUnderConstruction, isEditing) { isUnderConstruction = it }
                             CategoryStatusChip("Hizmet", "VIP", isSpecial, isEditing) { isSpecial = it }
                             CategoryStatusChip("Arama", "Evden Ara", callFromHome, isEditing) { callFromHome = it }
-                            CategoryStatusChip("Arama", "Kargo Engel", dontCallForCargo, isEditing, isDestructive = true) { dontCallForCargo = it }
                             CategoryStatusChip("Arama", "Sadece Cep", callOnlyMobile, isEditing) { callOnlyMobile = it }
                         }
                     }

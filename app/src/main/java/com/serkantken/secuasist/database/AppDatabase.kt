@@ -6,9 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.serkantken.secuasist.models.Camera
-import com.serkantken.secuasist.models.Cargo
-import com.serkantken.secuasist.models.CargoCompany
-import com.serkantken.secuasist.models.CompanyDelivererCrossRef
 import com.serkantken.secuasist.models.Contact
 import com.serkantken.secuasist.models.Villa
 import com.serkantken.secuasist.models.VillaContact
@@ -18,15 +15,11 @@ import com.serkantken.secuasist.models.VillaContact
         com.serkantken.secuasist.models.Villa::class,
         com.serkantken.secuasist.models.Contact::class,
         com.serkantken.secuasist.models.VillaContact::class,
-        com.serkantken.secuasist.models.CargoCompany::class,
-        com.serkantken.secuasist.models.Cargo::class,
         com.serkantken.secuasist.models.Camera::class,
         com.serkantken.secuasist.models.Intercom::class,
-        com.serkantken.secuasist.models.CompanyDelivererCrossRef::class,
-        com.serkantken.secuasist.models.CameraVisibleVillaCrossRef::class,
-        com.serkantken.secuasist.models.SyncLog::class
+        com.serkantken.secuasist.models.CameraVisibleVillaCrossRef::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -36,13 +29,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun villaDao(): VillaDao
     abstract fun contactDao(): ContactDao
     abstract fun villaContactDao(): VillaContactDao
-    abstract fun cargoCompanyDao(): CargoCompanyDao
-    // abstract fun companyContactDao(): CompanyContactDao
-    abstract fun cargoDao(): CargoDao
     abstract fun cameraDao(): CameraDao
     abstract fun intercomDao(): IntercomDao
-    abstract fun companyDelivererDao(): CompanyDelivererDao
-    abstract fun syncLogDao(): SyncLogDao
 
     companion object {
         @Volatile

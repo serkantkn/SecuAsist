@@ -56,7 +56,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val app = context.applicationContext as SecuAsistApplication
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Genel", "Bağlantı", "Görünüm", "İzinler")
+    val tabs = listOf("Genel", "Görünüm", "İzinler")
 
     Scaffold(
         topBar = {
@@ -92,9 +92,8 @@ fun SettingsScreen(
             ) {
                 when (selectedTabIndex) {
                     0 -> SettingsGeneralTab(viewModel, onUserManagementClick)
-                    1 -> SettingsConnectionTab(viewModel, onBack, app)
-                    2 -> SettingsAppearanceTab(viewModel)
-                    3 -> SettingsPermissionsTab(viewModel)
+                    1 -> SettingsAppearanceTab(viewModel)
+                    2 -> SettingsPermissionsTab(viewModel)
                 }
             }
         }
@@ -108,6 +107,7 @@ fun SettingsGeneralTab(
     onUserManagementClick: () -> Unit
 ) {
     val preferredGate by viewModel.preferredGate.collectAsState()
+    val deviceName by viewModel.deviceName.collectAsState()
     val context = LocalContext.current
     val app = context.applicationContext as com.serkantken.secuasist.SecuAsistApplication
 
@@ -128,6 +128,18 @@ fun SettingsGeneralTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Device Name
+        SettingCard(
+            title = "Cihaz Kimliği / İsmi",
+            description = "Bu cihazın sistemdeki görünen adı. (Örn: A Kapısı Tableti)"
+        ) {
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = { viewModel.updateDeviceName(it) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true
+            )
+        }
         // Gate Selection
         SettingCard(
             title = "Kapı Seçimi (Navigasyon)",
@@ -270,180 +282,6 @@ fun SettingsGeneralTab(
             }
         }
 
-    }
-}
-
-@Composable
-fun SettingsConnectionTab(
-    viewModel: SettingsViewModel, 
-    onBack: () -> Unit, 
-    app: com.serkantken.secuasist.SecuAsistApplication
-) {
-    val ipAddress by viewModel.ipAddress.collectAsState()
-    val serverPort by viewModel.serverPort.collectAsState()
-    val deviceName by viewModel.deviceName.collectAsState()
-    val context = LocalContext.current
-    val connectionState by app.wsClient.connectionState.collectAsState(initial = com.serkantken.secuasist.network.ConnectionState.DISCONNECTED)
-    val coroutineScope = rememberCoroutineScope()
-    var showWipeWarning by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        SettingCard(
-            title = "Cihaz Kimliği / İsmi",
-            description = "Bu cihazın sistemdeki görünen adı. (Örn: A Kapısı Tableti)"
-        ) {
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = { viewModel.updateDeviceName(it) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                enabled = true,
-                singleLine = true,
-                trailingIcon = {
-                    Button(
-                        onClick = { 
-                            viewModel.saveSettings()
-                            android.widget.Toast.makeText(context, "Cihaz ismi kaydedildi", android.widget.Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.padding(end = 4.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Kaydet", fontSize = 12.sp)
-                    }
-                }
-            )
-        }
-
-        SettingCard(
-            title = "Sunucu Bağlantısı",
-            description = "SecuAsist yönetim sunucusuna bağlanmak için gerekli olan yerel IP adresi ve port bilgilerini girin. Değişiklikler uygulandıktan sonra sistem otomatik olarak yeniden bağlanacaktır."
-        ) {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                OutlinedTextField(
-                    value = ipAddress,
-                    onValueChange = { viewModel.updateIpAddress(it) },
-                    label = { Text("IP Adresi") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = serverPort,
-                    onValueChange = { viewModel.updateServerPort(it) },
-                    label = { Text("Port") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (showWipeWarning) {
-                    AlertDialog(
-                        onDismissRequest = { showWipeWarning = false },
-                        title = { Text("Veri Sıfırlama Uyarısı") },
-                        text = { Text("Bu işlem cihazınızdaki tüm yerel kayıtları ve verileri tamamen temizleyecek ve yalnızca sunucudaki güncel verilerle eşitlenmenizi sağlayacaktır. İşlemi onaylıyor musunuz?") },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    showWipeWarning = false
-                                    viewModel.saveSettings()
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                        app.db.clearAllTables()
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            android.widget.Toast.makeText(context, "Veriler temizlendi ve sunucuya bağlanılıyor...", android.widget.Toast.LENGTH_LONG).show()
-                                            onBack()
-                                        }
-                                    }
-                                }
-                            ) { Text("Evet, Sil ve Bağlan", color = MaterialTheme.colorScheme.error) }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showWipeWarning = false }) { Text("Vazgeç") }
-                        }
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        if (ipAddress.isNotBlank() && serverPort.toIntOrNull() != null) {
-                            val currentIp = context.getSharedPreferences("secuasist_prefs", Context.MODE_PRIVATE).getString("server_ip", "")
-                            if (currentIp == ipAddress) {
-                                // Sadece aynı IP'ye bağlanılıyorsa uyarı vermeden bağlan
-                                viewModel.saveSettings()
-                                android.widget.Toast.makeText(context, "Mevcut ayarlarla bağlanılıyor...", android.widget.Toast.LENGTH_SHORT).show()
-                                onBack()
-                            } else {
-                                // Yeni bir IP adresi girildiyse tüm verilerin silineceği uyarısını çıkar
-                                showWipeWarning = true
-                            }
-                        } else {
-                            android.widget.Toast.makeText(context, "Lütfen geçerli değerler giriniz.", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Kaydet ve Bağlan")
-                }
-            }
-        }
-
-        // Server Health Status
-        val serverStatus by viewModel.serverStatus.collectAsState()
-        
-        if (connectionState == com.serkantken.secuasist.network.ConnectionState.CONNECTED) {
-            SettingCard(
-                title = "Sunucu Sağlık Durumu",
-                description = "Bağlı olduğunuz sunucunun anlık kaynak kullanım ve çalışma verileri.",
-                extraActions = {
-                    IconButton(
-                        onClick = { viewModel.refreshServerStatus() },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh, 
-                            contentDescription = "Yenile",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            ) {
-                Column(
-                    modifier = Modifier.padding(top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatusItem("CPU Kullanımı", serverStatus.cpuUsage)
-                        StatusItem("RAM Kullanımı", serverStatus.ramUsage)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatusItem("Çalışma Süresi", serverStatus.uptime)
-                        StatusItem("Cihaz Sayısı", serverStatus.connectedDevices.toString())
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StatusItem(label: String, value: String) {
-    Column(modifier = Modifier.padding(4.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     }
 }
 

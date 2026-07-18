@@ -92,7 +92,6 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
         val directions = intent?.getStringExtra("VILLA_DIRECTIONS") ?: "Yol tarifi yok"
         val villaNo = intent?.getStringExtra("VILLA_NO") ?: "?"
         val contactName = intent?.getStringExtra("CONTACT_NAME") ?: "Bilinmeyen Kişi"
-        val showCargoWarning = intent?.getStringExtra("SHOW_CARGO_WARNING") ?: ""
         
         if (telephonyManager.callState == TelephonyManager.CALL_STATE_IDLE && !hasCallStarted) {
             stopSelf()
@@ -100,7 +99,7 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
         }
 
         if (floatingView == null) {
-            showFloatingWidget(street, directions, villaNo, contactName, showCargoWarning)
+            showFloatingWidget(street, directions, villaNo, contactName)
             isUIVisible.value = true
             listenToCallState()
         }
@@ -141,7 +140,7 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun showFloatingWidget(street: String, directions: String, villaNo: String, contactName: String, showCargoWarning: String) {
+    private fun showFloatingWidget(street: String, directions: String, villaNo: String, contactName: String) {
         val displayMetrics = resources.displayMetrics
         val screenHeight = displayMetrics.heightPixels
         val targetHeight = (screenHeight * 0.6).toInt()
@@ -174,7 +173,6 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
                         directions = directions,
                         villaNo = villaNo,
                         contactName = contactName,
-                        showCargoWarning = showCargoWarning,
                         onClose = { closeWithAnimation() },
                         onDrag = { _, dy ->
                             layoutParams.y += dy.roundToInt()
@@ -194,7 +192,6 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
         directions: String, 
         villaNo: String, 
         contactName: String,
-        showCargoWarning: String,
         onClose: () -> Unit, 
         onDrag: (Float, Float) -> Unit
     ) {
@@ -377,35 +374,7 @@ class FloatingWidgetService : LifecycleService(), SavedStateRegistryOwner, ViewM
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // --- Kargo Uyarısı ---
-                        if (showCargoWarning.isNotBlank()) {
-                            Surface(
-                                color = accentAmber.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "📦 Bekleyen Kargo",
-                                        color = textMuted,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = showCargoWarning,
-                                        color = accentAmber,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

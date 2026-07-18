@@ -10,11 +10,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
@@ -33,10 +31,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.lazy.grid.items
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serkantken.secuasist.models.Villa
-import com.serkantken.secuasist.network.ConnectionState
 import com.serkantken.secuasist.ui.viewmodels.HomeViewModel
 import com.serkantken.secuasist.SecuAsistApplication
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,8 +46,6 @@ fun HomeScreen(
 ) {
     val searchResults by viewModel.filteredResults.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val connectionState by viewModel.connectionState.collectAsState()
-    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val isUpdateAvailable by viewModel.isUpdateAvailable.collectAsState()
     val latestInfo by viewModel.latestVersionInfo.collectAsState()
     
@@ -116,50 +113,42 @@ fun HomeScreen(
                             showBottomSheet = true
                         }
                     } else null,
-                    onSettingsClick = onSettingsClick,
-                    connectionState = connectionState,
-                    offlineSyncCount = pendingSyncCount,
-                    extraActions = {
-                        IconButton(onClick = { viewModel.refresh() }) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Yenile",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
+                    onSettingsClick = onSettingsClick
                 )
                 
                 WhatsAppNotificationCard()
                 
-                // 2. Search Bar (Customized to look integrated)
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSearch = {},
-                    active = false,
-                    onActiveChange = {},
-                    placeholder = { Text("Villa Ara...") },
+                // 2. Search Bar (Customized to look integrated and use numeric keyboard)
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    placeholder = { Text("Villa No Ara...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
-                        Row {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { 
-                                    viewModel.updateSearchQuery("") 
-                                    focusRequester.requestFocus()
-                                    keyboardController?.show()
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Temizle")
-                                }
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { 
+                                viewModel.updateSearchQuery("") 
+                                focusRequester.requestFocus()
+                                keyboardController?.show()
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Temizle")
                             }
-
                         }
                     },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                        .focusRequester(focusRequester)
-                ) {}
+                        .focusRequester(focusRequester),
+                    shape = MaterialTheme.shapes.medium
+                )
             }
         },
         floatingActionButton = {
@@ -192,7 +181,7 @@ fun HomeScreen(
             
             if (searchResults.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (searchQuery.any { it.isLetter() }) "Kişi bulunamadı." else "Kayıtlı villa bulunamadı.", style = MaterialTheme.typography.bodyLarge)
+                    Text("Kayıtlı villa bulunamadı.", style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -205,33 +194,15 @@ fun HomeScreen(
                 ) {
                     items(
                         items = searchResults,
-                        key = { item ->
-                            when (item) {
-                                is HomeViewModel.HomeSearchResult.VillaResult -> "v_${item.villa.villaId}"
-                                is HomeViewModel.HomeSearchResult.ContactResult -> "c_${item.contact.contactId}"
+                        key = { villa -> "v_${villa.villaId}" }
+                    ) { villa ->
+                        VillaItem(
+                            villa = villa,
+                            onClick = {
+                                selectedVilla = villa
+                                showBottomSheet = true
                             }
-                        }
-                    ) { item ->
-                        when (item) {
-                            is HomeViewModel.HomeSearchResult.VillaResult -> {
-                                VillaItem(
-                                    villa = item.villa,
-                                    onClick = {
-                                        selectedVilla = item.villa
-                                        showBottomSheet = true
-                                    }
-                                )
-                            }
-                            is HomeViewModel.HomeSearchResult.ContactResult -> {
-                                ContactSearchResultItem(
-                                    contact = item.contact,
-                                    onClick = {
-                                        selectedContact = item.contact
-                                        showContactBottomSheet = true
-                                    }
-                                )
-                            }
-                        }
+                        )
                     }
                 }
             }
@@ -381,7 +352,6 @@ fun VillaItem(villa: Villa, onClick: () -> Unit) {
                 if (villa.isVillaRental == 1) statusIcons.add(Triple(Icons.Default.VpnKey, Color.Blue, "Kiracı"))
                 if (villa.isVillaSpecial == 1) statusIcons.add(Triple(Icons.Default.Star, Color(0xFFFFD700), "VIP"))
                 if (villa.isVillaCallFromHome == 1) statusIcons.add(Triple(Icons.Default.Phone, Color(0xFF4CAF50), "Evden Ara"))
-                if (villa.isVillaCallForCargo == 0) statusIcons.add(Triple(Icons.Default.Inventory2, Color.Red, "Kargo Red"))
                 if (villa.isCallOnlyMobile == 1) statusIcons.add(Triple(Icons.Default.Smartphone, Color(0xFFC2185B), "Sadece Cep"))
 
                 Row(

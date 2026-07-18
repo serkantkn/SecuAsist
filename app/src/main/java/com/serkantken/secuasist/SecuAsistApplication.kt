@@ -9,7 +9,6 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.serkantken.secuasist.database.AppDatabase
 import com.serkantken.secuasist.models.*
-import com.serkantken.secuasist.network.WebSocketClient
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,10 +30,8 @@ class SecuAsistApplication : Application() {
         .create()
 
     lateinit var db: AppDatabase
-    lateinit var wsClient: WebSocketClient
     private lateinit var prefs: SharedPreferences
 
-    lateinit var syncManager: com.serkantken.secuasist.sync.SyncManager
     lateinit var updateManager: com.serkantken.secuasist.utils.UpdateManager
     
     override fun onCreate() {
@@ -44,27 +41,11 @@ class SecuAsistApplication : Application() {
         db = AppDatabase.getDatabase(this)
         updateManager = com.serkantken.secuasist.utils.UpdateManager(this)
 
-        val savedIp = prefs.getString("server_ip", "10.0.2.2") ?: "10.0.2.2"
-        val savedPort = try {
-            prefs.getString("server_port", "8765")?.toIntOrNull() ?: 8765
-        } catch (e: Exception) {
-            prefs.getInt("server_port", 8765)
-        }
-        wsClient = WebSocketClient(this, savedIp, savedPort)
-
-        // 1. Initialize SyncManager first
-        syncManager = com.serkantken.secuasist.sync.SyncManager(this)
-        syncManager.start()
-
-        // 2. Then Connect
-        wsClient.connect()
-        
-        Log.i("SecuAsistApp", "✅ Uygulama (v2) başlatıldı ve Sync Manager aktif.")
+        Log.i("SecuAsistApp", "✅ Uygulama (v2) başlatıldı.")
     }
 
     override fun onTerminate() {
         super.onTerminate()
-        // wsClient.disconnect()
         appScope.cancel()
     }
 }

@@ -80,12 +80,10 @@ fun ContactsScreen(viewModel: ContactsViewModel = viewModel()) {
 
     Scaffold(
         topBar = {
-            val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
             Column {
                 com.serkantken.secuasist.ui.components.ScreenHeader(
                     title = "Kişiler",
-                    onNewClick = if (isAdmin) { { showAddDialog = true } } else null,
-                    offlineSyncCount = pendingSyncCount
+                    onNewClick = if (isAdmin) { { showAddDialog = true } } else null
                 )
                 
                 TabRow(selectedTabIndex = selectedTab) {

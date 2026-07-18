@@ -86,10 +86,7 @@ class CallReceiver : BroadcastReceiver() {
                 if (villas.isNotEmpty()) {
                     val villa = villas.first()
                     
-                    if (isOffhook) {
-                        db.cargoDao().clearMissedCargosForVillaToday(villa.villaId)
-                    }
-                    
+
                     val serviceIntent = Intent(context, FloatingWidgetService::class.java).apply {
                         putExtra("VILLA_STREET", villa.villaStreet ?: "Bilinmeyen Sokak")
                         
@@ -102,9 +99,7 @@ class CallReceiver : BroadcastReceiver() {
                         putExtra("VILLA_NO", villa.villaNo.toString())
                         putExtra("CONTACT_NAME", contact.contactName)
                         
-                        // Get the companies of missed cargos
-                        val missedCompanies = db.cargoDao().getMissedCargoCompanyNamesToday(villa.villaId)
-                        putExtra("SHOW_CARGO_WARNING", missedCompanies.joinToString(", "))
+
                     }
                     
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

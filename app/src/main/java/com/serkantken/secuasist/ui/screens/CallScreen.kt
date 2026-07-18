@@ -242,25 +242,6 @@ fun CallScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             }
 
-            // --- Kargo Uyarısı ---
-            if (uiState.missedCargoCompanies.isNotEmpty()) {
-                val companiesStr = uiState.missedCargoCompanies.joinToString(", ")
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    color = Color(0xFFF59E0B).copy(alpha = 0.12f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(0.85f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("📦 Bekleyen Kargo", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text(companiesStr, color = Color(0xFFF59E0B), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
 
 
             Spacer(modifier = Modifier.weight(1f))

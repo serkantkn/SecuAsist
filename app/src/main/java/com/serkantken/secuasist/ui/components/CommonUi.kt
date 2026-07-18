@@ -14,15 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.serkantken.secuasist.network.ConnectionState
 
 @Composable
 fun ScreenHeader(
     title: String,
     onNewClick: (() -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null,
-    connectionState: ConnectionState? = null,
-    offlineSyncCount: Int = 0,
     extraActions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
@@ -42,41 +39,11 @@ fun ScreenHeader(
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Offline Sync Badge
-            if (offlineSyncCount > 0) {
-                Surface(
-                    color = MaterialTheme.colorScheme.error,
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Text(
-                        text = offlineSyncCount.toString(),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-            
             // Extra Actions Slot
             extraActions()
             
-            // Connection Status (Optional)
-            if (connectionState != null) {
-                if (extraActions != {} || offlineSyncCount > 0) Spacer(modifier = Modifier.width(8.dp))
-                val (iconColor, _) = when(connectionState) {
-                    ConnectionState.CONNECTED -> Color.Green to "Bağlı"
-                    ConnectionState.CONNECTING -> Color.Yellow to "Bağlanıyor"
-                    ConnectionState.DISCONNECTED -> Color.Red to "Bağlı Değil"
-                }
-                Icon(
-                    imageVector = Icons.Default.CloudQueue,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
+            Spacer(modifier = Modifier.width(12.dp))
+            
             
             // Settings Button
             if (onSettingsClick != null) {

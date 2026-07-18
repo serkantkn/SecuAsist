@@ -43,19 +43,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         return telecomManager.defaultDialerPackage == context.packageName
     }
 
-    // Legacy Settings State
-    private val _ipAddress = MutableStateFlow(prefs.getString("server_ip", "10.0.2.2") ?: "10.0.2.2")
-    val ipAddress: StateFlow<String> = _ipAddress
-
-    private val _serverPort = MutableStateFlow(
-        try {
-            prefs.getString("server_port", "8765") ?: "8765"
-        } catch (e: Exception) {
-            prefs.getInt("server_port", 8765).toString()
-        }
-    )
-    val serverPort: StateFlow<String> = _serverPort
-    
+    // Device Name
     private val _deviceName = MutableStateFlow(prefs.getString("device_name", "") ?: "")
     val deviceName: StateFlow<String> = _deviceName
     
@@ -71,41 +59,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AppTheme.SYSTEM
         )
-
-    // Server Health Status
-    data class ServerStatus(
-        val cpuUsage: String = "0%",
-        val ramUsage: String = "0 MB",
-        val uptime: String = "00:00:00",
-        val connectedDevices: Int = 0
-    )
-    private val _serverStatus = MutableStateFlow(ServerStatus())
-    val serverStatus: StateFlow<ServerStatus> = _serverStatus
-
-    fun updateServerStatus(status: ServerStatus) {
-        _serverStatus.value = status
-    }
-
-    init {
-        val app = getApplication<SecuAsistApplication>()
-        app.syncManager.serverStatus
-            .onEach { json ->
-                json?.let {
-                    _serverStatus.value = ServerStatus(
-                        cpuUsage = it.get("cpu").asString,
-                        ramUsage = it.get("ram").asString,
-                        uptime = it.get("uptime").asString,
-                        connectedDevices = it.get("clients").asInt
-                    )
-                }
-            }
-            .launchIn(viewModelScope)
-    }
-
-    fun refreshServerStatus() {
-        val app = getApplication<SecuAsistApplication>()
-        app.syncManager.requestServerStatus()
-    }
 
     // Backup & Restore
     private val backupManager = BackupManager(application)
@@ -130,16 +83,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
     
-    fun updateIpAddress(ip: String) {
-        _ipAddress.value = ip
-    }
-    
-    fun updateServerPort(port: String) {
-        if (port.all { it.isDigit() }) {
-            _serverPort.value = port
-        }
-    }
-    
     fun updatePreferredGate(gate: String) {
         _preferredGate.value = gate
         prefs.edit().putString("preferred_gate", gate).apply()
@@ -152,29 +95,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     
     fun updateDeviceName(name: String) {
         _deviceName.value = name
-    }
-    
-    fun saveSettings() {
-        val ip = _ipAddress.value
-        val port = _serverPort.value.toIntOrNull()
-        val gate = _preferredGate.value
-        val devName = _deviceName.value
-        
-        if (ip.isNotBlank() && port != null && devName.isNotBlank()) {
-            prefs.edit()
-                .putString("server_ip", ip)
-                .putString("server_port", port.toString())
-                .putString("preferred_gate", gate)
-                .putString("device_name", devName)
-                .apply()
-                
-            // Reconnect logic
-            val app = getApplication<com.serkantken.secuasist.SecuAsistApplication>()
-            try {
-                app.wsClient.reconnectWithNewIp(ip, port)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        prefs.edit().putString("device_name", name).apply()
     }
 }

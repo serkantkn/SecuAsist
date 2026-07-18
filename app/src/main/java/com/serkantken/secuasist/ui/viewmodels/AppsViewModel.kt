@@ -19,14 +19,6 @@ import kotlinx.coroutines.flow.map
 
 class AppsViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as SecuAsistApplication
-    private val syncLogDao = app.db.syncLogDao()
-
-    // Offline Sync Count
-    val pendingSyncCount = syncLogDao.getPendingCount().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        0
-    )
 
     private val packageManager = application.packageManager
 
